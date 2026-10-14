@@ -1,0 +1,43 @@
+name: build-images
+on:
+  push:
+    branches: [clipgringa]
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - name: backend
+            context: backend
+          - name: frontend
+            context: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Image name (lowercase)
+        id: img
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/clipgringa-${{ matrix.name }}" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          target: ${{ matrix.name == 'frontend' && 'runner' || '' }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.img.outputs.name }}:latest
+          build-args: |
+            BACKEND_CPU_ONLY=true
+            NEXT_PUBLIC_API_URL=https://api.clipgringa.gringatools.com
+            NEXT_PUBLIC_APP_URL=https://clipgringa.gringatools.com
+            NEXT_PUBLIC_SELF_HOST=true
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
