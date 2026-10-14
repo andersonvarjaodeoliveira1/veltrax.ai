@@ -8,6 +8,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { FeedbackButton } from "@/components/feedback-button";
 import { getSiteUrl } from "@/lib/site";
+import { LanguageProvider } from "@/lib/i18n";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -101,13 +102,15 @@ export default function RootLayout({
         ) : null}
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} ${syne.variable} antialiased`}>
-        <TooltipProvider>
-          {children}
-          <DataFastIdentity />
-          <AttributionTracker />
-          <FeedbackButton />
-          <Toaster />
-        </TooltipProvider>
+        <LanguageProvider>
+          <TooltipProvider>
+            {children}
+            <DataFastIdentity />
+            <AttributionTracker />
+            <FeedbackButton />
+            <Toaster />
+          </TooltipProvider>
+        </LanguageProvider>
       </body>
     </html>
   );

@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { useI18n, type Lang } from "@/lib/i18n";
 import {
   AudioLines, Check, ChevronLeft, ChevronRight, Clapperboard, Download, Flame, Loader2, MessageSquare,
   Play, Scissors, Share2, Sparkles, Star, Trash2, TrendingUp,
@@ -224,7 +225,35 @@ function stepFromMessage(message: string) {
   return null;
 }
 
+/** Mensagens amigáveis que se alternam enquanto o vídeo é processado (uma lista por etapa). */
+const FRIENDLY: Record<Lang, string[][]> = {
+  pt: [
+    ["Seu arquivo está carregando…", "Aguarde um momento…", "Preparando seu vídeo…"],
+    ["Estamos transcrevendo o áudio…", "Aguarde um momento, isso leva alguns minutos…", "Ouvindo cada palavra do seu vídeo…"],
+    ["A IA está procurando os melhores momentos…", "Escolhendo os trechos com mais potencial viral…", "Quase lá, só mais um pouco…"],
+    ["Criando seus cortes com legenda…", "Enquadrando o rosto e ajustando as legendas…", "Pode deixar esta página aberta, os cortes aparecem aqui assim que ficam prontos."],
+  ],
+  en: [
+    ["Your file is loading…", "Please wait a moment…", "Getting your video ready…"],
+    ["We are transcribing the audio…", "Hang tight, this takes a few minutes…", "Listening to every word of your video…"],
+    ["The AI is looking for the best moments…", "Picking the parts with the most viral potential…", "Almost there, just a little longer…"],
+    ["Creating your captioned clips…", "Framing the face and fitting the captions…", "You can keep this page open — clips appear here as soon as they are ready."],
+  ],
+  es: [
+    ["Tu archivo se está cargando…", "Espera un momento…", "Preparando tu video…"],
+    ["Estamos transcribiendo el audio…", "Espera un momento, esto tarda unos minutos…", "Escuchando cada palabra de tu video…"],
+    ["La IA está buscando los mejores momentos…", "Eligiendo los fragmentos con más potencial viral…", "Casi listo, solo un poco más…"],
+    ["Creando tus cortes con subtítulos…", "Encuadrando el rostro y ajustando los subtítulos…", "Puedes dejar esta página abierta: los cortes aparecen aquí en cuanto estén listos."],
+  ],
+};
+
 export function ProcessingPanel({ status, progress, message, readyCount }: { status: string; progress: number; message: string; readyCount: number }) {
+  const { lang } = useI18n();
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => setTick((n) => n + 1), 6000);
+    return () => window.clearInterval(id);
+  }, []);
   const byProgress = STEPS.findIndex((step) => progress < step.until);
   const activeStep = status === "queued" ? -1 : stepFromMessage(message) ?? (byProgress === -1 ? STEPS.length - 1 : byProgress);
   return (
@@ -235,9 +264,16 @@ export function ProcessingPanel({ status, progress, message, readyCount }: { sta
       <div className="flex flex-col gap-6 p-5 sm:p-6 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
           <p className="shimmer text-lg font-semibold">{message || (status === "queued" ? "Waiting in queue" : "Processing")}</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {readyCount > 0 ? `${readyCount} clip${readyCount === 1 ? "" : "s"} ready below — more on the way.` : "Grab a coffee — clips appear here the moment they render."}
-          </p>
+          {readyCount > 0 ? (
+            <p className="mt-1 text-sm text-muted-foreground">{`${readyCount} clip${readyCount === 1 ? "" : "s"} ready below — more on the way.`}</p>
+          ) : (
+            <p data-no-translate className="mt-1 text-sm text-muted-foreground">
+              {(() => {
+                const list = FRIENDLY[lang][Math.max(0, Math.min(3, activeStep < 0 ? 0 : activeStep))];
+                return list[tick % list.length];
+              })()}
+            </p>
+          )}
         </div>
         <ol className="grid grid-cols-4 gap-2 md:flex md:gap-1">
           {STEPS.map((step, index) => {

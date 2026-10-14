@@ -20,6 +20,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Kbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
 import { DISPLAY_NAME } from "@/lib/site";
+import { LanguageSwitcher } from "@/lib/i18n";
 
 type NavItem = { href: string; label: string; icon: typeof Film; match: (path: string) => boolean; external?: boolean };
 
@@ -113,6 +114,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <div className="mt-auto w-full space-y-2 pb-3">
           <Announcements key={user.id} userId={user.id} compact={compact} />
+          {!compact && <LanguageSwitcher className="w-full justify-between" />}
           {!compact && billing?.monetization_enabled && <UsageCard billing={billing} />}
           <UserRow compact={compact} name={DISPLAY_NAME} email={user.email} />
         </div>
@@ -124,6 +126,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Image src="/logo.png" alt="" width={22} height={22} className="size-[22px]" />ClipGringa
           </Link>
           <div className="flex items-center gap-1">
+            <LanguageSwitcher />
             <Announcements key={user.id} userId={user.id} compact />
             <button type="button" onClick={() => setPaletteOpen(true)} aria-label="Search generations" className="rounded-lg p-2 text-muted-foreground hover:bg-accent">
               <Search className="size-5" />
