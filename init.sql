@@ -249,7 +249,7 @@ VALUES (
     'Make content about ClipGringa and get hosted Pro for free while participating as an approved creator. Your audience gets 20% off their first three months. No cash payments or referral commissions.',
     '/affiliate',
     'Explore the creator program',
-    true,
+    false,
     '2026-10-09T00:00:00Z'
 )
 ON CONFLICT ("id") DO NOTHING;

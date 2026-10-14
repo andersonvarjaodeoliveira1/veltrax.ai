@@ -16,6 +16,9 @@ jobs:
             context: backend
           - name: frontend
             context: frontend
+          - name: postgres
+            context: .
+            file: postgres.Dockerfile
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -30,6 +33,7 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
+          file: ${{ matrix.file || format('{0}/Dockerfile', matrix.context) }}
           target: ${{ matrix.name == 'frontend' && 'runner' || '' }}
           platforms: linux/amd64
           push: true
