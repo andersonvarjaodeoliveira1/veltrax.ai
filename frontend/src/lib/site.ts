@@ -18,3 +18,6 @@ export function getSiteUrl() {
     return DEFAULT_SITE_URL;
   }
 }
+
+/** Nome exibido no painel (instalação de conta única). */
+export const DISPLAY_NAME = "GRINGATOOLS";

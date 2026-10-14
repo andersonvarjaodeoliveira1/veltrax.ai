@@ -50,7 +50,7 @@ export default function LandingPage() {
             <Link href="/sign-in">Entrar</Link>
           </Button>
           <Button asChild size="sm" className="rounded-full bg-gradient-to-br from-[#8b5cf6] to-[#7b3fe4] text-white">
-            <Link href="/sign-up">Começar agora</Link>
+            <Link href="/sign-in">Começar agora</Link>
           </Button>
         </nav>
       </header>
@@ -69,7 +69,7 @@ export default function LandingPage() {
           </p>
           <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Button asChild size="lg" className="rounded-full bg-gradient-to-br from-[#8b5cf6] to-[#7b3fe4] px-8 text-white">
-              <Link href="/sign-up">Criar meus cortes</Link>
+              <Link href="/sign-in">Criar meus cortes</Link>
             </Button>
             <Button asChild size="lg" variant="outline" className="rounded-full px-8">
               <Link href="#como-funciona">Ver como funciona</Link>
@@ -123,7 +123,7 @@ export default function LandingPage() {
                   <li>Presets para TikTok, Reels e Shorts</li>
                 </ul>
                 <Button asChild className="mt-6 w-full rounded-full bg-gradient-to-br from-[#8b5cf6] to-[#7b3fe4] text-white">
-                  <Link href="/sign-up">Assinar {p.name}</Link>
+                  <Link href="/sign-in">Assinar {p.name}</Link>
                 </Button>
               </div>
             ))}
@@ -133,7 +133,7 @@ export default function LandingPage() {
         <section className="mx-auto max-w-3xl px-6 pb-24 pt-8 text-center">
           <h2 className="text-2xl font-semibold sm:text-3xl">Pronto para o primeiro corte?</h2>
           <Button asChild size="lg" className="mt-6 rounded-full bg-gradient-to-br from-[#8b5cf6] to-[#7b3fe4] px-8 text-white">
-            <Link href="/sign-up">Começar agora</Link>
+            <Link href="/sign-in">Começar agora</Link>
           </Button>
           <p className="mt-6 text-xs text-muted-foreground">
             Software livre sob a licença AGPL-3.0.{" "}

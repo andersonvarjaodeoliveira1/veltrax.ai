@@ -30,6 +30,7 @@ import { formatSupportMessage, parseApiError } from "@/lib/api-error";
 import { buildFontOptionsPayload, FONT_TEMPLATE_DEFAULT_VALUE } from "@/lib/font-options";
 import { fetchGenerations, greeting, type GenerationSummary } from "@/lib/generations";
 import { cn } from "@/lib/utils";
+import { DISPLAY_NAME } from "@/lib/site";
 import { FontSelectOption, type FontOption } from "@/components/font-select-option";
 
 interface CaptionTemplate {
@@ -311,7 +312,7 @@ export default function HomeApp() {
 
         <div className="mx-auto max-w-3xl animate-rise">
           <h1 className="text-center font-display text-3xl font-bold tracking-tight sm:text-[2.6rem] sm:leading-tight">
-            {greeting(session.user.name)}
+            {greeting(DISPLAY_NAME)}
           </h1>
           <p className="mt-2 text-center text-muted-foreground">
             Drop in a long video. Get back captioned, ready-to-post clips.

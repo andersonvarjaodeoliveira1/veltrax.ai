@@ -5,7 +5,7 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowRight, Bot, CornerDownLeft, Download, Film, LogOut, Plus, Search, Settings, Shield, Sparkles,
+  ArrowRight, CornerDownLeft, Download, Film, LogOut, Plus, Search, Shield, Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { signOut, useSession } from "@/lib/auth-client";
@@ -19,6 +19,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Kbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
+import { DISPLAY_NAME } from "@/lib/site";
 
 type NavItem = { href: string; label: string; icon: typeof Film; match: (path: string) => boolean; external?: boolean };
 
@@ -28,8 +29,6 @@ const NAV: NavItem[] = [
   { href: "/", label: "Create", icon: Sparkles, match: (p) => p === "/" },
   { href: "/list", label: "Library", icon: Film, match: (p) => p.startsWith("/list") || p.startsWith("/tasks") },
   { href: DOWNLOADER_URL, label: "Baixar vídeo", icon: Download, match: () => false, external: true },
-  { href: "/settings/api-keys", label: "Agents & API", icon: Bot, match: (p) => p.startsWith("/settings/api-keys") },
-  { href: "/settings", label: "Settings", icon: Settings, match: (p) => p === "/settings" },
 ];
 
 function initials(name?: string | null, email?: string | null) {
@@ -115,7 +114,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="mt-auto w-full space-y-2 pb-3">
           <Announcements key={user.id} userId={user.id} compact={compact} />
           {!compact && billing?.monetization_enabled && <UsageCard billing={billing} />}
-          <UserRow compact={compact} name={user.name} email={user.email} />
+          <UserRow compact={compact} name={DISPLAY_NAME} email={user.email} />
         </div>
       </aside> : null}
 
@@ -134,7 +133,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {children}
       </div>
 
-      {user ? <nav aria-label="Mobile navigation" className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+      {user ? <nav aria-label="Mobile navigation" className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-3 border-t bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
         {NAV.map((item) => {
           const active = item.match(pathname);
           const cls = cn("flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium", active ? "text-foreground" : "text-muted-foreground");
@@ -189,7 +188,7 @@ function UsageCard({ billing }: { billing: NonNullable<ReturnType<typeof useBill
     ? `Get more with ${upgrade.nextPlan.name}`
     : null;
   return (
-    <Link href="/settings#plan" className="group block rounded-xl border border-sidebar-border bg-background p-3 text-xs transition-colors hover:border-foreground/20">
+    <Link href="/" className="group block rounded-xl border border-sidebar-border bg-background p-3 text-xs transition-colors hover:border-foreground/20">
       <div className="flex items-center justify-between">
         <span className="font-semibold">{formatBillingPlanName(billing.plan)}</span>
         <span className="text-muted-foreground tabular-nums">{billing.usage_count}{limit ? ` / ${limit}` : ""}</span>
@@ -263,8 +262,6 @@ function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (
     const actions: PaletteEntry[] = [
       { id: "new", label: "New generation", hint: "Paste a link or upload", href: "/", icon: Plus },
       { id: "library", label: "Open library", href: "/list", icon: Film },
-      { id: "keys", label: "Agents & API", hint: "API keys & MCP", href: "/settings/api-keys", icon: Bot },
-      { id: "settings", label: "Settings", href: "/settings", icon: Settings },
     ].filter((entry) => !q || entry.label.toLowerCase().includes(q));
     const matches = generations
       .filter((generation) => !q || generation.source_title.toLowerCase().includes(q))

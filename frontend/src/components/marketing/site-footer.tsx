@@ -14,7 +14,7 @@ export function SiteFooter() {
           <span className="text-sm font-semibold">ClipGringa</span>
         </Link>
         <nav aria-label="Links do rodapé" className="flex flex-wrap gap-x-6 gap-y-2 text-xs text-muted-foreground">
-          <Link href="/sign-up" className={linkClassName}>Começar</Link>
+          <Link href="/sign-in" className={linkClassName}>Começar</Link>
           <Link href="/#planos" className={linkClassName}>Planos</Link>
           <Link href="/status" className={linkClassName}>Status do serviço</Link>
           <Link href="/privacy" className={linkClassName}>Privacidade</Link>

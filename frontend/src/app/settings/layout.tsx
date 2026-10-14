@@ -1,8 +1,6 @@
-import { AppShell } from "@/components/app/app-shell";
-import { noIndexMetadata } from "@/lib/seo";
+import { redirect } from "next/navigation";
 
-export const metadata = noIndexMetadata;
-
-export default function SettingsLayout({ children }: { children: React.ReactNode }) {
-  return <AppShell>{children}</AppShell>;
+// Área bloqueada nesta instalação (conta única): Settings e Agents & API.
+export default function SettingsLayout() {
+  redirect("/");
 }

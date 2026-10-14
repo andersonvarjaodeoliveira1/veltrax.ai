@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ClipCutAnimation } from "@/components/auth/clip-cut-animation";
 
 /** Split-screen frame for sign-in and sign-up: form on the left, product showcase on the right. */
-export function AuthFrame({ children, footer }: { children: React.ReactNode; footer: React.ReactNode }) {
+export function AuthFrame({ children, footer }: { children: React.ReactNode; footer?: React.ReactNode }) {
   return (
     <div className="grid min-h-dvh bg-background lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
       <div className="flex flex-col px-6 py-8 sm:px-12">
