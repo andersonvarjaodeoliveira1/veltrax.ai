@@ -5,7 +5,7 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowRight, Bot, CornerDownLeft, Film, LogOut, Plus, Search, Settings, Shield, Sparkles,
+  ArrowRight, Bot, CornerDownLeft, Download, Film, LogOut, Plus, Search, Settings, Shield, Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { signOut, useSession } from "@/lib/auth-client";
@@ -20,11 +20,14 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Kbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
 
-type NavItem = { href: string; label: string; icon: typeof Film; match: (path: string) => boolean };
+type NavItem = { href: string; label: string; icon: typeof Film; match: (path: string) => boolean; external?: boolean };
+
+const DOWNLOADER_URL = "https://turboscribe.ai/pt/downloader/youtube/video";
 
 const NAV: NavItem[] = [
   { href: "/", label: "Create", icon: Sparkles, match: (p) => p === "/" },
   { href: "/list", label: "Library", icon: Film, match: (p) => p.startsWith("/list") || p.startsWith("/tasks") },
+  { href: DOWNLOADER_URL, label: "Baixar vídeo", icon: Download, match: () => false, external: true },
   { href: "/settings/api-keys", label: "Agents & API", icon: Bot, match: (p) => p.startsWith("/settings/api-keys") },
   { href: "/settings", label: "Settings", icon: Settings, match: (p) => p === "/settings" },
 ];
@@ -89,7 +92,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {items.map((item) => {
             const active = item.match(pathname);
             return (
-              <SidebarLink key={item.href} compact={compact} href={item.href} label={item.label} active={active}>
+              <SidebarLink key={item.href} compact={compact} href={item.href} label={item.label} active={active} external={item.external}>
                 <item.icon className="size-4" />
               </SidebarLink>
             );
@@ -131,14 +134,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {children}
       </div>
 
-      {user ? <nav aria-label="Mobile navigation" className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+      {user ? <nav aria-label="Mobile navigation" className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
         {NAV.map((item) => {
           const active = item.match(pathname);
-          return (
-            <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined}
-              className={cn("flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium", active ? "text-foreground" : "text-muted-foreground")}>
-              <item.icon className={cn("size-5", active && "text-brand")} />{item.label}
-            </Link>
+          const cls = cn("flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium", active ? "text-foreground" : "text-muted-foreground");
+          const inner = <><item.icon className={cn("size-5", active && "text-brand")} />{item.label}</>;
+          return item.external ? (
+            <a key={item.href} href={item.href} target="_blank" rel="noopener noreferrer" className={cls}>{inner}</a>
+          ) : (
+            <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={cls}>{inner}</Link>
           );
         })}
       </nav> : null}
@@ -148,11 +152,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-function SidebarLink({ href, label, active, compact, shortcut, className, children }: {
-  href: string; label: string; active?: boolean; compact: boolean; shortcut?: string; className?: string; children: React.ReactNode;
+function SidebarLink({ href, label, active, compact, shortcut, className, external, children }: {
+  href: string; label: string; active?: boolean; compact: boolean; shortcut?: string; className?: string; external?: boolean; children: React.ReactNode;
 }) {
+  const Anchor = (external ? "a" : Link) as typeof Link;
+  const extra = external ? { target: "_blank", rel: "noopener noreferrer" } : {};
   const link = (
-    <Link
+    <Anchor
+      {...extra}
       href={href}
       aria-current={active ? "page" : undefined}
       aria-label={compact ? label : undefined}
@@ -166,7 +173,7 @@ function SidebarLink({ href, label, active, compact, shortcut, className, childr
       {children}
       {!compact && <span className="flex-1">{label}</span>}
       {!compact && shortcut && <span className="text-[11px] opacity-60">{shortcut}</span>}
-    </Link>
+    </Anchor>
   );
   if (!compact) return link;
   return <Tooltip><TooltipTrigger asChild>{link}</TooltipTrigger><TooltipContent side="right">{label}</TooltipContent></Tooltip>;
