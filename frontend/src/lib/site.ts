@@ -9,7 +9,7 @@ export const HOSTED_APP_URL = DEFAULT_SITE_URL;
  * Defina NEXT_PUBLIC_SOURCE_URL com o repositório público do ClipGringa.
  */
 export const GITHUB_URL =
-  process.env.NEXT_PUBLIC_SOURCE_URL || "https://github.com/gringatools/clipgringa";
+  process.env.NEXT_PUBLIC_SOURCE_URL || "https://github.com/andersonvarjaodeoliveira1/veltrax.ai/tree/clipgringa";
 
 export function getSiteUrl() {
   try {
