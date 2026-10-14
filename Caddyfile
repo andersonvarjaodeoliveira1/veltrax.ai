@@ -1,0 +1,16 @@
+# Proxy reverso com HTTPS automático (Let's Encrypt).
+# Os dois subdomínios precisam apontar (registro A) para o IP do servidor.
+{$APP_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy frontend:3107
+}
+
+{$API_DOMAIN} {
+	# Uploads grandes de vídeo vão direto do navegador para a API.
+	request_body {
+		max_size 12GB
+	}
+	reverse_proxy backend:8000 {
+		flush_interval -1
+	}
+}

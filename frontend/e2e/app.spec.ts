@@ -1,0 +1,51 @@
+import fs from "fs";
+import path from "path";
+
+import { expect, test } from "@playwright/test";
+
+const seed = JSON.parse(
+  fs.readFileSync(path.join(process.cwd(), "e2e", ".seed.json"), "utf8"),
+);
+
+async function signIn(page: import("@playwright/test").Page, email: string, password: string) {
+  await page.goto("/sign-in");
+  await page.getByPlaceholder("Email").fill(email);
+  await page.getByPlaceholder("Password").fill(password);
+  await page.getByRole("button", { name: "Sign In" }).click();
+  await page.waitForURL("**/");
+}
+
+test("regular user can browse seeded tasks and save preferences", async ({ page }) => {
+  // This flow compiles several routes (list, task, settings, admin) on its first
+  // visit to the dev server; together they can take over a minute in CI.
+  test.setTimeout(120_000);
+  await signIn(page, seed.regular.email, seed.regular.password);
+
+  await page.goto("/list");
+  await expect(page.getByText(seed.completedSourceTitle)).toBeVisible();
+
+  await page.goto(`/tasks/${seed.completedTaskId}`);
+  await page.getByRole("button", { name: "Preview Clip 1", exact: true }).click();
+  const preview = page.getByRole("dialog");
+  await expect(preview.getByText("This is a seeded clip", { exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(preview).not.toBeVisible();
+
+  await page.goto("/settings");
+  await page.getByRole("switch", { name: /completion emails/i }).click();
+  await page.getByRole("button", { name: /save preferences/i }).click();
+  await expect(page.getByText(/preferences saved/i)).toBeVisible();
+
+  await page.goto("/admin");
+  await expect(page.getByText(/not an admin/i)).toBeVisible();
+});
+
+test("admin user can access the admin dashboard", async ({ page }) => {
+  await signIn(page, seed.admin.email, seed.admin.password);
+
+  await page.goto("/admin");
+  await expect(page.getByText(/admin dashboard/i)).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: /currently processing tasks/i }),
+  ).toBeVisible();
+});

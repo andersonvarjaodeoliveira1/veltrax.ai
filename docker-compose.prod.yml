@@ -1,0 +1,31 @@
+# Produção por subdomínio. Use junto com o docker-compose.yml:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env up -d --build
+services:
+  frontend:
+    build:
+      target: runner
+    environment:
+      - NODE_ENV=production
+    volumes: !reset []
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: clipgringa-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - APP_DOMAIN=${APP_DOMAIN}
+      - API_DOMAIN=${API_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+      - backend
+
+volumes:
+  caddy_data:
+  caddy_config:
