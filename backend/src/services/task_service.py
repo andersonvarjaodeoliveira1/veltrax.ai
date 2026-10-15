@@ -3,6 +3,8 @@ Task service - orchestrates task creation and processing workflow.
 """
 
 from sqlalchemy.ext.asyncio import AsyncSession
+import asyncio
+import os
 from typing import Dict, Any, Optional, Callable
 import logging
 from datetime import datetime
@@ -368,6 +370,36 @@ class TaskService(ClipEditingMixin):
             clip_ids = []
             render_start = perf_counter()
 
+            # Render a few clips at the same time (ffmpeg runs in worker threads) while
+            # DB writes and progress stay strictly in clip order on this coroutine.
+            try:
+                render_concurrency = int(os.getenv("CLIP_RENDER_CONCURRENCY", "2"))
+            except ValueError:
+                render_concurrency = 2
+            render_gate = asyncio.Semaphore(max(1, min(3, render_concurrency)))
+
+            async def _render_clip(index: int, item: Dict[str, Any]):
+                async with render_gate:
+                    return await self.video_service.create_single_clip(
+                        video_path,
+                        item,
+                        index,
+                        clips_output_dir,
+                        font_family,
+                        font_size,
+                        font_color,
+                        caption_template,
+                        output_format,
+                        add_subtitles,
+                        normalized_cleanup_settings,
+                    )
+
+            render_tasks = [
+                asyncio.create_task(_render_clip(idx, item))
+                for idx, item in enumerate(segments_to_render)
+            ]
+            render_consumed: set[int] = set()
+
             for i, segment in enumerate(segments_to_render):
                 # Check cancellation
                 await check_cancelled()
@@ -382,19 +414,8 @@ class TaskService(ClipEditingMixin):
                 )
 
                 # Render single clip in thread pool
-                clip_info = await self.video_service.create_single_clip(
-                    video_path,
-                    segment,
-                    i,
-                    clips_output_dir,
-                    font_family,
-                    font_size,
-                    font_color,
-                    caption_template,
-                    output_format,
-                    add_subtitles,
-                    normalized_cleanup_settings,
-                )
+                clip_info = await render_tasks[i]
+                render_consumed.add(i)
                 pending_clip_path = Path(clip_info["path"]) if clip_info else None
                 await check_cancelled()
                 if clip_info is None:
@@ -492,6 +513,19 @@ class TaskService(ClipEditingMixin):
             logger.error(f"Error processing task {task_id}: {e}")
             # Clear failed writes before recording the terminal error state.
             await self.db.rollback()
+            for task_index, render_task in enumerate(locals().get("render_tasks", [])):
+                if task_index in locals().get("render_consumed", set()):
+                    continue
+                if not render_task.done():
+                    render_task.cancel()
+                elif not render_task.cancelled() and render_task.exception() is None:
+                    unused = render_task.result()
+                    if unused and unused.get("path"):
+                        try:
+                            Path(unused["path"]).unlink(missing_ok=True)
+                            Path(unused["path"]).with_suffix(".source_map.json").unlink(missing_ok=True)
+                        except OSError:
+                            pass
             if pending_clip_path and pending_clip_path != video_path:
                 try:
                     if pending_clip_path.resolve().is_relative_to(clips_output_dir.resolve()):
