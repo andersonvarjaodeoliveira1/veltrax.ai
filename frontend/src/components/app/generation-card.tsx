@@ -1,14 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { AlertTriangle, Loader2, Youtube, Upload } from "lucide-react";
+import { useState } from "react";
+import { AlertTriangle, Loader2, Trash2, Youtube, Upload } from "lucide-react";
 import { ClipCover, ScoreRing } from "@/components/app/clip-cover";
 import { StatusBadge, ACTIVE_TASK_STATUSES } from "@/components/app/status-badge";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { coverClipUrl, timeAgo, type GenerationSummary } from "@/lib/generations";
 import { cn } from "@/lib/utils";
 
-export function GenerationCard({ generation, selected, onToggle, selectionDisabled, showStatus, className }: {
+export function GenerationCard({ generation, selected, onToggle, selectionDisabled, showStatus, className, onDelete }: {
   generation: GenerationSummary;
   /** Always show the status badge (management views); otherwise only non-completed states. */
   showStatus?: boolean;
@@ -16,7 +21,11 @@ export function GenerationCard({ generation, selected, onToggle, selectionDisabl
   onToggle?: () => void;
   selectionDisabled?: boolean;
   className?: string;
+  /** When set, shows a delete button (with confirmation) on the card. */
+  onDelete?: (id: string) => void | Promise<void>;
 }) {
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const active = ACTIVE_TASK_STATUSES.includes(generation.status);
   const failed = generation.status === "error";
   const selectable = Boolean(onToggle);
@@ -64,6 +73,39 @@ export function GenerationCard({ generation, selected, onToggle, selectionDisabl
           </div>
         </div>
       </Link>
+      {onDelete && !selectable && (
+        <>
+          <button
+            type="button"
+            onClick={() => setConfirming(true)}
+            aria-label={`Delete ${generation.source_title}`}
+            className="absolute left-2 top-2 rounded-full bg-black/60 p-1.5 text-white backdrop-blur transition-opacity hover:bg-red-600 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
+          >
+            <Trash2 className="size-3.5" aria-hidden />
+          </button>
+          <AlertDialog open={confirming} onOpenChange={setConfirming}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete this generation?</AlertDialogTitle>
+                <AlertDialogDescription>This removes the video and its clips from your library. This can&apos;t be undone.</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  disabled={deleting}
+                  onClick={async (event) => {
+                    event.preventDefault();
+                    setDeleting(true);
+                    try { await onDelete(generation.id); setConfirming(false); } finally { setDeleting(false); }
+                  }}
+                >
+                  {deleting ? "Deleting…" : "Delete"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </>
+      )}
       {selectable && (
         <div className={cn(
           "absolute left-2 top-2 rounded-md bg-white/90 p-1 shadow-sm backdrop-blur transition-opacity",

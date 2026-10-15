@@ -11,6 +11,7 @@ import { FONT_SEARCH_THRESHOLD, getYouTubeThumbnailUrl, uploadVideoFile } from "
 import { AppShell } from "@/components/app/app-shell";
 import { GenerationCard } from "@/components/app/generation-card";
 import { VideoDownloadStatus } from "@/components/app/video-download-status";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -67,6 +68,14 @@ export default function HomeApp() {
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needsDownload, setNeedsDownload] = useState(false);
+  const deleteRecent = async (id: string) => {
+    const response = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
+    if (!response.ok) {
+      toast.error("Couldn't delete. Try again.");
+      throw new Error("delete failed");
+    }
+    setRecent((items) => (items ? items.filter((item) => item.id !== id) : items));
+  };
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const urlInputRef = useRef<HTMLInputElement | null>(null);
   const { data: session, isPending } = useSession();
@@ -640,7 +649,7 @@ export default function HomeApp() {
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-4">
-              {recent.map((generation) => <GenerationCard key={generation.id} generation={generation} />)}
+              {recent.map((generation) => <GenerationCard key={generation.id} generation={generation} onDelete={deleteRecent} />)}
             </div>
           )}
         </section>
