@@ -24,7 +24,7 @@ import { Switch } from "@/components/ui/switch";
 import { Kbd } from "@/components/ui/kbd";
 import { useSession } from "@/lib/auth-client";
 import { useBillingSummary } from "@/hooks/use-billing-summary";
-import { formatBillingPlanName, isPaidBillingPlan } from "@/lib/billing-plans";
+import { isPaidBillingPlan } from "@/lib/billing-plans";
 import { track } from "@/lib/datafast";
 import { formatSupportMessage, parseApiError } from "@/lib/api-error";
 import { buildFontOptionsPayload, FONT_TEMPLATE_DEFAULT_VALUE } from "@/lib/font-options";
@@ -66,6 +66,7 @@ export default function HomeApp() {
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [needsDownload, setNeedsDownload] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const urlInputRef = useRef<HTMLInputElement | null>(null);
   const { data: session, isPending } = useSession();
@@ -217,6 +218,7 @@ export default function HomeApp() {
 
     setIsLoading(true);
     setError(null);
+    setNeedsDownload(false);
     setStatusMessage("");
 
     const fontOptions = buildFontOptionsPayload(fontFamily, fontSize, fontColor);
@@ -260,6 +262,15 @@ export default function HomeApp() {
           setStatusMessage("");
           return;
         }
+        if (sourceType === "youtube" && (info.code === "VIDEO_METADATA_UNAVAILABLE" || info.code === "VIDEO_TOO_LONG")) {
+          setError(info.code === "VIDEO_TOO_LONG"
+            ? "This video is too long. Download it and upload a shorter file."
+            : "Couldn't read this YouTube link. Download the video and upload the file.");
+          setNeedsDownload(true);
+          setIsLoading(false);
+          setStatusMessage("");
+          return;
+        }
         throw new Error(formatSupportMessage(info));
       }
 
@@ -296,7 +307,7 @@ export default function HomeApp() {
   }
 
   const limitNote = billingSummary?.max_youtube_duration_seconds
-    ? `${formatBillingPlanName(billingSummary.plan)}: YouTube videos up to ${billingSummary.max_youtube_duration_seconds / 60} minutes. We check the length before using a generation.`
+    ? `YouTube: videos up to ${billingSummary.max_youtube_duration_seconds / 60} min.`
     : null;
 
   return (
@@ -592,7 +603,14 @@ export default function HomeApp() {
           {error && (
             <Alert className="mt-4 border-red-200 bg-red-50">
               <AlertCircle className="h-4 w-4 text-red-500" />
-              <AlertDescription className="text-sm text-red-700">{error}</AlertDescription>
+              <AlertDescription className="text-sm text-red-700">
+                <span>{error}</span>
+                {needsDownload && (
+                  <Button asChild size="sm" className="mt-2 w-fit">
+                    <a href="https://turboscribe.ai/pt/downloader/youtube/video" target="_blank" rel="noopener noreferrer">Baixar vídeo</a>
+                  </Button>
+                )}
+              </AlertDescription>
             </Alert>
           )}
 

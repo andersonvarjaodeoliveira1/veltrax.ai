@@ -98,6 +98,8 @@ const E: Record<string, Entry> = {
   "Checking video length…": { pt: "Verificando a duração do vídeo…", es: "Comprobando la duración del video…" },
   "Starting generation…": { pt: "Iniciando…", es: "Iniciando…" },
   "Failed to process video. Please try again.": { pt: "Não foi possível processar o vídeo. Tente novamente.", es: "No se pudo procesar el video. Inténtalo de nuevo." },
+  "This video is too long. Download it and upload a shorter file.": { pt: "Este vídeo é longo demais. Baixe o vídeo, corte e envie o arquivo.", es: "Este video es demasiado largo. Descárgalo y sube un archivo más corto." },
+  "Couldn't read this YouTube link. Download the video and upload the file.": { pt: "Não deu para ler este link do YouTube. Baixe o vídeo e envie o arquivo.", es: "No se pudo leer este enlace de YouTube. Descarga el video y sube el archivo." },
   "We couldn't verify this video's length. Please try again shortly or upload the video file. No generation was used.": { pt: "Não foi possível verificar a duração deste vídeo. Tente de novo em instantes ou envie o arquivo do vídeo.", es: "No se pudo verificar la duración de este video. Inténtalo de nuevo o sube el archivo de video." },
   "Completion emails follow your preference in": { pt: "Os e-mails de conclusão seguem sua preferência em", es: "Los correos de finalización siguen tu preferencia en" },
 
@@ -250,6 +252,7 @@ const E: Record<string, Entry> = {
 
 /** Frases com números/variáveis. */
 export const PATTERNS: Array<{ re: RegExp; pt: (m: RegExpMatchArray) => string; es: (m: RegExpMatchArray) => string }> = [
+  { re: /^YouTube: videos up to (\d+(?:\.\d+)?) min\.$/, pt: (m) => `YouTube: vídeos de até ${m[1]} min.`, es: (m) => `YouTube: videos de hasta ${m[1]} min.` },
   { re: /^Creating clip (\d+)\/(\d+)(?:\.\.\.|…)$/, pt: (m) => `Criando corte ${m[1]} de ${m[2]}…`, es: (m) => `Creando corte ${m[1]} de ${m[2]}…` },
   { re: /^(\d+) clips? ready below — more on the way\.$/, pt: (m) => `${m[1]} ${m[1] === "1" ? "corte pronto" : "cortes prontos"} abaixo — mais a caminho.`, es: (m) => `${m[1]} ${m[1] === "1" ? "corte listo" : "cortes listos"} abajo — más en camino.` },
   { re: /^(\d+) clips? · (.+) total$/, pt: (m) => `${m[1]} ${m[1] === "1" ? "corte" : "cortes"} · ${m[2]} no total`, es: (m) => `${m[1]} ${m[1] === "1" ? "corte" : "cortes"} · ${m[2]} en total` },
