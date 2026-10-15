@@ -4,10 +4,13 @@ Optimized for free yt-dlp downloads with optional Apify fallback.
 """
 
 import asyncio
+import base64
 from datetime import datetime
 import logging
+import os
 import re
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -28,6 +31,27 @@ YOUTUBE_METADATA_PROVIDER_DATA_API = "youtube_data_api"
 YOUTUBE_DOWNLOAD_PROVIDER_YTDLP = "yt_dlp"
 YOUTUBE_DOWNLOAD_PROVIDER_APIFY = "apify"
 YOUTUBE_DATA_API_URL = "https://www.googleapis.com/youtube/v3/videos"
+
+
+def _youtube_cookie_file() -> Optional[str]:
+    """Write the optional Netscape cookies (base64 in YOUTUBE_COOKIES_B64) to a private temp file.
+
+    Lets yt-dlp present a logged-in session when YouTube blocks the server IP.
+    The value never leaves the environment and is never logged.
+    """
+    encoded = os.getenv("YOUTUBE_COOKIES_B64", "").strip()
+    if not encoded:
+        return None
+    try:
+        data = base64.b64decode(encoded)
+        path = Path(tempfile.gettempdir()) / f"yt_cookies_{os.getpid()}.txt"
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+        return str(path)
+    except Exception:
+        logger.warning("YOUTUBE_COOKIES_B64 is set but could not be decoded")
+        return None
 
 
 class YouTubeDownloader:
@@ -79,6 +103,9 @@ class YouTubeDownloader:
             "prefer_insecure": False,
             "age_limit": None,
         }
+        cookie_file = _youtube_cookie_file()
+        if cookie_file:
+            opts["cookiefile"] = cookie_file
 
         return opts
 
@@ -98,6 +125,9 @@ def _build_info_options() -> Dict[str, Any]:
         },
         "nocheckcertificate": True,
     }
+    cookie_file = _youtube_cookie_file()
+    if cookie_file:
+        ydl_opts["cookiefile"] = cookie_file
     return ydl_opts
 
 
