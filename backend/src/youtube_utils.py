@@ -651,6 +651,10 @@ def download_youtube_video(
 
     config = get_config()
     primary_provider = config.youtube_download_provider
+    # A saved Apify token means yt-dlp is blocked from this server (datacenter IP):
+    # go straight to Apify instead of waiting for yt-dlp to fail first.
+    if config.apify_api_token and primary_provider == YOUTUBE_DOWNLOAD_PROVIDER_YTDLP:
+        primary_provider = YOUTUBE_DOWNLOAD_PROVIDER_APIFY
     secondary_provider = (
         YOUTUBE_DOWNLOAD_PROVIDER_APIFY
         if primary_provider == YOUTUBE_DOWNLOAD_PROVIDER_YTDLP

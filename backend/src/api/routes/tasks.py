@@ -56,6 +56,11 @@ async def _preflight_youtube_source(url: str, duration_limit: int) -> Dict[str, 
         if not math.isfinite(duration) or duration <= 0:
             raise ValueError("Invalid video duration")
     except Exception:
+        # With an Apify token the download does not need yt-dlp metadata; the
+        # duration limit is enforced on the downloaded file by the worker.
+        if get_config().apify_api_token:
+            logger.info("YouTube metadata unavailable; relying on post-download duration check")
+            return {}
         raise HTTPException(
             status_code=503,
             detail={
