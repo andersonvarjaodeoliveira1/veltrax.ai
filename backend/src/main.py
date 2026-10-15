@@ -193,6 +193,12 @@ def create_app(
     app.include_router(api_keys_router)
     app.include_router(account_router)
     app.include_router(folders_router)
+    try:  # BETA, isolated: a failure here must never take the API down
+        from .api.routes.multiplier import router as multiplier_router
+
+        app.include_router(multiplier_router)
+    except Exception:  # pragma: no cover
+        logging.getLogger(__name__).exception("Multiplier (beta) disabled")
 
     @app.get("/")
     def read_root():

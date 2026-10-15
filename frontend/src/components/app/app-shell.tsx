@@ -5,7 +5,7 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowRight, CornerDownLeft, Download, Film, FolderOpen, LogOut, Plus, Search, Shield,
+  ArrowRight, CornerDownLeft, Download, Film, FolderOpen, Layers, LogOut, Plus, Search, Shield,
 } from "lucide-react";
 import { toast } from "sonner";
 import { signOut, useSession } from "@/lib/auth-client";
@@ -22,13 +22,14 @@ import { cn } from "@/lib/utils";
 import { DISPLAY_NAME } from "@/lib/site";
 import { LanguageSwitcher } from "@/lib/i18n";
 
-type NavItem = { href: string; label: string; icon: typeof Film; match: (path: string) => boolean; external?: boolean };
+type NavItem = { href: string; label: string; icon: typeof Film; match: (path: string) => boolean; external?: boolean; badge?: string };
 
 const DOWNLOADER_URL = "https://turboscribe.ai/pt/downloader/youtube/video";
 
 const NAV: NavItem[] = [
   { href: "/list", label: "Library", icon: Film, match: (p) => p.startsWith("/list") || p.startsWith("/tasks") },
   { href: "/folders", label: "Folders", icon: FolderOpen, match: (p) => p.startsWith("/folders") },
+  { href: "/multiplicador", label: "Multiplicador", icon: Layers, match: (p) => p.startsWith("/multiplicador"), badge: "BETA" },
   { href: DOWNLOADER_URL, label: "Baixar vídeo", icon: Download, match: () => false, external: true },
 ];
 
@@ -92,7 +93,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {items.map((item) => {
             const active = item.match(pathname);
             return (
-              <SidebarLink key={item.href} compact={compact} href={item.href} label={item.label} active={active} external={item.external}>
+              <SidebarLink key={item.href} compact={compact} href={item.href} label={item.label} active={active} external={item.external} badge={item.badge}>
                 <item.icon className="size-4" />
               </SidebarLink>
             );
@@ -140,7 +141,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {NAV.map((item) => {
           const active = item.match(pathname);
           const cls = cn("flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium", active ? "text-foreground" : "text-muted-foreground");
-          const inner = <><item.icon className={cn("size-5", active && "text-brand")} />{item.label}</>;
+          const inner = <><item.icon className={cn("size-5", active && "text-brand")} />{item.label}{item.badge && <span data-no-translate className="-mt-0.5 text-[8px] font-semibold text-brand">{item.badge}</span>}</>;
           return item.external ? (
             <a key={item.href} href={item.href} target="_blank" rel="noopener noreferrer" className={cls}>{inner}</a>
           ) : (
@@ -154,8 +155,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-function SidebarLink({ href, label, active, compact, shortcut, className, external, children }: {
-  href: string; label: string; active?: boolean; compact: boolean; shortcut?: string; className?: string; external?: boolean; children: React.ReactNode;
+function SidebarLink({ href, label, active, compact, shortcut, className, external, badge, children }: {
+  badge?: string; href: string; label: string; active?: boolean; compact: boolean; shortcut?: string; className?: string; external?: boolean; children: React.ReactNode;
 }) {
   const Anchor = (external ? "a" : Link) as typeof Link;
   const extra = external ? { target: "_blank", rel: "noopener noreferrer" } : {};
@@ -174,6 +175,7 @@ function SidebarLink({ href, label, active, compact, shortcut, className, extern
     >
       {children}
       {!compact && <span className="flex-1">{label}</span>}
+      {!compact && badge && <span data-no-translate className="rounded-full bg-gradient-to-br from-[#8b5cf6] to-[#7b3fe4] px-1.5 py-px text-[9px] font-semibold tracking-wide text-white">{badge}</span>}
       {!compact && shortcut && <span className="text-[11px] opacity-60">{shortcut}</span>}
     </Anchor>
   );
