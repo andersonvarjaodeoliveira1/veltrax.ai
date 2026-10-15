@@ -81,6 +81,10 @@ def create_app(
         description="ClipGringa backend with async job processing",
         version="0.2.0",
         lifespan=lifespan,
+        # Do not publish the API schema/docs: they map every endpoint.
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
     )
     app.state.queue_adapter = queue_adapter
     app.state.config = runtime_config
@@ -119,6 +123,13 @@ def create_app(
 
         elapsed_ms = round((time.perf_counter() - started_at) * 1000, 2)
         response.headers[TRACE_HEADER] = trace_id
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["X-Robots-Tag"] = "noindex, nofollow, noarchive"
+        response.headers["Cross-Origin-Resource-Policy"] = "same-site"
+        if "server" in response.headers:
+            del response.headers["server"]
         logger.info(
             "Completed request %s %s with status %s in %sms",
             request.method,
@@ -174,12 +185,14 @@ def create_app(
     from .api.routes.billing import router as billing_router
     from .api.routes.api_keys import router as api_keys_router
     from .api.routes.account import router as account_router
+    from .api.routes.folders import router as folders_router
 
     app.include_router(media_router)
     app.include_router(feedback_router)
     app.include_router(billing_router)
     app.include_router(api_keys_router)
     app.include_router(account_router)
+    app.include_router(folders_router)
 
     @app.get("/")
     def read_root():
@@ -188,8 +201,6 @@ def create_app(
             "name": "ClipGringa API",
             "version": "0.2.0",
             "status": "running",
-            "docs": "/docs",
-            "architecture": "job queue",
         }
 
     @app.get("/health")

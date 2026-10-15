@@ -11,19 +11,18 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSession } from "@/lib/auth-client";
-import { GITHUB_URL } from "@/lib/site";
 
 const DOCS = [
   {
     title: "Connect an agent",
     description: "Set up the MCP server in Claude, Cursor and other MCP clients.",
-    href: `${GITHUB_URL}/blob/main/mcp/README.md`,
+    href: "#",
     icon: Bot,
   },
   {
     title: "REST API reference",
     description: "Endpoints, authentication and examples for direct API access.",
-    href: `${GITHUB_URL}/blob/main/docs/api-reference.md#authenticating-with-api-keys`,
+    href: "#",
     icon: Braces,
   },
 ];

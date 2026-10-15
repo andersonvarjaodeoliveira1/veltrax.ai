@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import { HomeRouter } from "@/components/home-router";
-import { GITHUB_URL, getSiteUrl } from "@/lib/site";
+import { getSiteUrl } from "@/lib/site";
 
 const siteUrl = getSiteUrl();
 
@@ -32,7 +32,6 @@ const structuredData = [
     name: "ClipGringa",
     url: siteUrl,
     logo: `${siteUrl}/logo.png`,
-    sameAs: [GITHUB_URL],
   },
   {
     "@context": "https://schema.org",

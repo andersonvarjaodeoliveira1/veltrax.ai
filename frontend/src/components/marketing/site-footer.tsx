@@ -1,7 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
 
-import { GITHUB_URL } from "@/lib/site";
 
 const linkClassName = "hover:text-foreground transition-colors";
 
@@ -19,15 +18,11 @@ export function SiteFooter() {
           <Link href="/status" className={linkClassName}>Status do serviço</Link>
           <Link href="/privacy" className={linkClassName}>Privacidade</Link>
           <Link href="/terms" className={linkClassName}>Termos</Link>
-          <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer" className={linkClassName}>
-            Código-fonte (AGPL-3.0)
-          </a>
         </nav>
         <p className="text-xs text-muted-foreground">&copy; {new Date().getFullYear()} ClipGringa</p>
       </div>
       <p className="mx-auto mt-6 max-w-6xl text-[11px] leading-5 text-muted-foreground/80">
-        Baseado no projeto de código aberto SupoClip (AGPL-3.0). O código-fonte deste serviço,
-        com as alterações, está disponível no link acima.
+        Baseado no projeto de código aberto SupoClip (AGPL-3.0).
       </p>
     </footer>
   );

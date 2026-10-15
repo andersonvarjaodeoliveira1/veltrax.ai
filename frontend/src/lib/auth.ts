@@ -39,8 +39,9 @@ export const auth = betterAuth({
     provider: "postgresql",
   }),
   user: {
+    // Single-account install: nobody may delete the account through the API.
     deleteUser: {
-      enabled: true,
+      enabled: false,
       beforeDelete: async (user) => {
         await prepareAccountDeletion(user.id);
       },
@@ -53,8 +54,37 @@ export const auth = betterAuth({
     },
   },
   trustedOrigins,
+  // Brute-force protection: strict per-IP limits on every credential endpoint.
+  rateLimit: {
+    enabled: true,
+    window: 60,
+    max: 60,
+    storage: "memory",
+    customRules: {
+      "/sign-in/email": { window: 300, max: 5 },
+      "/sign-in/*": { window: 300, max: 10 },
+      "/sign-up/*": { window: 3600, max: 3 },
+      "/forget-password": { window: 3600, max: 3 },
+      "/request-password-reset": { window: 3600, max: 3 },
+      "/reset-password": { window: 3600, max: 5 },
+      "/change-password": { window: 3600, max: 5 },
+      "/change-email": { window: 3600, max: 3 },
+    },
+  },
+  session: {
+    expiresIn: 60 * 60 * 24 * 7,
+    updateAge: 60 * 60 * 24,
+    cookieCache: { enabled: false },
+  },
+  advanced: {
+    useSecureCookies: process.env.NODE_ENV === "production",
+    ipAddress: { ipAddressHeaders: ["x-forwarded-for", "x-real-ip"] },
+    defaultCookieAttributes: { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production" },
+  },
   emailAndPassword: {
     enabled: true,
+    minPasswordLength: 10,
+    maxPasswordLength: 128,
     disableSignUp,
     revokeSessionsOnPasswordReset: true,
     sendResetPassword: async ({ user, url }) => {

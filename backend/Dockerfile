@@ -46,6 +46,15 @@ RUN uv pip install --upgrade --force-reinstall "yt-dlp[default]"
 # Copy source code
 COPY src/ ./src/
 
+# Code protection: ship compiled bytecode only (no readable .py sources) so
+# anyone who pulls or opens the image cannot simply read the application code.
+ARG STRIP_SOURCE=true
+RUN if [ "$STRIP_SOURCE" = "true" ]; then \
+      .venv/bin/python -m compileall -b -q -j 0 src && \
+      find src -name "*.py" -type f -delete && \
+      find src -name "__pycache__" -type d -prune -exec rm -rf {} + ; \
+    fi
+
 # Copy fonts and transitions directories
 COPY fonts/ ./fonts/
 COPY transitions/ ./transitions/

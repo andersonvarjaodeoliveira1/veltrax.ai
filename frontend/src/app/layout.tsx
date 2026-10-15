@@ -9,6 +9,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { FeedbackButton } from "@/components/feedback-button";
 import { getSiteUrl } from "@/lib/site";
 import { LanguageProvider } from "@/lib/i18n";
+import { CodeGuard } from "@/components/code-guard";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -61,15 +62,10 @@ export const metadata: Metadata = {
       "Cortes com IA, nota de potencial viral, legendas e enquadramento no rosto.",
   },
   robots: {
-    index: true,
-    follow: true,
-    googleBot: {
-      index: true,
-      follow: true,
-      "max-image-preview": "large",
-      "max-snippet": -1,
-      "max-video-preview": -1,
-    },
+    index: false,
+    follow: false,
+    nocache: true,
+    googleBot: { index: false, follow: false, noimageindex: true },
   },
 };
 
@@ -105,6 +101,7 @@ export default function RootLayout({
         <LanguageProvider>
           <TooltipProvider>
             {children}
+            <CodeGuard />
             <DataFastIdentity />
             <AttributionTracker />
             <FeedbackButton />

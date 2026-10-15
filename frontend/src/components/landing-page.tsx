@@ -5,7 +5,6 @@ import Link from "next/link";
 
 import { SiteFooter } from "@/components/marketing/site-footer";
 import { Button } from "@/components/ui/button";
-import { GITHUB_URL } from "@/lib/site";
 
 const steps = [
   { n: "01", title: "Envie o vídeo", text: "Cole um link do YouTube ou envie o arquivo do seu computador." },
@@ -135,12 +134,6 @@ export default function LandingPage() {
           <Button asChild size="lg" className="mt-6 rounded-full bg-gradient-to-br from-[#8b5cf6] to-[#7b3fe4] px-8 text-white">
             <Link href="/sign-in">Começar agora</Link>
           </Button>
-          <p className="mt-6 text-xs text-muted-foreground">
-            Software livre sob a licença AGPL-3.0.{" "}
-            <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer" className="underline underline-offset-4">
-              Ver código-fonte
-            </a>
-          </p>
         </section>
       </main>
 

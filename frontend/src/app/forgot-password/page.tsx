@@ -1,13 +1,6 @@
-import { ForgotPassword } from "@/components/auth/forgot-password";
-import { AuthFrame } from "@/components/auth/auth-frame";
-import Link from "next/link";
+import { redirect } from "next/navigation";
 
+/** Recuperação por e-mail desativada (conta única, sem envio de e-mail). */
 export default function ForgotPasswordPage() {
-  return (
-    <AuthFrame
-      footer={<>Remembered it?{" "}<Link href="/sign-in" className="font-medium text-foreground underline-offset-4 hover:underline">Sign in</Link></>}
-    >
-      <ForgotPassword />
-    </AuthFrame>
-  );
+  redirect("/sign-in");
 }

@@ -9,6 +9,7 @@ export interface GenerationSummary {
   clips_count: number;
   top_virality_score?: number | null;
   cover_clip_id?: string | null;
+  folder_id?: string | null;
   created_at: string;
   updated_at: string;
 }
