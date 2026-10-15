@@ -51,7 +51,7 @@
 }
 
 :root {
-  --radius: 0.75rem;
+  --radius: 1.125rem;
   --brand: oklch(0.64 0.2 38);
   --brand-foreground: oklch(0.99 0.005 60);
   --brand-soft: oklch(0.96 0.03 50);
