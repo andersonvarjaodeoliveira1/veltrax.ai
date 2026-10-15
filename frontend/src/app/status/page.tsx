@@ -65,7 +65,7 @@ export default async function StatusPage() {
                   {component.description}
                 </p>
                 <p className="mt-6 text-xs text-muted-foreground">
-                  Last updated: <time dateTime={component.updatedAt.toISOString()}>{component.updatedAt.toLocaleString("en-GB", { timeZone: "Europe/Zurich", dateStyle: "long", timeStyle: "short" })} (Zurich)</time>
+                  Last updated: <time dateTime={component.updatedAt.toISOString()}>{component.updatedAt.toLocaleString("en-GB", { timeZone: "America/Sao_Paulo", dateStyle: "long", timeStyle: "short" })} (andersonvarjao)</time>
                 </p>
                 <p data-no-translate className="mt-2 text-xs text-muted-foreground">
                   Última atualização - andersonvarjao
