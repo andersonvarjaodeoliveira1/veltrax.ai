@@ -5,7 +5,7 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowRight, CornerDownLeft, Download, Film, FolderOpen, LogOut, Plus, Search, Shield, Sparkles,
+  ArrowRight, CornerDownLeft, Download, Film, FolderOpen, LogOut, Plus, Search, Shield,
 } from "lucide-react";
 import { toast } from "sonner";
 import { signOut, useSession } from "@/lib/auth-client";
@@ -27,7 +27,6 @@ type NavItem = { href: string; label: string; icon: typeof Film; match: (path: s
 const DOWNLOADER_URL = "https://turboscribe.ai/pt/downloader/youtube/video";
 
 const NAV: NavItem[] = [
-  { href: "/", label: "Create", icon: Sparkles, match: (p) => p === "/" },
   { href: "/list", label: "Library", icon: Film, match: (p) => p.startsWith("/list") || p.startsWith("/tasks") },
   { href: "/folders", label: "Folders", icon: FolderOpen, match: (p) => p.startsWith("/folders") },
   { href: DOWNLOADER_URL, label: "Baixar vídeo", icon: Download, match: () => false, external: true },
@@ -137,7 +136,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {children}
       </div>
 
-      {user ? <nav aria-label="Mobile navigation" className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+      {user ? <nav aria-label="Mobile navigation" className="fixed inset-x-0 bottom-0 z-40 grid grid-flow-col auto-cols-fr border-t bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
         {NAV.map((item) => {
           const active = item.match(pathname);
           const cls = cn("flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium", active ? "text-foreground" : "text-muted-foreground");
