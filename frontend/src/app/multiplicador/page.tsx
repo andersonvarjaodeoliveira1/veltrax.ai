@@ -43,13 +43,13 @@ function postWithProgress(url: string, form: FormData, onProgress: (percent: num
   });
 }
 
-const MAX_CREATIVE_SECONDS = 180;
+const MAX_CREATIVE_SECONDS = 600;
 
 /** Backend errors are in English; show them in Portuguese. */
 function ptError(detail: unknown, fallback: string) {
   if (typeof detail !== "string") return fallback;
   const map: [RegExp, string][] = [
-    [/too long \(max 3 minutes\)/i, "Esse criativo tem mais de 3 minutos. Corte o vídeo e envie de novo."],
+    [/too long \(max 10 minutes\)/i, "Esse criativo tem mais de 10 minutos. Corte o vídeo e envie de novo."],
     [/too large/i, "Um dos arquivos é grande demais (máximo 300 MB)."],
     [/Only video files/i, "Envie só arquivos de vídeo (mp4, mov, webm ou mkv)."],
     [/Could not read this video/i, "Não foi possível ler esse vídeo. Tente outro arquivo."],
@@ -341,7 +341,7 @@ export default function MultiplierPage() {
       <div className="space-y-4">
         <div className="rounded-[18px] border border-border bg-card p-4">
           <p className="font-medium">Seu criativo</p>
-          <p className="text-xs text-muted-foreground">Envie um vídeo (até 3 minutos). O sistema cria sozinho versões com zoom, tom de cor, velocidade e início diferentes para você testar.</p>
+          <p className="text-xs text-muted-foreground">Envie um vídeo (até 10 minutos). O sistema cria sozinho versões com zoom, tom de cor, velocidade e início diferentes para você testar.</p>
           <input ref={creativeInput} type="file" accept="video/*" hidden
             onChange={async (event) => {
               const file = event.target.files?.[0] || null;
@@ -351,7 +351,7 @@ export default function MultiplierPage() {
               const duration = await readDuration(file);
               if (duration !== null && duration > MAX_CREATIVE_SECONDS) {
                 setCreative(null);
-                setError(`Esse vídeo tem ${formatDuration(duration)}. O limite é de 3 minutos. Corte o vídeo e envie de novo.`);
+                setError(`Esse vídeo tem ${formatDuration(duration)}. O limite é de 10 minutos. Corte o vídeo e envie de novo.`);
                 return;
               }
               setCreative(file);

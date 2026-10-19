@@ -70,7 +70,7 @@ async def _render_card(text_value: str, button: str, aspect: str, target: Path, 
 
 # ---- Automatic variations of a single creative (BETA) --------------------------
 MAX_VARIATIONS = 12
-MAX_SOURCE_SECONDS = 180
+MAX_SOURCE_SECONDS = 600
 
 GRADES = {
     "warm": "eq=saturation=1.08:contrast=1.04,colorbalance=rs=0.07:gs=0.02:bs=-0.07",
@@ -627,7 +627,7 @@ async def create_variations(request: Request, db: AsyncSession = Depends(get_db)
         except Exception:
             raise HTTPException(status_code=400, detail="Could not read this video")
         if duration > MAX_SOURCE_SECONDS:
-            raise HTTPException(status_code=400, detail="The creative is too long (max 3 minutes)")
+            raise HTTPException(status_code=400, detail="The creative is too long (max 10 minutes)")
         recipes = [
             recipe for recipe in RECIPES if not (recipe.get("skip") and duration < 6)
         ][:count]
