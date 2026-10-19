@@ -43,6 +43,44 @@ function postWithProgress(url: string, form: FormData, onProgress: (percent: num
   });
 }
 
+const MAX_CREATIVE_SECONDS = 180;
+
+/** Backend errors are in English; show them in Portuguese. */
+function ptError(detail: unknown, fallback: string) {
+  if (typeof detail !== "string") return fallback;
+  const map: [RegExp, string][] = [
+    [/too long \(max 3 minutes\)/i, "Esse criativo tem mais de 3 minutos. Corte o vídeo e envie de novo."],
+    [/too large/i, "Um dos arquivos é grande demais (máximo 300 MB)."],
+    [/Only video files/i, "Envie só arquivos de vídeo (mp4, mov, webm ou mkv)."],
+    [/Could not read this video/i, "Não foi possível ler esse vídeo. Tente outro arquivo."],
+    [/already have a job running/i, "Você já tem uma criação em andamento. Espere terminar."],
+    [/Job limit reached/i, "Limite de multiplicações atingido. Exclua as mais antigas."],
+    [/combinations is too many/i, "Combinações demais. O máximo é 60 vídeos por vez."],
+    [/at least 1 hook, 1 body and 1 CTA/i, "Envie pelo menos 1 gancho, 1 corpo e 1 CTA."],
+    [/text card/i, "Não foi possível criar o cartão de texto. Tente de novo."],
+  ];
+  for (const [pattern, message] of map) if (pattern.test(detail)) return message;
+  return fallback;
+}
+
+function readDuration(file: File) {
+  return new Promise<number | null>((resolve) => {
+    const url = URL.createObjectURL(file);
+    const video = document.createElement("video");
+    const done = (value: number | null) => { URL.revokeObjectURL(url); resolve(value); };
+    video.preload = "metadata";
+    video.onloadedmetadata = () => done(Number.isFinite(video.duration) ? video.duration : null);
+    video.onerror = () => done(null);
+    video.src = url;
+  });
+}
+
+function formatDuration(seconds: number) {
+  const m = Math.floor(seconds / 60);
+  const s = Math.round(seconds % 60);
+  return m > 0 ? `${m} min ${s} s` : `${s} s`;
+}
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function Group({ title, hint, files, max, onChange }: {
@@ -159,7 +197,7 @@ export default function MultiplierPage() {
     try {
       const response = await postWithProgress(endpoint, form, setUploadPct);
       if (!response.ok) {
-        throw new Error(typeof response.data?.detail === "string" ? response.data.detail : "Não foi possível iniciar. Tente de novo.");
+        throw new Error(ptError(response.data?.detail, "Não foi possível iniciar. Tente de novo."));
       }
       setUploadPct(100);
       onStarted?.();
@@ -265,7 +303,19 @@ export default function MultiplierPage() {
           <p className="font-medium">Seu criativo</p>
           <p className="text-xs text-muted-foreground">Envie um vídeo (até 3 minutos). O sistema cria sozinho versões com zoom, tom de cor, velocidade e início diferentes para você testar.</p>
           <input ref={creativeInput} type="file" accept="video/*" hidden
-            onChange={(event) => { setCreative(event.target.files?.[0] || null); event.target.value = ""; }} />
+            onChange={async (event) => {
+              const file = event.target.files?.[0] || null;
+              event.target.value = "";
+              if (!file) return;
+              setError(null);
+              const duration = await readDuration(file);
+              if (duration !== null && duration > MAX_CREATIVE_SECONDS) {
+                setCreative(null);
+                setError(`Esse vídeo tem ${formatDuration(duration)}. O limite é de 3 minutos. Corte o vídeo e envie de novo.`);
+                return;
+              }
+              setCreative(file);
+            }} />
           <button type="button" disabled={sending} onClick={() => creativeInput.current?.click()}
             className="mt-3 flex w-full flex-col items-center justify-center gap-2 rounded-[18px] border border-dashed border-border px-4 py-8 text-sm text-muted-foreground hover:border-brand hover:text-foreground disabled:opacity-60">
             {creative ? (
