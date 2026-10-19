@@ -333,6 +333,8 @@ export default function MultiplierPage() {
         <ProgressPanel
           stage={phase}
           percent={phase === "upload" ? uploadPct : renderInfo && renderInfo.total ? (renderInfo.done / renderInfo.total) * 100 : null}
+          done={phase === "render" ? renderInfo?.done : undefined}
+          total={phase === "render" ? renderInfo?.total : undefined}
           detail={phase === "render" && renderInfo?.total ? `${renderInfo.done} de ${renderInfo.total} vídeos prontos` : undefined}
         />
       )}
@@ -376,7 +378,7 @@ export default function MultiplierPage() {
         <div className="flex flex-wrap items-center gap-3 rounded-[18px] border border-border bg-card p-4">
           <div className="flex items-center gap-1.5">
             <span className="mr-1 text-sm text-muted-foreground">Quantidade</span>
-            {[3, 6, 9, 12].map((value) => (
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((value) => (
               <button key={value} type="button" onClick={() => setVariationCount(value)} disabled={sending}
                 className={cn("rounded-full border px-3 py-1 text-sm", variationCount === value ? "border-transparent bg-primary text-primary-foreground" : "border-border text-muted-foreground")}>
                 {value}

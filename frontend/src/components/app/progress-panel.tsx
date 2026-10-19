@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 
 type Props = {
@@ -7,7 +8,26 @@ type Props = {
   /** 0-100. `null` shows an indeterminate bar. */
   percent: number | null;
   detail?: string;
+  /** Videos finished / total, used for the live status line while creating. */
+  done?: number;
+  total?: number;
 };
+
+const RENDER_MESSAGES = [
+  "Preparando o vídeo original",
+  "Aplicando zoom e ajuste de cor",
+  "Ajustando a velocidade e o início",
+  "Codificando o vídeo em alta qualidade",
+  "Misturando o áudio",
+  "Finalizando o arquivo",
+];
+const UPLOAD_MESSAGES = ["Enviando o arquivo com segurança", "Quase lá, só mais um pouco"];
+
+function formatElapsed(seconds: number) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return m > 0 ? `${m} min ${String(s).padStart(2, "0")} s` : `${s} s`;
+}
 
 const STEPS = [
   { key: "upload", label: "Enviando" },
@@ -15,7 +35,16 @@ const STEPS = [
 ] as const;
 
 /** Loading panel with an animated bar, used while sending files and while videos are created. */
-export function ProgressPanel({ stage, percent, detail }: Props) {
+export function ProgressPanel({ stage, percent, detail, done, total }: Props) {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    setElapsed(0);
+    const id = setInterval(() => setElapsed((value) => value + 1), 1000);
+    return () => clearInterval(id);
+  }, [stage]);
+  const messages = stage === "upload" ? UPLOAD_MESSAGES : RENDER_MESSAGES;
+  const message = messages[Math.floor(elapsed / 5) % messages.length];
+  const current = stage === "render" && total ? Math.min((done ?? 0) + 1, total) : null;
   const value = percent === null ? null : Math.max(0, Math.min(100, Math.round(percent)));
   const title = stage === "upload" ? "Enviando seus vídeos…" : "Criando seus vídeos…";
   return (
@@ -55,6 +84,14 @@ export function ProgressPanel({ stage, percent, detail }: Props) {
           </div>
         )}
       </div>
+
+      <p className="mt-3 text-sm text-foreground">
+        {current !== null ? `Criando o vídeo ${current} de ${total}: ` : ""}
+        {message}…
+      </p>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Tempo: {formatElapsed(elapsed)} · Está funcionando, pode levar alguns minutos. Não feche esta página.
+      </p>
 
       <ol className="mt-4 flex items-center gap-2 text-xs">
         {STEPS.map((step, index) => {
