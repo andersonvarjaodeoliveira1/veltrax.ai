@@ -41,6 +41,13 @@ def normalize_apify_quality(value: Optional[str]) -> str:
 
 def _extract_download_url(payload: Any) -> Optional[str]:
     if isinstance(payload, dict):
+        # epctex/youtube-video-downloader returns {"output": {"url": "https://..."}}
+        output = payload.get("output")
+        if isinstance(output, dict):
+            output_url = output.get("url")
+            if isinstance(output_url, str) and output_url.startswith(("http://", "https://")):
+                return output_url
+
         direct_value = payload.get("downloadUrl")
         if isinstance(direct_value, str) and direct_value.startswith(("http://", "https://")):
             return direct_value
@@ -133,7 +140,7 @@ def _build_run_input(actor_id: str, url: str, quality: str) -> dict[str, Any]:
     return {
         "startUrls": [url],
         "quality": quality,
-        "proxy": {"useApifyProxy": True},
+        "storageType": "apify",
     }
 
 

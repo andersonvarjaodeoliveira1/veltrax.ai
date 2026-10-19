@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...auth_headers import resolve_authenticated_user_id
 from ...config import get_config
 from ...database import AsyncSessionLocal, get_db
-from ...media.ffmpeg import ffprobe_has_audio, run_ffmpeg_command
+from ...media.ffmpeg import ffprobe_duration, ffprobe_has_audio, run_ffmpeg_command
 from ...utils.async_helpers import run_in_thread
 
 logger = logging.getLogger(__name__)
@@ -65,6 +65,78 @@ async def _render_card(text_value: str, button: str, aspect: str, target: Path) 
         raise HTTPException(status_code=502, detail="Could not create the text card. Try again.")
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(response.content)
+
+
+# ---- Automatic variations of a single creative (BETA) --------------------------
+MAX_VARIATIONS = 12
+MAX_SOURCE_SECONDS = 180
+
+GRADES = {
+    "warm": "eq=saturation=1.08:contrast=1.04,colorbalance=rs=0.07:gs=0.02:bs=-0.07",
+    "cool": "eq=saturation=1.05,colorbalance=rs=-0.06:bs=0.08",
+    "vivid": "eq=saturation=1.3:contrast=1.08:brightness=0.01",
+}
+
+# Ordered by how different they look; the first N are used.
+RECIPES: list[dict[str, Any]] = [
+    {"key": "zoom", "zoom": 0.93},
+    {"key": "quente", "grade": "warm"},
+    {"key": "frio", "grade": "cool"},
+    {"key": "vivo", "grade": "vivid"},
+    {"key": "rapido", "speed": 1.06},
+    {"key": "lento", "speed": 0.95},
+    {"key": "zoom-quente", "zoom": 0.93, "grade": "warm"},
+    {"key": "zoom-frio", "zoom": 0.93, "grade": "cool"},
+    {"key": "inicio", "skip": 1.0},
+    {"key": "rapido-vivo", "speed": 1.06, "grade": "vivid"},
+    {"key": "zoom-vivo", "zoom": 0.93, "grade": "vivid"},
+    {"key": "lento-quente", "speed": 0.95, "grade": "warm"},
+]
+
+
+def render_variation(
+    source: Path, output: Path, width: int, height: int, recipe: dict[str, Any], mirror: bool
+) -> None:
+    """Render one automatic variation (zoom / colour / speed / alternative start) of a creative."""
+    speed = float(recipe.get("speed", 1.0))
+    video = []
+    if mirror:
+        video.append("hflip")
+    zoom = recipe.get("zoom")
+    if zoom:
+        video.append(f"crop=iw*{zoom}:ih*{zoom}")
+    video.append(f"scale={width}:{height}:force_original_aspect_ratio=decrease")
+    video.append(f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black")
+    video.append("setsar=1")
+    video.append("fps=30")
+    grade = recipe.get("grade")
+    if grade:
+        video.append(GRADES[grade])
+    if speed != 1.0:
+        video.append(f"setpts=PTS/{speed}")
+    video.append("format=yuv420p")
+    audio = []
+    if speed != 1.0:
+        audio.append(f"atempo={speed}")
+    audio.append("aresample=48000")
+    audio.append("aformat=sample_fmts=fltp:channel_layouts=stereo")
+    command: list[str] = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error"]
+    skip = float(recipe.get("skip", 0) or 0)
+    if skip:
+        command += ["-ss", str(skip)]
+    command += [
+        "-i", str(source),
+        "-filter_complex", f"[0:v]{','.join(video)}[v];[0:a]{','.join(audio)}[a]",
+        "-map", "[v]", "-map", "[a]",
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "21",
+        "-pix_fmt", "yuv420p", "-profile:v", "high",
+        "-c:a", "aac", "-b:a", "160k", "-ar", "48000",
+        "-movflags", "+faststart",
+        str(output),
+    ]
+    result = run_ffmpeg_command(command, timeout=900)
+    if result.returncode != 0 or not output.exists():
+        raise RuntimeError("ffmpeg failed to render this variation")
 
 
 def _root() -> Path:
@@ -460,3 +532,104 @@ async def delete_job(job_id: str, request: Request, db: AsyncSession = Depends(g
     await db.commit()
     await run_in_thread(shutil.rmtree, _job_dir(job_id), True)
     return {"deleted": True}
+
+
+async def _run_variations_job(
+    job_id: str, source: Path, recipes: list[dict[str, Any]], aspect: str, mirror: bool
+) -> None:
+    width, height = ASPECTS[aspect]
+    job_dir = _job_dir(job_id)
+    outputs: list[dict[str, Any]] = [
+        {"index": number, "label": f"V{number}-{recipe['key']}", "status": "pending"}
+        for number, recipe in enumerate(recipes, start=1)
+    ]
+    try:
+        async with _render_gate:
+            prepared = await run_in_thread(ensure_audio, source)
+            done = 0
+            for number, recipe in enumerate(recipes, start=1):
+                target = job_dir / f"out_{number:03d}.mp4"
+                try:
+                    await run_in_thread(render_variation, prepared, target, width, height, recipe, mirror)
+                    outputs[number - 1]["status"] = "ready"
+                    outputs[number - 1]["filename"] = target.name
+                except Exception as exc:  # one bad variation must not stop the job
+                    logger.warning("variations %s #%s failed: %s", job_id, number, exc)
+                    outputs[number - 1]["status"] = "error"
+                done += 1
+                await _save_progress(job_id, done=done, outputs=json.dumps(outputs))
+        ready = sum(1 for item in outputs if item["status"] == "ready")
+        await _save_progress(
+            job_id,
+            status="completed" if ready else "error",
+            error=None if ready else "Could not create the variations. Check the video and try again.",
+            outputs=json.dumps(outputs),
+        )
+    except Exception as exc:
+        logger.exception("variations job %s crashed", job_id)
+        await _save_progress(job_id, status="error", error=str(exc)[:300])
+    finally:
+        _running.pop(job_id, None)
+        shutil.rmtree(job_dir / "in", ignore_errors=True)
+
+
+@router.post("/variations")
+async def create_variations(request: Request, db: AsyncSession = Depends(get_db)):
+    user_id = await _user_id(request, db)
+    if user_id in _running.values():
+        raise HTTPException(status_code=409, detail="You already have a job running. Wait for it to finish.")
+    total_jobs = (
+        await db.execute(
+            text("SELECT COUNT(*) FROM multiplier_jobs WHERE user_id = :u"), {"u": user_id}
+        )
+    ).scalar_one()
+    if total_jobs >= MAX_JOBS_PER_USER:
+        raise HTTPException(status_code=409, detail="Job limit reached. Delete older ones first.")
+
+    form = await request.form()
+    aspect = str(form.get("aspect") or "9:16")
+    if aspect not in ASPECTS:
+        raise HTTPException(status_code=400, detail="Invalid format")
+    try:
+        count = int(str(form.get("count") or "6"))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid count")
+    count = max(1, min(MAX_VARIATIONS, count))
+    mirror = str(form.get("mirror") or "").lower() in {"1", "true", "on", "yes"}
+
+    job_id = str(uuid.uuid4())
+    job_dir = _job_dir(job_id)
+    try:
+        saved = await _read_group(form, "video", 1, job_dir)
+        if not saved:
+            raise HTTPException(status_code=400, detail="Send a video")
+        source = saved[0]
+        try:
+            duration = await run_in_thread(ffprobe_duration, source)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Could not read this video")
+        if duration > MAX_SOURCE_SECONDS:
+            raise HTTPException(status_code=400, detail="The creative is too long (max 3 minutes)")
+        recipes = [
+            recipe for recipe in RECIPES if not (recipe.get("skip") and duration < 6)
+        ][:count]
+    except HTTPException:
+        shutil.rmtree(job_dir, ignore_errors=True)
+        raise
+    except Exception:
+        shutil.rmtree(job_dir, ignore_errors=True)
+        raise
+
+    await db.execute(
+        text(
+            "INSERT INTO multiplier_jobs (id, user_id, status, aspect, total, done, outputs) "
+            "VALUES (:id, :user_id, 'processing', :aspect, :total, 0, '[]')"
+        ),
+        {"id": job_id, "user_id": user_id, "aspect": aspect, "total": len(recipes)},
+    )
+    await db.commit()
+
+    _running[job_id] = user_id
+    task = asyncio.create_task(_run_variations_job(job_id, source, recipes, aspect, mirror))
+    task.add_done_callback(lambda _t: None)
+    return {"id": job_id, "total": len(recipes), "status": "processing"}

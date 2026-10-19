@@ -73,8 +73,15 @@ def test_download_video_via_apify_saves_file(tmp_path, monkeypatch):
     assert actor_calls["run_input"] == {
         "startUrls": ["https://www.youtube.com/watch?v=abcdefghijk"],
         "quality": "720",
-        "proxy": {"useApifyProxy": True},
+        "storageType": "apify",
     }
+
+
+def test_extract_download_url_reads_epctex_output_url():
+    from src.apify_youtube_downloader import _extract_download_url
+
+    item = {"videoId": "x", "status": "succeeded", "output": {"url": "https://api.apify.com/v2/records/x.mp4?signature=1"}}
+    assert _extract_download_url(item) == "https://api.apify.com/v2/records/x.mp4?signature=1"
 
 
 def test_download_video_via_apify_supports_eunit_actor(tmp_path, monkeypatch):

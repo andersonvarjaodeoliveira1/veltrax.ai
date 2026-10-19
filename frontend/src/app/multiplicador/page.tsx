@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Download, Layers, Loader2, Play, Trash2, Upload } from "lucide-react";
+import { Download, Film, Layers, Loader2, Play, Sparkles, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
+import { ProgressPanel } from "@/components/app/progress-panel";
 
 type Output = { index: number; label: string; status: "pending" | "ready" | "error" };
 type Job = {
@@ -23,6 +24,26 @@ async function readError(response: Response, fallback: string) {
   } catch { /* ignore */ }
   return fallback;
 }
+
+/** POST multipart with upload progress (fetch cannot report it). */
+function postWithProgress(url: string, form: FormData, onProgress: (percent: number) => void) {
+  return new Promise<{ ok: boolean; status: number; data: { id?: string; total?: number; detail?: unknown } | null }>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url);
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress((event.loaded / event.total) * 100);
+    };
+    xhr.onerror = () => reject(new Error("Falha de conexão. Tente de novo."));
+    xhr.onload = () => {
+      let data: { id?: string; total?: number; detail?: unknown } | null = null;
+      try { data = JSON.parse(xhr.responseText); } catch { /* not json */ }
+      resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, data });
+    };
+    xhr.send(form);
+  });
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function Group({ title, hint, files, max, onChange }: {
   title: string; hint: string; files: File[]; max: number; onChange: (files: File[]) => void;
@@ -73,7 +94,15 @@ export default function MultiplierPage() {
   const [hookText, setHookText] = useState("");
   const [ctaText, setCtaText] = useState("");
   const [ctaButton, setCtaButton] = useState("");
+  const [tab, setTab] = useState<"combine" | "variations">("combine");
   const [sending, setSending] = useState(false);
+  const [phase, setPhase] = useState<"idle" | "upload" | "render">("idle");
+  const [uploadPct, setUploadPct] = useState(0);
+  const [renderInfo, setRenderInfo] = useState<{ done: number; total: number } | null>(null);
+  const [creative, setCreative] = useState<File | null>(null);
+  const [variationCount, setVariationCount] = useState(6);
+  const [mirror, setMirror] = useState(false);
+  const creativeInput = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -120,34 +149,75 @@ export default function MultiplierPage() {
     return () => clearInterval(timer);
   }, [processing, openId, loadJobs, loadOpen]);
 
-  async function start() {
+  /** Sends the form with an upload bar, then follows the job with a render bar until it ends. */
+  async function runJob(endpoint: string, form: FormData, onStarted?: () => void) {
     setError(null);
     setSending(true);
+    setUploadPct(0);
+    setRenderInfo(null);
+    setPhase("upload");
     try {
-      const form = new FormData();
-      hooks.forEach((file) => form.append("hooks", file));
-      bodies.forEach((file) => form.append("bodies", file));
-      ctas.forEach((file) => form.append("ctas", file));
-      form.append("aspect", aspect);
-      if (cardsEnabled) {
-        if (hookText.trim()) form.append("hook_text", hookText.trim());
-        if (ctaText.trim()) {
-          form.append("cta_text", ctaText.trim());
-          if (ctaButton.trim()) form.append("cta_button", ctaButton.trim());
-        }
+      const response = await postWithProgress(endpoint, form, setUploadPct);
+      if (!response.ok) {
+        throw new Error(typeof response.data?.detail === "string" ? response.data.detail : "Não foi possível iniciar. Tente de novo.");
       }
-      const response = await fetch("/api/multiplier/jobs", { method: "POST", body: form });
-      if (!response.ok) throw new Error(await readError(response, "Não foi possível iniciar. Tente de novo."));
-      const data = await response.json();
-      setHooks([]); setBodies([]); setCtas([]); setHookText(""); setCtaText(""); setCtaButton("");
-      await loadJobs();
-      setOpenId(data.id);
-      await loadOpen(data.id);
+      setUploadPct(100);
+      onStarted?.();
+      const id = String(response.data?.id);
+      setPhase("render");
+      setRenderInfo({ done: 0, total: response.data?.total ?? 0 });
+      await sleep(600);
+      for (;;) {
+        const poll = await fetch(`/api/multiplier/jobs/${id}`, { cache: "no-store" });
+        if (poll.ok) {
+          const job = (await poll.json()) as Job;
+          setRenderInfo({ done: job.done, total: job.total });
+          if (job.status !== "processing") {
+            setRenderInfo({ done: job.total, total: job.total });
+            await sleep(700);
+            await loadJobs();
+            setOpenId(id);
+            setOpenJob(job);
+            if (job.status === "error") setError(job.error || "Não foi possível criar os vídeos.");
+            break;
+          }
+        }
+        await sleep(2000);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível iniciar. Tente de novo.");
     } finally {
+      setPhase("idle");
       setSending(false);
     }
+  }
+
+  async function start() {
+    const form = new FormData();
+    hooks.forEach((file) => form.append("hooks", file));
+    bodies.forEach((file) => form.append("bodies", file));
+    ctas.forEach((file) => form.append("ctas", file));
+    form.append("aspect", aspect);
+    if (cardsEnabled) {
+      if (hookText.trim()) form.append("hook_text", hookText.trim());
+      if (ctaText.trim()) {
+        form.append("cta_text", ctaText.trim());
+        if (ctaButton.trim()) form.append("cta_button", ctaButton.trim());
+      }
+    }
+    await runJob("/api/multiplier/jobs", form, () => {
+      setHooks([]); setBodies([]); setCtas([]); setHookText(""); setCtaText(""); setCtaButton("");
+    });
+  }
+
+  async function startVariations() {
+    if (!creative) return;
+    const form = new FormData();
+    form.append("video", creative);
+    form.append("aspect", aspect);
+    form.append("count", String(variationCount));
+    if (mirror) form.append("mirror", "true");
+    await runJob("/api/multiplier/variations", form, () => setCreative(null));
   }
 
   async function remove(id: string) {
@@ -170,6 +240,82 @@ export default function MultiplierPage() {
         </p>
       </div>
 
+      <div className="inline-flex rounded-full border border-border bg-card p-1 text-sm" role="tablist">
+        {([["combine", "Combinar", Layers], ["variations", "Variações", Sparkles]] as const).map(([key, label, Icon]) => (
+          <button key={key} type="button" role="tab" aria-selected={tab === key} disabled={sending}
+            onClick={() => setTab(key)}
+            className={cn("flex items-center gap-1.5 rounded-full px-4 py-1.5 font-medium transition-colors",
+              tab === key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}>
+            <Icon className="size-4" /> {label}
+          </button>
+        ))}
+      </div>
+
+      {phase !== "idle" && (
+        <ProgressPanel
+          stage={phase}
+          percent={phase === "upload" ? uploadPct : renderInfo && renderInfo.total ? (renderInfo.done / renderInfo.total) * 100 : null}
+          detail={phase === "render" && renderInfo?.total ? `${renderInfo.done} de ${renderInfo.total} vídeos prontos` : undefined}
+        />
+      )}
+
+      {phase === "idle" && tab === "variations" && (
+      <div className="space-y-4">
+        <div className="rounded-[18px] border border-border bg-card p-4">
+          <p className="font-medium">Seu criativo</p>
+          <p className="text-xs text-muted-foreground">Envie um vídeo (até 3 minutos). O sistema cria sozinho versões com zoom, tom de cor, velocidade e início diferentes para você testar.</p>
+          <input ref={creativeInput} type="file" accept="video/*" hidden
+            onChange={(event) => { setCreative(event.target.files?.[0] || null); event.target.value = ""; }} />
+          <button type="button" disabled={sending} onClick={() => creativeInput.current?.click()}
+            className="mt-3 flex w-full flex-col items-center justify-center gap-2 rounded-[18px] border border-dashed border-border px-4 py-8 text-sm text-muted-foreground hover:border-brand hover:text-foreground disabled:opacity-60">
+            {creative ? (
+              <>
+                <Film className="size-6 text-brand" />
+                <span className="max-w-full truncate font-medium text-foreground">{creative.name}</span>
+                <span className="text-xs">{(creative.size / 1024 / 1024).toFixed(1)} MB · toque para trocar</span>
+              </>
+            ) : (
+              <>
+                <Upload className="size-6" />
+                <span>Adicionar criativo</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 rounded-[18px] border border-border bg-card p-4">
+          <div className="flex items-center gap-1.5">
+            <span className="mr-1 text-sm text-muted-foreground">Quantidade</span>
+            {[3, 6, 9, 12].map((value) => (
+              <button key={value} type="button" onClick={() => setVariationCount(value)} disabled={sending}
+                className={cn("rounded-full border px-3 py-1 text-sm", variationCount === value ? "border-transparent bg-primary text-primary-foreground" : "border-border text-muted-foreground")}>
+                {value}
+              </button>
+            ))}
+          </div>
+        <div className="flex gap-1.5">
+          {ASPECTS.map((value) => (
+            <button key={value} type="button" onClick={() => setAspect(value)} disabled={sending}
+              className={cn("rounded-full border px-3 py-1 text-sm", aspect === value ? "border-transparent bg-primary text-primary-foreground" : "border-border text-muted-foreground")}>
+              {value}
+            </button>
+          ))}
+        </div>
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            <input type="checkbox" checked={mirror} onChange={(e) => setMirror(e.target.checked)} disabled={sending} />
+            Espelhar (inverte textos no vídeo)
+          </label>
+          <Button className="ml-auto" disabled={!creative || sending} onClick={startVariations}>
+            {sending ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+            {sending ? "Aguarde…" : "Criar variações"}
+          </Button>
+        </div>
+      </div>
+
+      )}
+
+      {phase === "idle" && tab === "combine" && (
+        <>
       <div className="grid gap-4 md:grid-cols-3">
         <Group title="Ganchos" hint="Início do vídeo" files={hooks} max={LIMITS.hooks} onChange={setHooks} />
         <Group title="Corpos" hint="Meio do vídeo" files={bodies} max={LIMITS.bodies} onChange={setBodies} />
@@ -218,6 +364,10 @@ export default function MultiplierPage() {
           {sending ? "Enviando…" : "Gerar combinações"}
         </Button>
       </div>
+
+
+        </>
+      )}
 
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
 
