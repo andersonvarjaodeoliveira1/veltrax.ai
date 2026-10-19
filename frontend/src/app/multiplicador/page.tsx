@@ -7,7 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import { ProgressPanel } from "@/components/app/progress-panel";
 
-type Output = { index: number; label: string; status: "pending" | "ready" | "error" };
+type Output = { index: number; label: string; changes?: string[]; status: "pending" | "ready" | "error" };
 type Job = {
   id: string; status: "processing" | "completed" | "error"; aspect: string;
   total: number; done: number; error: string | null; created_at: string; outputs?: Output[];
@@ -542,6 +542,13 @@ export default function MultiplierPage() {
                     ) : (
                       <div className="flex aspect-[9/16] items-center justify-center rounded-lg bg-muted/50 text-xs text-muted-foreground">
                         {output.status === "error" ? "Falhou" : "Aguardando…"}
+                      </div>
+                    )}
+                    {output.changes && output.changes.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {output.changes.map((change) => (
+                          <span key={change} className="rounded-full bg-brand/15 px-2 py-0.5 text-[11px] text-brand">{change}</span>
+                        ))}
                       </div>
                     )}
                     <div className="flex items-center justify-between text-xs">

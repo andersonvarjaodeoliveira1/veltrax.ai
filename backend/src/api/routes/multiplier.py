@@ -95,6 +95,28 @@ RECIPES: list[dict[str, Any]] = [
 ]
 
 
+GRADE_LABELS = {"warm": "Tom quente", "cool": "Tom frio", "vivid": "Cores vivas"}
+
+
+def describe_recipe(recipe: dict[str, Any], mirror: bool) -> list[str]:
+    """Human-readable (pt-BR) list of what was changed in one variation."""
+    changes: list[str] = []
+    if recipe.get("zoom"):
+        changes.append(f"Zoom de {round((1 - float(recipe['zoom'])) * 100)}%")
+    if recipe.get("grade"):
+        changes.append(GRADE_LABELS.get(recipe["grade"], "Cor ajustada"))
+    speed = float(recipe.get("speed", 1.0))
+    if speed > 1.0:
+        changes.append(f"Mais rápido (+{round((speed - 1) * 100)}%)")
+    elif speed < 1.0:
+        changes.append(f"Mais lento (-{round((1 - speed) * 100)}%)")
+    if recipe.get("skip"):
+        changes.append(f"Início cortado ({float(recipe['skip']):g} s)")
+    if mirror:
+        changes.append("Espelhado")
+    return changes
+
+
 def render_variation(
     source: Path, output: Path, width: int, height: int, recipe: dict[str, Any], mirror: bool
 ) -> None:
@@ -558,7 +580,12 @@ async def _run_variations_job(
     width, height = ASPECTS[aspect]
     job_dir = _job_dir(job_id)
     outputs: list[dict[str, Any]] = [
-        {"index": number, "label": f"V{number}-{recipe['key']}", "status": "pending"}
+        {
+            "index": number,
+            "label": f"V{number}-{recipe['key']}",
+            "changes": describe_recipe(recipe, mirror),
+            "status": "pending",
+        }
         for number, recipe in enumerate(recipes, start=1)
     ]
     try:
