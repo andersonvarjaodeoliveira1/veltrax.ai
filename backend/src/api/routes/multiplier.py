@@ -73,29 +73,34 @@ MAX_VARIATIONS = 12
 MAX_SOURCE_SECONDS = 600
 
 GRADES = {
-    "warm": "eq=saturation=1.08:contrast=1.04,colorbalance=rs=0.07:gs=0.02:bs=-0.07",
-    "cool": "eq=saturation=1.05,colorbalance=rs=-0.06:bs=0.08",
-    "vivid": "eq=saturation=1.3:contrast=1.08:brightness=0.01",
+    "warm": "eq=saturation=1.2:contrast=1.1:brightness=0.03,colorbalance=rs=0.25:rm=0.22:rh=0.12:gs=0.05:bs=-0.25:bm=-0.22:bh=-0.12",
+    "cool": "eq=saturation=1.15:contrast=1.08,colorbalance=rs=-0.22:rm=-0.2:rh=-0.1:bs=0.28:bm=0.24:bh=0.12",
+    "vivid": "eq=saturation=1.5:contrast=1.12:brightness=0.02",
+    "drama": "eq=saturation=0.85:contrast=1.25:brightness=-0.04,vignette=PI/5",
 }
 
 # Ordered by how different they look; the first N are used.
 RECIPES: list[dict[str, Any]] = [
-    {"key": "zoom", "zoom": 0.93},
+    {"key": "zoom", "zoom": 0.88},
     {"key": "quente", "grade": "warm"},
     {"key": "frio", "grade": "cool"},
     {"key": "vivo", "grade": "vivid"},
-    {"key": "rapido", "speed": 1.06},
-    {"key": "lento", "speed": 0.95},
-    {"key": "zoom-quente", "zoom": 0.93, "grade": "warm"},
-    {"key": "zoom-frio", "zoom": 0.93, "grade": "cool"},
-    {"key": "inicio", "skip": 1.0},
-    {"key": "rapido-vivo", "speed": 1.06, "grade": "vivid"},
-    {"key": "zoom-vivo", "zoom": 0.93, "grade": "vivid"},
-    {"key": "lento-quente", "speed": 0.95, "grade": "warm"},
+    {"key": "rapido", "speed": 1.10},
+    {"key": "lento", "speed": 0.92},
+    {"key": "zoom-quente", "zoom": 0.90, "grade": "warm"},
+    {"key": "drama", "grade": "drama"},
+    {"key": "inicio", "skip": 1.5},
+    {"key": "rapido-vivo", "speed": 1.08, "grade": "vivid"},
+    {"key": "zoom-frio", "zoom": 0.90, "grade": "cool"},
+    {"key": "lento-quente", "speed": 0.93, "grade": "warm"},
 ]
 
-
-GRADE_LABELS = {"warm": "Tom quente", "cool": "Tom frio", "vivid": "Cores vivas"}
+GRADE_LABELS = {
+    "warm": "Tom quente (mais laranja)",
+    "cool": "Tom frio (mais azulado)",
+    "vivid": "Cores mais vivas",
+    "drama": "Contraste forte com bordas escuras",
+}
 
 
 def describe_recipe(recipe: dict[str, Any], mirror: bool) -> list[str]:
