@@ -14,7 +14,8 @@ export function buildCardHtml({ text, button, aspect, seconds }) {
   const [width, height] = SIZES[aspect];
   const vertical = height >= width;
   const scale = Math.min(width, height) / 1080;
-  const fontSize = Math.round((text.length > 60 ? 84 : 104) * scale);
+  const base = text.length > 120 ? 62 : text.length > 60 ? 84 : 104;
+  const fontSize = Math.round(base * scale);
   const boxWidth = Math.round(width * 0.82);
   const boxLeft = Math.round((width - boxWidth) / 2);
   const textTop = Math.round(height * (button ? (vertical ? 0.3 : 0.22) : 0.38));

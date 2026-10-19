@@ -57,6 +57,10 @@ function ptError(detail: unknown, fallback: string) {
     [/Job limit reached/i, "Limite de multiplicações atingido. Exclua as mais antigas."],
     [/combinations is too many/i, "Combinações demais. O máximo é 60 vídeos por vez."],
     [/at least 1 hook, 1 body and 1 CTA/i, "Envie pelo menos 1 gancho, 1 corpo e 1 CTA."],
+    [/Describe the product/i, "Descreva o produto em pelo menos uma frase."],
+    [/Too many AI requests/i, "Muitos pedidos à IA em pouco tempo. Tente de novo daqui a pouco."],
+    [/AI is not configured/i, "A IA não está disponível agora. Escreva os textos manualmente."],
+    [/AI took too long|Could not generate/i, "Não foi possível gerar os textos agora. Tente de novo."],
     [/text card/i, "Não foi possível criar o cartão de texto. Tente de novo."],
   ];
   for (const [pattern, message] of map) if (pattern.test(detail)) return message;
@@ -132,6 +136,12 @@ export default function MultiplierPage() {
   const [hookText, setHookText] = useState("");
   const [ctaText, setCtaText] = useState("");
   const [ctaButton, setCtaButton] = useState("");
+  type AiItem = { text: string; button?: string; use: boolean };
+  const [productText, setProductText] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiHooks, setAiHooks] = useState<AiItem[]>([]);
+  const [aiBodies, setAiBodies] = useState<AiItem[]>([]);
+  const [aiCtas, setAiCtas] = useState<AiItem[]>([]);
   const [tab, setTab] = useState<"combine" | "variations">("combine");
   const [sending, setSending] = useState(false);
   const [phase, setPhase] = useState<"idle" | "upload" | "render">("idle");
@@ -146,11 +156,13 @@ export default function MultiplierPage() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [openJob, setOpenJob] = useState<Job | null>(null);
 
-  const hookCount = hooks.length + (cardsEnabled && hookText.trim() ? 1 : 0);
-  const ctaCount = ctas.length + (cardsEnabled && ctaText.trim() ? 1 : 0);
-  const combos = hookCount * bodies.length * ctaCount;
-  const tooMany = combos > MAX_COMBOS || hookCount > LIMITS.hooks || ctaCount > LIMITS.ctas;
-  const ready = hookCount > 0 && bodies.length > 0 && ctaCount > 0 && !tooMany;
+  const usedAi = (items: AiItem[]) => (cardsEnabled ? items.filter((item) => item.use && item.text.trim()) : []);
+  const hookCount = hooks.length + (cardsEnabled && hookText.trim() ? 1 : 0) + usedAi(aiHooks).length;
+  const bodyCount = bodies.length + usedAi(aiBodies).length;
+  const ctaCount = ctas.length + (cardsEnabled && ctaText.trim() ? 1 : 0) + usedAi(aiCtas).length;
+  const combos = hookCount * bodyCount * ctaCount;
+  const tooMany = combos > MAX_COMBOS || hookCount > LIMITS.hooks || bodyCount > LIMITS.bodies || ctaCount > LIMITS.ctas;
+  const ready = hookCount > 0 && bodyCount > 0 && ctaCount > 0 && !tooMany;
 
   const loadJobs = useCallback(async () => {
     const response = await fetch("/api/multiplier/jobs", { cache: "no-store" });
@@ -238,14 +250,42 @@ export default function MultiplierPage() {
     form.append("aspect", aspect);
     if (cardsEnabled) {
       if (hookText.trim()) form.append("hook_text", hookText.trim());
+      usedAi(aiHooks).forEach((item) => form.append("hook_text", item.text.trim()));
+      usedAi(aiBodies).forEach((item) => form.append("body_text", item.text.trim()));
       if (ctaText.trim()) {
         form.append("cta_text", ctaText.trim());
-        if (ctaButton.trim()) form.append("cta_button", ctaButton.trim());
+        form.append("cta_button", ctaButton.trim());
       }
+      usedAi(aiCtas).forEach((item) => {
+        form.append("cta_text", item.text.trim());
+        form.append("cta_button", (item.button || "").trim());
+      });
     }
     await runJob("/api/multiplier/jobs", form, () => {
       setHooks([]); setBodies([]); setCtas([]); setHookText(""); setCtaText(""); setCtaButton("");
+      setAiHooks([]); setAiBodies([]); setAiCtas([]);
     });
+  }
+
+  async function generateCopy() {
+    setError(null);
+    setAiBusy(true);
+    try {
+      const response = await fetch("/api/multiplier/script", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ product: productText }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(ptError(data?.detail, "Não foi possível gerar os textos. Tente de novo."));
+      setAiHooks((data.hooks || []).map((text: string) => ({ text, use: true })));
+      setAiBodies((data.bodies || []).map((text: string) => ({ text, use: true })));
+      setAiCtas((data.ctas || []).map((item: { text: string; button: string }) => ({ text: item.text, button: item.button, use: true })));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível gerar os textos. Tente de novo.");
+    } finally {
+      setAiBusy(false);
+    }
   }
 
   async function startVariations() {
@@ -371,6 +411,53 @@ export default function MultiplierPage() {
         <Group title="Corpos" hint="Meio do vídeo" files={bodies} max={LIMITS.bodies} onChange={setBodies} />
         <Group title="CTAs" hint="Final (chamada para ação)" files={ctas} max={LIMITS.ctas} onChange={setCtas} />
       </div>
+
+      {cardsEnabled && (
+        <div className="rounded-[18px] border border-border bg-card p-4">
+          <p className="font-medium">Textos com IA <span className="ml-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold">BETA</span></p>
+          <p className="text-xs text-muted-foreground">Fale do seu produto e a IA escreve ganchos, corpos e CTAs. Cada texto vira um cartão animado e entra nas combinações.</p>
+          <textarea
+            value={productText} onChange={(e) => setProductText(e.target.value)} maxLength={800} rows={3} disabled={aiBusy || sending}
+            placeholder="Ex.: escova alisadora elétrica que seca e alisa em 10 minutos, leve e fácil de usar"
+            className="mt-3 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+          />
+          <div className="mt-2 flex justify-end">
+            <Button size="sm" disabled={productText.trim().length < 10 || aiBusy || sending} onClick={generateCopy}>
+              {aiBusy ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+              {aiBusy ? "Gerando…" : aiHooks.length ? "Gerar de novo" : "Gerar textos"}
+            </Button>
+          </div>
+          {(aiHooks.length > 0 || aiBodies.length > 0 || aiCtas.length > 0) && (
+            <div className="mt-4 grid gap-4 md:grid-cols-3">
+              {([
+                ["Ganchos", aiHooks, setAiHooks, false],
+                ["Corpos", aiBodies, setAiBodies, false],
+                ["CTAs", aiCtas, setAiCtas, true],
+              ] as const).map(([title, items, setItems, withButton]) => (
+                <div key={title} className="space-y-2">
+                  <p className="text-sm font-medium">{title}</p>
+                  {items.map((item, index) => (
+                    <div key={index} className="rounded-lg border border-border bg-background p-2">
+                      <label className="flex items-start gap-2 text-xs">
+                        <input type="checkbox" className="mt-1" checked={item.use}
+                          onChange={(e) => setItems(items.map((it, i) => (i === index ? { ...it, use: e.target.checked } : it)))} />
+                        <textarea value={item.text} rows={withButton ? 2 : 3} maxLength={220}
+                          onChange={(e) => setItems(items.map((it, i) => (i === index ? { ...it, text: e.target.value } : it)))}
+                          className="w-full resize-none bg-transparent text-sm outline-none" />
+                      </label>
+                      {withButton && (
+                        <input value={item.button || ""} maxLength={28} placeholder="Botão"
+                          onChange={(e) => setItems(items.map((it, i) => (i === index ? { ...it, button: e.target.value } : it)))}
+                          className="mt-1 h-8 w-full rounded-md border border-border bg-background px-2 text-xs" />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {cardsEnabled && (
         <div className="rounded-[18px] border border-border bg-card p-4">

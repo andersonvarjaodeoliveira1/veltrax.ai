@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import httpx
+from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import text
@@ -50,7 +51,7 @@ def _cards_url() -> str:
     return os.getenv("CARDS_URL", "").strip().rstrip("/")
 
 
-async def _render_card(text_value: str, button: str, aspect: str, target: Path) -> None:
+async def _render_card(text_value: str, button: str, aspect: str, target: Path, seconds: int = 3) -> None:
     headers = {"Content-Type": "application/json"}
     token = os.getenv("CARDS_TOKEN", "")
     if token:
@@ -59,7 +60,7 @@ async def _render_card(text_value: str, button: str, aspect: str, target: Path) 
         response = await client.post(
             f"{_cards_url()}/render",
             headers=headers,
-            json={"text": text_value, "button": button, "aspect": aspect, "seconds": 3},
+            json={"text": text_value, "button": button, "aspect": aspect, "seconds": seconds},
         )
     if response.status_code != 200:
         raise HTTPException(status_code=502, detail="Could not create the text card. Try again.")
@@ -137,6 +138,17 @@ def render_variation(
     result = run_ffmpeg_command(command, timeout=900)
     if result.returncode != 0 or not output.exists():
         raise RuntimeError("ffmpeg failed to render this variation")
+
+
+def _card_specs(form: Any, field: str, button_field: str | None, seconds: int) -> list[tuple[str, str, int]]:
+    """Text cards requested in the form: [(text, button, seconds)], at most 10."""
+    texts = [str(item).strip()[:220] for item in form.getlist(field)]
+    buttons = [str(item).strip()[:40] for item in form.getlist(button_field)] if button_field else []
+    specs: list[tuple[str, str, int]] = []
+    for index, value in enumerate(texts):
+        if value:
+            specs.append((value, buttons[index] if index < len(buttons) else "", seconds))
+    return specs[:10]
 
 
 def _root() -> Path:
@@ -261,7 +273,11 @@ async def _save_progress(job_id: str, **fields: Any) -> None:
 
 
 async def _run_job(
-    job_id: str, combos: list[tuple[int, int, int]], files: dict[str, list[Path]], aspect: str
+    job_id: str,
+    combos: list[tuple[int, int, int]],
+    files: dict[str, list[Path]],
+    aspect: str,
+    cards: dict[str, list[tuple[str, str, int]]] | None = None,
 ) -> None:
     width, height = ASPECTS[aspect]
     job_dir = _job_dir(job_id)
@@ -278,6 +294,11 @@ async def _run_job(
     ]
     try:
         async with _render_gate:
+            for group, specs in (cards or {}).items():
+                for number, (card_text, card_button, card_seconds) in enumerate(specs, start=1):
+                    target = job_dir / "in" / f"{group}_card{number}.mp4"
+                    await _render_card(card_text, card_button, aspect, target, card_seconds)
+                    files[group].append(target)
             for group in files:
                 files[group] = [await run_in_thread(ensure_audio, item) for item in files[group]]
             done = 0
@@ -372,29 +393,26 @@ async def create_job(request: Request, db: AsyncSession = Depends(get_db)):
             "bodies": await _read_group(form, "bodies", MAX_BODIES, job_dir),
             "ctas": await _read_group(form, "ctas", MAX_CTAS, job_dir),
         }
-        # Optional text cards (BETA): a hook card and/or a CTA card made by the cards service
-        hook_text = str(form.get("hook_text") or "").strip()[:140]
-        cta_text = str(form.get("cta_text") or "").strip()[:140]
-        cta_button = str(form.get("cta_button") or "").strip()[:40]
-        if (hook_text or cta_text) and not _cards_url():
+        # Optional text cards (BETA), rendered later in the background by the cards service
+        cards = {
+            "hooks": _card_specs(form, "hook_text", None, 3),
+            "bodies": _card_specs(form, "body_text", None, 5),
+            "ctas": _card_specs(form, "cta_text", "cta_button", 3),
+        }
+        if any(cards.values()) and not _cards_url():
             raise HTTPException(status_code=400, detail="Text cards are not available right now")
-        if hook_text:
-            if len(files["hooks"]) >= MAX_HOOKS:
-                raise HTTPException(status_code=400, detail=f"At most {MAX_HOOKS} hooks")
-            target = job_dir / "in" / f"hooks_card{len(files['hooks']) + 1}.mp4"
-            await _render_card(hook_text, "", aspect, target)
-            files["hooks"].append(target)
-        if cta_text:
-            if len(files["ctas"]) >= MAX_CTAS:
-                raise HTTPException(status_code=400, detail=f"At most {MAX_CTAS} CTAs")
-            target = job_dir / "in" / f"ctas_card{len(files['ctas']) + 1}.mp4"
-            await _render_card(cta_text, cta_button, aspect, target)
-            files["ctas"].append(target)
-        if not files["hooks"] or not files["bodies"] or not files["ctas"]:
+        counts = {key: len(files[key]) + len(cards[key]) for key in files}
+        if counts["hooks"] > MAX_HOOKS:
+            raise HTTPException(status_code=400, detail=f"At most {MAX_HOOKS} hooks")
+        if counts["bodies"] > MAX_BODIES:
+            raise HTTPException(status_code=400, detail=f"At most {MAX_BODIES} bodies")
+        if counts["ctas"] > MAX_CTAS:
+            raise HTTPException(status_code=400, detail=f"At most {MAX_CTAS} CTAs")
+        if not counts["hooks"] or not counts["bodies"] or not counts["ctas"]:
             raise HTTPException(status_code=400, detail="Send at least 1 hook, 1 body and 1 CTA")
         combos = list(
             itertools.product(
-                range(len(files["hooks"])), range(len(files["bodies"])), range(len(files["ctas"]))
+                range(counts["hooks"]), range(counts["bodies"]), range(counts["ctas"])
             )
         )
         if len(combos) > MAX_COMBINATIONS:
@@ -419,7 +437,7 @@ async def create_job(request: Request, db: AsyncSession = Depends(get_db)):
     await db.commit()
 
     _running[job_id] = user_id
-    task = asyncio.create_task(_run_job(job_id, combos, files, aspect))
+    task = asyncio.create_task(_run_job(job_id, combos, files, aspect, cards))
     task.add_done_callback(lambda _t: None)
     return {"id": job_id, "total": len(combos), "status": "processing"}
 
@@ -633,3 +651,98 @@ async def create_variations(request: Request, db: AsyncSession = Depends(get_db)
     task = asyncio.create_task(_run_variations_job(job_id, source, recipes, aspect, mirror))
     task.add_done_callback(lambda _t: None)
     return {"id": job_id, "total": len(recipes), "status": "processing"}
+
+
+# ---- AI copy: hooks, bodies and CTAs from a product description (BETA) -----------
+SCRIPT_LIMIT_PER_HOUR = 20
+_script_calls: dict[str, list[float]] = {}
+
+SCRIPT_SYSTEM_PROMPT = """You write copy for short vertical video ads (TikTok, Reels, Shorts) in Brazilian Portuguese.
+The user describes a product. Produce text for three parts of the video:
+- hooks: 3 different opening lines that stop the scroll in the first seconds (max 70 characters each). Use curiosity, a question, a bold but honest statement or a relatable problem. Each hook takes a different angle.
+- bodies: 2 short body texts (max 200 characters each) that explain the benefit and how the product helps, in simple everyday language.
+- ctas: 2 calls to action. Each has a short line (max 60 characters) and a button label (max 24 characters, verb first, for example "Quero o meu").
+Rules: never invent prices, discounts, deadlines, statistics, awards or testimonials that were not given. No guaranteed results and no medical, financial-return or "miracle" claims. No emojis. Do not mention competitors. Write only what the product description supports."""
+
+
+class _CtaCopy(BaseModel):
+    text: str = Field(description="Call to action line, max 60 characters")
+    button: str = Field(description="Button label, max 24 characters")
+
+
+class _AdCopy(BaseModel):
+    hooks: list[str] = Field(description="3 opening lines, max 70 characters each")
+    bodies: list[str] = Field(description="2 body texts, max 200 characters each")
+    ctas: list[_CtaCopy] = Field(description="2 calls to action")
+
+
+def _clip(value: str, limit: int) -> str:
+    value = " ".join(str(value).split())
+    return value if len(value) <= limit else value[: limit - 1].rstrip() + "…"
+
+
+def _check_script_rate(user_id: str) -> None:
+    import time
+
+    now = time.time()
+    recent = [stamp for stamp in _script_calls.get(user_id, []) if now - stamp < 3600]
+    if len(recent) >= SCRIPT_LIMIT_PER_HOUR:
+        raise HTTPException(status_code=429, detail="Too many AI requests. Try again in a while.")
+    recent.append(now)
+    _script_calls[user_id] = recent
+
+
+async def _generate_copy(product: str, tone: str, model: Any = None) -> dict[str, Any]:
+    from pydantic_ai import Agent
+
+    if model is None:
+        from ...ai import _build_transcript_model, _get_missing_llm_key_error
+        from ...runtime_settings import apply_settings_to_process_env
+
+        runtime_config = get_config()
+        apply_settings_to_process_env(runtime_config.as_runtime_settings())
+        config_error = _get_missing_llm_key_error(runtime_config.llm, runtime_config)
+        if config_error:
+            logger.error("multiplier script: %s", config_error)
+            raise HTTPException(status_code=503, detail="AI is not configured right now")
+        model = _build_transcript_model(runtime_config)
+
+    agent = Agent(model, output_type=_AdCopy, system_prompt=SCRIPT_SYSTEM_PROMPT, output_retries=2)
+    prompt = f"Product description:\n{product}\n\nTone: {tone or 'direct and friendly'}"
+    try:
+        result = await asyncio.wait_for(agent.run(prompt), timeout=90)
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="AI took too long. Try again.")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("multiplier script generation failed")
+        raise HTTPException(status_code=502, detail="Could not generate the texts. Try again.")
+    data = result.output
+    hooks = [_clip(item, 90) for item in data.hooks if item.strip()][:3]
+    bodies = [_clip(item, 220) for item in data.bodies if item.strip()][:2]
+    ctas = [
+        {"text": _clip(item.text, 70), "button": _clip(item.button, 28)}
+        for item in data.ctas
+        if item.text.strip()
+    ][:2]
+    if not hooks or not bodies or not ctas:
+        raise HTTPException(status_code=502, detail="Could not generate the texts. Try again.")
+    return {"hooks": hooks, "bodies": bodies, "ctas": ctas}
+
+
+@router.post("/script")
+async def generate_script(request: Request, db: AsyncSession = Depends(get_db)):
+    user_id = await _user_id(request, db)
+    try:
+        data = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=400, detail="JSON object expected")
+    product = " ".join(str(data.get("product") or "").split())[:800]
+    if len(product) < 10:
+        raise HTTPException(status_code=400, detail="Describe the product in at least a sentence")
+    tone = " ".join(str(data.get("tone") or "").split())[:60]
+    _check_script_rate(user_id)
+    return await _generate_copy(product, tone)

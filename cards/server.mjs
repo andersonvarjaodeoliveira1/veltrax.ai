@@ -11,7 +11,7 @@ const PORT = Number(process.env.PORT || 8100);
 const TOKEN = process.env.CARDS_TOKEN || "";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CLI = join(HERE, "node_modules", ".bin", "hyperframes");
-const MAX_TEXT = 140;
+const MAX_TEXT = 220;
 const MAX_BUTTON = 40;
 
 let chain = Promise.resolve(); // one render at a time: Chrome is memory hungry
