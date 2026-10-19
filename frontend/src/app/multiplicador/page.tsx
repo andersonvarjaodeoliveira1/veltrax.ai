@@ -43,6 +43,18 @@ function postWithProgress(url: string, form: FormData, onProgress: (percent: num
   });
 }
 
+const EFFECT_GROUPS: { title: string; items: { key: string; label: string }[] }[] = [
+  { title: "Cor e filtros", items: [
+    { key: "quente", label: "Quente" }, { key: "frio", label: "Frio" }, { key: "vivo", label: "Cores vivas" },
+    { key: "drama", label: "Drama" }, { key: "pb", label: "Preto e branco" }, { key: "sepia", label: "Sépia" },
+    { key: "claro", label: "Mais claro" }, { key: "contraste", label: "Contraste alto" },
+  ] },
+  { title: "Imagem", items: [{ key: "zoom", label: "Zoom" }] },
+  { title: "Tempo", items: [
+    { key: "rapido", label: "Mais rápido" }, { key: "lento", label: "Mais lento" }, { key: "inicio", label: "Cortar início" },
+  ] },
+];
+
 const MAX_CREATIVE_SECONDS = 600;
 
 /** Backend errors are in English; show them in Portuguese. */
@@ -60,6 +72,7 @@ function ptError(detail: unknown, fallback: string) {
     [/Describe the product/i, "Descreva o produto em pelo menos uma frase."],
     [/Too many AI requests/i, "Muitos pedidos à IA em pouco tempo. Tente de novo daqui a pouco."],
     [/AI is not configured/i, "A IA não está disponível agora. Escreva os textos manualmente."],
+    [/Pick at least one effect/i, "Escolha pelo menos um efeito."],
     [/AI took too long|Could not generate/i, "Não foi possível gerar os textos agora. Tente de novo."],
     [/text card/i, "Não foi possível criar o cartão de texto. Tente de novo."],
   ];
@@ -150,6 +163,8 @@ export default function MultiplierPage() {
   const [creative, setCreative] = useState<File | null>(null);
   const [variationCount, setVariationCount] = useState(6);
   const [mirror, setMirror] = useState(false);
+  const [pickMode, setPickMode] = useState<"auto" | "custom">("auto");
+  const [effects, setEffects] = useState<string[]>([]);
   const creativeInput = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -293,7 +308,8 @@ export default function MultiplierPage() {
     const form = new FormData();
     form.append("video", creative);
     form.append("aspect", aspect);
-    form.append("count", String(variationCount));
+    if (pickMode === "custom") effects.forEach((key) => form.append("effects", key));
+    else form.append("count", String(variationCount));
     if (mirror) form.append("mirror", "true");
     await runJob("/api/multiplier/variations", form, () => setCreative(null));
   }
@@ -376,6 +392,40 @@ export default function MultiplierPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3 rounded-[18px] border border-border bg-card p-4">
+          <div className="flex w-full items-center gap-1.5">
+            <span className="mr-1 text-sm text-muted-foreground">Efeitos</span>
+            {([["auto", "Automático"], ["custom", "Escolher"]] as const).map(([key, label]) => (
+              <button key={key} type="button" onClick={() => setPickMode(key)} disabled={sending}
+                className={cn("rounded-full border px-3 py-1 text-sm", pickMode === key ? "border-transparent bg-primary text-primary-foreground" : "border-border text-muted-foreground")}>
+                {label}
+              </button>
+            ))}
+          </div>
+          {pickMode === "custom" && (
+            <div className="w-full space-y-3">
+              {EFFECT_GROUPS.map((group) => (
+                <div key={group.title} className="space-y-1.5">
+                  <p className="text-xs text-muted-foreground">{group.title}</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {group.items.map((item) => {
+                      const on = effects.includes(item.key);
+                      return (
+                        <button key={item.key} type="button" disabled={sending} aria-pressed={on}
+                          onClick={() => setEffects((current) => on ? current.filter((k) => k !== item.key) : [...current, item.key])}
+                          className={cn("rounded-full border px-3 py-1 text-sm", on ? "border-transparent bg-primary text-primary-foreground" : "border-border text-muted-foreground")}>
+                          {item.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+              <p className="text-xs text-muted-foreground">
+                {effects.length === 0 ? "Marque os efeitos. Cada um vira um vídeo." : `${effects.length} ${effects.length === 1 ? "vídeo será criado" : "vídeos serão criados"}.`}
+              </p>
+            </div>
+          )}
+          {pickMode === "auto" && (
           <div className="flex items-center gap-1.5">
             <span className="mr-1 text-sm text-muted-foreground">Quantidade</span>
             {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((value) => (
@@ -385,6 +435,7 @@ export default function MultiplierPage() {
               </button>
             ))}
           </div>
+          )}
         <div className="flex gap-1.5">
           {ASPECTS.map((value) => (
             <button key={value} type="button" onClick={() => setAspect(value)} disabled={sending}
@@ -397,7 +448,7 @@ export default function MultiplierPage() {
             <input type="checkbox" checked={mirror} onChange={(e) => setMirror(e.target.checked)} disabled={sending} />
             Espelhar (inverte textos no vídeo)
           </label>
-          <Button className="ml-auto" disabled={!creative || sending} onClick={startVariations}>
+          <Button className="ml-auto" disabled={!creative || sending || (pickMode === "custom" && effects.length === 0)} onClick={startVariations}>
             {sending ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
             {sending ? "Aguarde…" : "Criar variações"}
           </Button>

@@ -77,6 +77,10 @@ GRADES = {
     "cool": "eq=saturation=1.15:contrast=1.08,colorbalance=rs=-0.22:rm=-0.2:rh=-0.1:bs=0.28:bm=0.24:bh=0.12",
     "vivid": "eq=saturation=1.5:contrast=1.12:brightness=0.02",
     "drama": "eq=saturation=0.85:contrast=1.25:brightness=-0.04,vignette=PI/5",
+    "pb": "hue=s=0,eq=contrast=1.15",
+    "sepia": "colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131",
+    "claro": "eq=brightness=0.10:contrast=0.95:saturation=1.1",
+    "contraste": "eq=contrast=1.35:saturation=1.1:brightness=-0.02",
 }
 
 # Ordered by how different they look; the first N are used.
@@ -100,6 +104,26 @@ GRADE_LABELS = {
     "cool": "Tom frio (mais azulado)",
     "vivid": "Cores mais vivas",
     "drama": "Contraste forte com bordas escuras",
+    "pb": "Preto e branco",
+    "sepia": "Sépia (tom antigo)",
+    "claro": "Mais claro e luminoso",
+    "contraste": "Contraste alto",
+}
+
+# Effects the user can pick one by one (key -> recipe). Keys are what the form sends.
+EFFECTS: dict[str, dict[str, Any]] = {
+    "zoom": {"key": "zoom", "zoom": 0.88},
+    "quente": {"key": "quente", "grade": "warm"},
+    "frio": {"key": "frio", "grade": "cool"},
+    "vivo": {"key": "vivo", "grade": "vivid"},
+    "drama": {"key": "drama", "grade": "drama"},
+    "pb": {"key": "pb", "grade": "pb"},
+    "sepia": {"key": "sepia", "grade": "sepia"},
+    "claro": {"key": "claro", "grade": "claro"},
+    "contraste": {"key": "contraste", "grade": "contraste"},
+    "rapido": {"key": "rapido", "speed": 1.10},
+    "lento": {"key": "lento", "speed": 0.92},
+    "inicio": {"key": "inicio", "skip": 1.5},
 }
 
 
@@ -587,7 +611,7 @@ async def _run_variations_job(
     outputs: list[dict[str, Any]] = [
         {
             "index": number,
-            "label": f"V{number}-{recipe['key']}",
+            "label": f"variacao-{number}-{recipe['key']}" + ("-espelhado" if mirror else ""),
             "changes": describe_recipe(recipe, mirror),
             "status": "pending",
         }
@@ -660,9 +684,16 @@ async def create_variations(request: Request, db: AsyncSession = Depends(get_db)
             raise HTTPException(status_code=400, detail="Could not read this video")
         if duration > MAX_SOURCE_SECONDS:
             raise HTTPException(status_code=400, detail="The creative is too long (max 10 minutes)")
-        recipes = [
-            recipe for recipe in RECIPES if not (recipe.get("skip") and duration < 6)
-        ][:count]
+        chosen = [str(value) for value in form.getlist("effects")]
+        if chosen:
+            picked = [EFFECTS[key] for key in dict.fromkeys(chosen) if key in EFFECTS]
+            recipes = [r for r in picked if not (r.get("skip") and duration < 6)][:MAX_VARIATIONS]
+            if not recipes:
+                raise HTTPException(status_code=400, detail="Pick at least one effect")
+        else:
+            recipes = [
+                recipe for recipe in RECIPES if not (recipe.get("skip") and duration < 6)
+            ][:count]
     except HTTPException:
         shutil.rmtree(job_dir, ignore_errors=True)
         raise
