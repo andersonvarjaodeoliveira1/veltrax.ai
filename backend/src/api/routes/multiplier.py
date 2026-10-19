@@ -10,12 +10,14 @@ import asyncio
 import itertools
 import json
 import logging
+import os
 import shutil
 import uuid
 import zipfile
 from pathlib import Path
 from typing import Any, cast
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import text
@@ -41,6 +43,28 @@ VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".webm", ".mkv"}
 
 _running: dict[str, str] = {}  # job id -> user id
 _render_gate = asyncio.Semaphore(1)
+
+
+def _cards_url() -> str:
+    """Optional text-card service (BETA, separate container). Empty = disabled."""
+    return os.getenv("CARDS_URL", "").strip().rstrip("/")
+
+
+async def _render_card(text_value: str, button: str, aspect: str, target: Path) -> None:
+    headers = {"Content-Type": "application/json"}
+    token = os.getenv("CARDS_TOKEN", "")
+    if token:
+        headers["x-cards-token"] = token
+    async with httpx.AsyncClient(timeout=150) as client:
+        response = await client.post(
+            f"{_cards_url()}/render",
+            headers=headers,
+            json={"text": text_value, "button": button, "aspect": aspect, "seconds": 3},
+        )
+    if response.status_code != 200:
+        raise HTTPException(status_code=502, detail="Could not create the text card. Try again.")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(response.content)
 
 
 def _root() -> Path:
@@ -243,6 +267,12 @@ async def _read_group(form: Any, field: str, limit: int, job_dir: Path) -> list[
     return saved
 
 
+@router.get("/features")
+async def features(request: Request, db: AsyncSession = Depends(get_db)):
+    await _user_id(request, db)
+    return {"cards": bool(_cards_url())}
+
+
 @router.post("/jobs")
 async def create_job(request: Request, db: AsyncSession = Depends(get_db)):
     user_id = await _user_id(request, db)
@@ -270,6 +300,24 @@ async def create_job(request: Request, db: AsyncSession = Depends(get_db)):
             "bodies": await _read_group(form, "bodies", MAX_BODIES, job_dir),
             "ctas": await _read_group(form, "ctas", MAX_CTAS, job_dir),
         }
+        # Optional text cards (BETA): a hook card and/or a CTA card made by the cards service
+        hook_text = str(form.get("hook_text") or "").strip()[:140]
+        cta_text = str(form.get("cta_text") or "").strip()[:140]
+        cta_button = str(form.get("cta_button") or "").strip()[:40]
+        if (hook_text or cta_text) and not _cards_url():
+            raise HTTPException(status_code=400, detail="Text cards are not available right now")
+        if hook_text:
+            if len(files["hooks"]) >= MAX_HOOKS:
+                raise HTTPException(status_code=400, detail=f"At most {MAX_HOOKS} hooks")
+            target = job_dir / "in" / f"hooks_card{len(files['hooks']) + 1}.mp4"
+            await _render_card(hook_text, "", aspect, target)
+            files["hooks"].append(target)
+        if cta_text:
+            if len(files["ctas"]) >= MAX_CTAS:
+                raise HTTPException(status_code=400, detail=f"At most {MAX_CTAS} CTAs")
+            target = job_dir / "in" / f"ctas_card{len(files['ctas']) + 1}.mp4"
+            await _render_card(cta_text, cta_button, aspect, target)
+            files["ctas"].append(target)
         if not files["hooks"] or not files["bodies"] or not files["ctas"]:
             raise HTTPException(status_code=400, detail="Send at least 1 hook, 1 body and 1 CTA")
         combos = list(

@@ -69,15 +69,21 @@ export default function MultiplierPage() {
   const [bodies, setBodies] = useState<File[]>([]);
   const [ctas, setCtas] = useState<File[]>([]);
   const [aspect, setAspect] = useState<(typeof ASPECTS)[number]>("9:16");
+  const [cardsEnabled, setCardsEnabled] = useState(false);
+  const [hookText, setHookText] = useState("");
+  const [ctaText, setCtaText] = useState("");
+  const [ctaButton, setCtaButton] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
   const [openJob, setOpenJob] = useState<Job | null>(null);
 
-  const combos = hooks.length * bodies.length * ctas.length;
-  const tooMany = combos > MAX_COMBOS;
-  const ready = hooks.length > 0 && bodies.length > 0 && ctas.length > 0 && !tooMany;
+  const hookCount = hooks.length + (cardsEnabled && hookText.trim() ? 1 : 0);
+  const ctaCount = ctas.length + (cardsEnabled && ctaText.trim() ? 1 : 0);
+  const combos = hookCount * bodies.length * ctaCount;
+  const tooMany = combos > MAX_COMBOS || hookCount > LIMITS.hooks || ctaCount > LIMITS.ctas;
+  const ready = hookCount > 0 && bodies.length > 0 && ctaCount > 0 && !tooMany;
 
   const loadJobs = useCallback(async () => {
     const response = await fetch("/api/multiplier/jobs", { cache: "no-store" });
@@ -90,6 +96,15 @@ export default function MultiplierPage() {
   }, []);
 
   useEffect(() => { void loadJobs(); }, [loadJobs]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const response = await fetch("/api/multiplier/features", { cache: "no-store" });
+        if (response.ok) setCardsEnabled(Boolean((await response.json()).cards));
+      } catch { /* cards stay hidden */ }
+    })();
+  }, []);
 
   const processing = useMemo(
     () => jobs.some((job) => job.status === "processing") || openJob?.status === "processing",
@@ -114,10 +129,17 @@ export default function MultiplierPage() {
       bodies.forEach((file) => form.append("bodies", file));
       ctas.forEach((file) => form.append("ctas", file));
       form.append("aspect", aspect);
+      if (cardsEnabled) {
+        if (hookText.trim()) form.append("hook_text", hookText.trim());
+        if (ctaText.trim()) {
+          form.append("cta_text", ctaText.trim());
+          if (ctaButton.trim()) form.append("cta_button", ctaButton.trim());
+        }
+      }
       const response = await fetch("/api/multiplier/jobs", { method: "POST", body: form });
       if (!response.ok) throw new Error(await readError(response, "Não foi possível iniciar. Tente de novo."));
       const data = await response.json();
-      setHooks([]); setBodies([]); setCtas([]);
+      setHooks([]); setBodies([]); setCtas([]); setHookText(""); setCtaText(""); setCtaButton("");
       await loadJobs();
       setOpenId(data.id);
       await loadOpen(data.id);
@@ -153,6 +175,30 @@ export default function MultiplierPage() {
         <Group title="Corpos" hint="Meio do vídeo" files={bodies} max={LIMITS.bodies} onChange={setBodies} />
         <Group title="CTAs" hint="Final (chamada para ação)" files={ctas} max={LIMITS.ctas} onChange={setCtas} />
       </div>
+
+      {cardsEnabled && (
+        <div className="rounded-[18px] border border-border bg-card p-4">
+          <p className="font-medium">Cartões de texto <span className="ml-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold">BETA</span></p>
+          <p className="text-xs text-muted-foreground">Sem vídeo para o gancho ou o CTA? Escreva o texto e o sistema cria um cartão animado de 3 segundos.</p>
+          <div className="mt-3 grid gap-3 md:grid-cols-3">
+            <label className="space-y-1 text-sm">
+              <span className="text-muted-foreground">Texto do gancho</span>
+              <input value={hookText} maxLength={140} onChange={(e) => setHookText(e.target.value)}
+                className="h-10 w-full rounded-lg border border-border bg-background px-3" />
+            </label>
+            <label className="space-y-1 text-sm">
+              <span className="text-muted-foreground">Texto do CTA</span>
+              <input value={ctaText} maxLength={140} onChange={(e) => setCtaText(e.target.value)}
+                className="h-10 w-full rounded-lg border border-border bg-background px-3" />
+            </label>
+            <label className="space-y-1 text-sm">
+              <span className="text-muted-foreground">Botão do CTA</span>
+              <input value={ctaButton} maxLength={40} onChange={(e) => setCtaButton(e.target.value)}
+                className="h-10 w-full rounded-lg border border-border bg-background px-3" />
+            </label>
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-3 rounded-[18px] border border-border bg-card p-4">
         <div className="flex gap-1.5">

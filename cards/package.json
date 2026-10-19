@@ -1,0 +1,10 @@
+{
+  "name": "clipgringa-cards",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "description": "BETA - renders text cards (hook / CTA) to MP4 using HyperFrames (Apache-2.0)",
+  "dependencies": {
+    "hyperframes": "0.8.174"
+  }
+}
