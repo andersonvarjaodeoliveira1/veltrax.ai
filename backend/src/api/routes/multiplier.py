@@ -146,10 +146,52 @@ def describe_recipe(recipe: dict[str, Any], mirror: bool) -> list[str]:
     return changes
 
 
+LOGO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
+MUSIC_EXTENSIONS = {".mp3", ".m4a", ".wav", ".aac", ".ogg"}
+MAX_LOGO_BYTES = 5 * 1024 * 1024
+MAX_MUSIC_BYTES = 30 * 1024 * 1024
+LOGO_POSITIONS = {
+    "tl": "{m}:{m}",
+    "tr": "W-w-{m}:{m}",
+    "bl": "{m}:H-h-{m}",
+    "br": "W-w-{m}:H-h-{m}",
+}
+LOGO_POSITION_LABELS = {
+    "tl": "canto superior esquerdo",
+    "tr": "canto superior direito",
+    "bl": "canto inferior esquerdo",
+    "br": "canto inferior direito",
+}
+
+
+def describe_extras(captions: str, logo_position: str | None, music: bool) -> list[str]:
+    extras: list[str] = []
+    if captions == "auto":
+        extras.append("Legenda automática")
+    elif captions == "edited":
+        extras.append("Legenda revisada")
+    if logo_position:
+        extras.append(f"Logo ({LOGO_POSITION_LABELS.get(logo_position, 'no canto')})")
+    if music:
+        extras.append("Música de fundo")
+    return extras
+
+
 def render_variation(
-    source: Path, output: Path, width: int, height: int, recipe: dict[str, Any], mirror: bool
+    source: Path,
+    output: Path,
+    width: int,
+    height: int,
+    recipe: dict[str, Any],
+    mirror: bool,
+    ass_path: Path | None = None,
+    fonts_dir: Path | None = None,
+    logo: Path | None = None,
+    logo_position: str = "tr",
+    music: Path | None = None,
+    music_volume: float = 0.25,
 ) -> None:
-    """Render one automatic variation (zoom / colour / speed / alternative start) of a creative."""
+    """Render one automatic variation of a creative, optionally with captions, a logo and music."""
     speed = float(recipe.get("speed", 1.0))
     video = []
     if mirror:
@@ -164,6 +206,11 @@ def render_variation(
     grade = recipe.get("grade")
     if grade:
         video.append(GRADES[grade])
+    if ass_path is not None:
+        # After mirror/zoom (so text is never flipped or cropped) and before setpts (so it follows the speed).
+        from ...media.ffmpeg import subtitles_filter_fragment
+
+        video.append(subtitles_filter_fragment(ass_path, fonts_dir))
     if speed != 1.0:
         video.append(f"setpts=PTS/{speed}")
     video.append("format=yuv420p")
@@ -172,20 +219,54 @@ def render_variation(
         audio.append(f"atempo={speed}")
     audio.append("aresample=48000")
     audio.append("aformat=sample_fmts=fltp:channel_layouts=stereo")
+
     command: list[str] = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error"]
     skip = float(recipe.get("skip", 0) or 0)
     if skip:
         command += ["-ss", str(skip)]
+    command += ["-i", str(source)]
+    next_input = 1
+    logo_index = music_index = None
+    if logo is not None:
+        command += ["-loop", "1", "-framerate", "30", "-i", str(logo)]
+        logo_index = next_input
+        next_input += 1
+    if music is not None:
+        command += ["-stream_loop", "-1", "-i", str(music)]
+        music_index = next_input
+
+    graph = [f"[0:v]{','.join(video)}[v0]"]
+    if logo_index is not None:
+        margin = max(12, round(width * 0.035))
+        where = LOGO_POSITIONS.get(logo_position, LOGO_POSITIONS["tr"]).format(m=margin)
+        graph.append(
+            f"[{logo_index}:v]scale={round(width * 0.2)}:-1,format=rgba,colorchannelmixer=aa=0.92[lg]"
+        )
+        graph.append(f"[v0][lg]overlay={where}:shortest=1,format=yuv420p[v]")
+    else:
+        graph.append("[v0]null[v]")
+    graph.append(f"[0:a]{','.join(audio)}[a0]")
+    if music_index is not None:
+        volume = max(0.02, min(1.0, float(music_volume)))
+        graph.append(
+            f"[{music_index}:a]volume={volume},aresample=48000,"
+            "aformat=sample_fmts=fltp:channel_layouts=stereo[m]"
+        )
+        graph.append("[a0][m]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[a]")
+    else:
+        graph.append("[a0]anull[a]")
+
     command += [
-        "-i", str(source),
-        "-filter_complex", f"[0:v]{','.join(video)}[v];[0:a]{','.join(audio)}[a]",
+        "-filter_complex", ";".join(graph),
         "-map", "[v]", "-map", "[a]",
         "-c:v", "libx264", "-preset", "veryfast", "-crf", "21",
         "-pix_fmt", "yuv420p", "-profile:v", "high",
         "-c:a", "aac", "-b:a", "160k", "-ar", "48000",
         "-movflags", "+faststart",
-        str(output),
     ]
+    if logo is not None or music is not None:
+        command += ["-shortest"]
+    command += [str(output)]
     result = run_ffmpeg_command(command, timeout=900)
     if result.returncode != 0 or not output.exists():
         raise RuntimeError("ffmpeg failed to render this variation")
@@ -387,14 +468,23 @@ async def _run_job(
             shutil.rmtree(job_dir / folder, ignore_errors=True)
 
 
-async def _read_group(form: Any, field: str, limit: int, job_dir: Path) -> list[Path]:
+async def _read_group(
+    form: Any, field: str, limit: int, job_dir: Path,
+    extensions: set[str] | None = None, max_bytes: int | None = None, kind: str = "video",
+) -> list[Path]:
+    allowed = extensions or VIDEO_EXTENSIONS
+    cap = max_bytes or MAX_FILE_BYTES
     saved: list[Path] = []
     for item in form.getlist(field):
         if not getattr(item, "filename", None) or not hasattr(item, "read"):
             continue
         upload = cast(UploadFile, item)
         extension = Path(upload.filename or "").suffix.lower()
-        if extension not in VIDEO_EXTENSIONS:
+        if extension not in allowed:
+            if kind == "logo":
+                raise HTTPException(status_code=400, detail="The logo must be an image (png, jpg, webp)")
+            if kind == "music":
+                raise HTTPException(status_code=400, detail="The music must be an audio file (mp3, m4a, wav)")
             raise HTTPException(status_code=400, detail="Only video files are accepted (mp4, mov, webm, mkv)")
         if len(saved) >= limit:
             raise HTTPException(status_code=400, detail=f"At most {limit} files in '{field}'")
@@ -404,7 +494,11 @@ async def _read_group(form: Any, field: str, limit: int, job_dir: Path) -> list[
         with open(target, "wb") as handle:
             while chunk := await upload.read(1024 * 1024):
                 written += len(chunk)
-                if written > MAX_FILE_BYTES:
+                if written > cap:
+                    if kind == "logo":
+                        raise HTTPException(status_code=413, detail="The logo is too large (max 5 MB)")
+                    if kind == "music":
+                        raise HTTPException(status_code=413, detail="The music is too large (max 30 MB)")
                     raise HTTPException(status_code=413, detail="A file is too large (max 300 MB)")
                 handle.write(chunk)
         saved.append(target)
@@ -604,15 +698,21 @@ async def delete_job(job_id: str, request: Request, db: AsyncSession = Depends(g
 
 
 async def _run_variations_job(
-    job_id: str, source: Path, recipes: list[dict[str, Any]], aspect: str, mirror: bool
+    job_id: str, source: Path, recipes: list[dict[str, Any]], aspect: str, mirror: bool,
+    captions: str = "none", caption_words: list[dict[str, Any]] | None = None,
+    logo: Path | None = None, logo_position: str = "tr",
+    music: Path | None = None, music_volume: float = 0.25,
 ) -> None:
+    from ...multiplier_captions import build_ass, shift_words, transcribe_words
+
     width, height = ASPECTS[aspect]
     job_dir = _job_dir(job_id)
+    extras = describe_extras(captions, logo_position if logo else None, music is not None)
     outputs: list[dict[str, Any]] = [
         {
             "index": number,
             "label": f"variacao-{number}-{recipe['key']}" + ("-espelhado" if mirror else ""),
-            "changes": describe_recipe(recipe, mirror),
+            "changes": describe_recipe(recipe, mirror) + extras,
             "status": "pending",
         }
         for number, recipe in enumerate(recipes, start=1)
@@ -620,11 +720,30 @@ async def _run_variations_job(
     try:
         async with _render_gate:
             prepared = await run_in_thread(ensure_audio, source)
+            words: list[dict[str, Any]] = list(caption_words or [])
+            if captions == "auto" and not words:
+                try:
+                    words = await run_in_thread(transcribe_words, source)
+                except Exception as exc:
+                    logger.warning("variations %s transcription failed: %s", job_id, exc)
+                    raise RuntimeError("Could not create the captions. Try again or send without captions.")
+                if not words:
+                    raise RuntimeError("No speech was found in this video, so there are no captions to add.")
             done = 0
             for number, recipe in enumerate(recipes, start=1):
                 target = job_dir / f"out_{number:03d}.mp4"
                 try:
-                    await run_in_thread(render_variation, prepared, target, width, height, recipe, mirror)
+                    ass_path: Path | None = None
+                    fonts_dir: Path | None = None
+                    if words:
+                        shifted = shift_words(words, float(recipe.get("skip", 0) or 0))
+                        candidate = job_dir / f"captions_{number:03d}.ass"
+                        written, fonts_dir = await run_in_thread(build_ass, shifted, width, height, candidate)
+                        ass_path = candidate if written else None
+                    await run_in_thread(
+                        render_variation, prepared, target, width, height, recipe, mirror,
+                        ass_path, fonts_dir, logo, logo_position, music, music_volume,
+                    )
                     outputs[number - 1]["status"] = "ready"
                     outputs[number - 1]["filename"] = target.name
                 except Exception as exc:  # one bad variation must not stop the job
@@ -645,6 +764,87 @@ async def _run_variations_job(
     finally:
         _running.pop(job_id, None)
         shutil.rmtree(job_dir / "in", ignore_errors=True)
+
+
+DRAFT_TTL_SECONDS = 24 * 3600
+DRAFT_LIMIT_PER_HOUR = 10
+_draft_calls: dict[str, list[float]] = {}
+
+
+def _drafts_root() -> Path:
+    path = _root() / "drafts"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _purge_old_drafts() -> None:
+    import time
+
+    now = time.time()
+    for child in _drafts_root().iterdir():
+        try:
+            if child.is_dir() and now - child.stat().st_mtime > DRAFT_TTL_SECONDS:
+                shutil.rmtree(child, ignore_errors=True)
+        except OSError:
+            continue
+
+
+def _read_draft(draft_id: str, user_id: str) -> tuple[Path, Path]:
+    """(draft dir, video path) of a draft owned by `user_id`."""
+    folder = _drafts_root() / _parse_uuid(draft_id)
+    meta_path = folder / "meta.json"
+    if not meta_path.exists():
+        raise HTTPException(status_code=404, detail="Draft not found")
+    meta = json.loads(meta_path.read_text())
+    video = folder / str(meta.get("video", ""))
+    if meta.get("user_id") != user_id or video.parent != folder or not video.exists():
+        raise HTTPException(status_code=404, detail="Draft not found")
+    return folder, video
+
+
+@router.post("/captions/draft")
+async def create_caption_draft(request: Request, db: AsyncSession = Depends(get_db)):
+    """Upload a creative, transcribe it and return editable caption lines (BETA)."""
+    import time
+
+    from ...multiplier_captions import lines_from_words, transcribe_words
+
+    user_id = await _user_id(request, db)
+    now = time.time()
+    recent = [stamp for stamp in _draft_calls.get(user_id, []) if now - stamp < 3600]
+    if len(recent) >= DRAFT_LIMIT_PER_HOUR:
+        raise HTTPException(status_code=429, detail="Too many caption requests. Try again later.")
+    _draft_calls[user_id] = recent + [now]
+    _purge_old_drafts()
+
+    form = await request.form()
+    draft_id = str(uuid.uuid4())
+    folder = _drafts_root() / draft_id
+    try:
+        saved = await _read_group(form, "video", 1, folder)
+        if not saved:
+            raise HTTPException(status_code=400, detail="Send a video")
+        video = folder / saved[0].name
+        shutil.move(str(saved[0]), str(video))
+        shutil.rmtree(folder / "in", ignore_errors=True)
+        try:
+            duration = await run_in_thread(ffprobe_duration, video)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Could not read this video")
+        if duration > MAX_SOURCE_SECONDS:
+            raise HTTPException(status_code=400, detail="The creative is too long (max 10 minutes)")
+        try:
+            words = await run_in_thread(transcribe_words, video)
+        except Exception as exc:
+            logger.warning("caption draft transcription failed: %s", exc)
+            raise HTTPException(status_code=502, detail="Could not create the captions. Try again.")
+        if not words:
+            raise HTTPException(status_code=422, detail="No speech was found in this video")
+        (folder / "meta.json").write_text(json.dumps({"user_id": user_id, "video": video.name}))
+    except Exception:
+        shutil.rmtree(folder, ignore_errors=True)
+        raise
+    return {"draft_id": draft_id, "duration": duration, "lines": lines_from_words(words)}
 
 
 @router.post("/variations")
@@ -674,10 +874,44 @@ async def create_variations(request: Request, db: AsyncSession = Depends(get_db)
     job_id = str(uuid.uuid4())
     job_dir = _job_dir(job_id)
     try:
-        saved = await _read_group(form, "video", 1, job_dir)
-        if not saved:
-            raise HTTPException(status_code=400, detail="Send a video")
-        source = saved[0]
+        draft_id = str(form.get("draft_id") or "").strip()
+        if draft_id:
+            folder, draft_video = _read_draft(draft_id, user_id)
+            (job_dir / "in").mkdir(parents=True, exist_ok=True)
+            source = job_dir / "in" / f"video_1{draft_video.suffix}"
+            shutil.move(str(draft_video), str(source))
+            shutil.rmtree(folder, ignore_errors=True)
+        else:
+            saved = await _read_group(form, "video", 1, job_dir)
+            if not saved:
+                raise HTTPException(status_code=400, detail="Send a video")
+            source = saved[0]
+        logo_files = await _read_group(form, "logo", 1, job_dir, LOGO_EXTENSIONS, MAX_LOGO_BYTES, "logo")
+        music_files = await _read_group(form, "music", 1, job_dir, MUSIC_EXTENSIONS, MAX_MUSIC_BYTES, "music")
+        logo = logo_files[0] if logo_files else None
+        music = music_files[0] if music_files else None
+        logo_position = str(form.get("logo_position") or "tr")
+        if logo_position not in LOGO_POSITIONS:
+            logo_position = "tr"
+        try:
+            music_volume = float(str(form.get("music_volume") or "0.25"))
+        except ValueError:
+            music_volume = 0.25
+        captions = str(form.get("captions") or "none")
+        if captions not in {"none", "auto"}:
+            captions = "none"
+        caption_words: list[dict[str, Any]] = []
+        raw_lines = str(form.get("caption_lines") or "").strip()
+        if raw_lines:
+            from ...multiplier_captions import words_from_lines
+
+            try:
+                caption_words = words_from_lines(json.loads(raw_lines))
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid captions")
+            if not caption_words:
+                raise HTTPException(status_code=400, detail="Invalid captions")
+            captions = "edited"
         try:
             duration = await run_in_thread(ffprobe_duration, source)
         except Exception:
@@ -711,7 +945,12 @@ async def create_variations(request: Request, db: AsyncSession = Depends(get_db)
     await db.commit()
 
     _running[job_id] = user_id
-    task = asyncio.create_task(_run_variations_job(job_id, source, recipes, aspect, mirror))
+    task = asyncio.create_task(
+        _run_variations_job(
+            job_id, source, recipes, aspect, mirror,
+            captions, caption_words, logo, logo_position, music, music_volume,
+        )
+    )
     task.add_done_callback(lambda _t: None)
     return {"id": job_id, "total": len(recipes), "status": "processing"}
 

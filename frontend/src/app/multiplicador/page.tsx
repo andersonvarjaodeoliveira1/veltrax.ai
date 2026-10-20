@@ -27,7 +27,7 @@ async function readError(response: Response, fallback: string) {
 
 /** POST multipart with upload progress (fetch cannot report it). */
 function postWithProgress(url: string, form: FormData, onProgress: (percent: number) => void) {
-  return new Promise<{ ok: boolean; status: number; data: { id?: string; total?: number; detail?: unknown } | null }>((resolve, reject) => {
+  return new Promise<{ ok: boolean; status: number; data: { id?: string; total?: number; detail?: unknown; draft_id?: string; lines?: CaptionLine[] } | null }>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", url);
     xhr.upload.onprogress = (event) => {
@@ -35,13 +35,20 @@ function postWithProgress(url: string, form: FormData, onProgress: (percent: num
     };
     xhr.onerror = () => reject(new Error("Falha de conexão. Tente de novo."));
     xhr.onload = () => {
-      let data: { id?: string; total?: number; detail?: unknown } | null = null;
+      let data: { id?: string; total?: number; detail?: unknown; draft_id?: string; lines?: CaptionLine[] } | null = null;
       try { data = JSON.parse(xhr.responseText); } catch { /* not json */ }
       resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, data });
     };
     xhr.send(form);
   });
 }
+
+type CaptionLine = { text: string; start: number; end: number };
+
+const LOGO_POSITIONS = [
+  { key: "tl", label: "Superior esquerdo" }, { key: "tr", label: "Superior direito" },
+  { key: "bl", label: "Inferior esquerdo" }, { key: "br", label: "Inferior direito" },
+] as const;
 
 const EFFECT_GROUPS: { title: string; items: { key: string; label: string }[] }[] = [
   { title: "Cor e filtros", items: [
@@ -62,6 +69,15 @@ function ptError(detail: unknown, fallback: string) {
   if (typeof detail !== "string") return fallback;
   const map: [RegExp, string][] = [
     [/too long \(max 10 minutes\)/i, "Esse criativo tem mais de 10 minutos. Corte o vídeo e envie de novo."],
+    [/logo is too large/i, "O logo é grande demais (máximo 5 MB)."],
+    [/music is too large/i, "A música é grande demais (máximo 30 MB)."],
+    [/logo must be an image/i, "O logo precisa ser uma imagem (png, jpg ou webp)."],
+    [/music must be an audio/i, "A música precisa ser um arquivo de áudio (mp3, m4a ou wav)."],
+    [/Could not create the captions/i, "Não foi possível criar a legenda. Tente de novo ou envie sem legenda."],
+    [/No speech was found/i, "Não encontramos fala nesse vídeo, então não há o que legendar."],
+    [/Too many caption requests/i, "Muitos pedidos de legenda em pouco tempo. Tente de novo daqui a pouco."],
+    [/Invalid captions/i, "A legenda está vazia ou inválida. Revise o texto."],
+    [/Draft not found/i, "O rascunho da legenda expirou. Gere a legenda de novo."],
     [/too large/i, "Um dos arquivos é grande demais (máximo 300 MB)."],
     [/Only video files/i, "Envie só arquivos de vídeo (mp4, mov, webm ou mkv)."],
     [/Could not read this video/i, "Não foi possível ler esse vídeo. Tente outro arquivo."],
@@ -166,6 +182,16 @@ export default function MultiplierPage() {
   const [pickMode, setPickMode] = useState<"auto" | "custom">("auto");
   const [effects, setEffects] = useState<string[]>([]);
   const creativeInput = useRef<HTMLInputElement>(null);
+  const logoInput = useRef<HTMLInputElement>(null);
+  const musicInput = useRef<HTMLInputElement>(null);
+  const [captionMode, setCaptionMode] = useState<"none" | "auto" | "review">("none");
+  const [draft, setDraft] = useState<{ id: string; lines: CaptionLine[] } | null>(null);
+  const [draftBusy, setDraftBusy] = useState(false);
+  const [draftPct, setDraftPct] = useState(0);
+  const [logo, setLogo] = useState<File | null>(null);
+  const [logoPos, setLogoPos] = useState<(typeof LOGO_POSITIONS)[number]["key"]>("tr");
+  const [music, setMusic] = useState<File | null>(null);
+  const [musicVolume, setMusicVolume] = useState(25);
   const [error, setError] = useState<string | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -303,15 +329,43 @@ export default function MultiplierPage() {
     }
   }
 
+  async function prepareCaptions() {
+    if (!creative) return;
+    setError(null);
+    setDraftBusy(true);
+    setDraftPct(0);
+    try {
+      const form = new FormData();
+      form.append("video", creative);
+      const response = await postWithProgress("/api/multiplier/captions/draft", form, setDraftPct);
+      if (!response.ok || !response.data?.draft_id) {
+        throw new Error(ptError(response.data?.detail, "Não foi possível criar a legenda. Tente de novo."));
+      }
+      setDraft({ id: response.data.draft_id, lines: response.data.lines ?? [] });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível criar a legenda. Tente de novo.");
+    } finally {
+      setDraftBusy(false);
+    }
+  }
+
   async function startVariations() {
     if (!creative) return;
     const form = new FormData();
-    form.append("video", creative);
+    if (captionMode === "review" && draft) {
+      form.append("draft_id", draft.id);
+      form.append("caption_lines", JSON.stringify(draft.lines.filter((line) => line.text.trim())));
+    } else {
+      form.append("video", creative);
+      if (captionMode === "auto") form.append("captions", "auto");
+    }
+    if (logo) { form.append("logo", logo); form.append("logo_position", logoPos); }
+    if (music) { form.append("music", music); form.append("music_volume", String(musicVolume / 100)); }
     form.append("aspect", aspect);
     if (pickMode === "custom") effects.forEach((key) => form.append("effects", key));
     else form.append("count", String(variationCount));
     if (mirror) form.append("mirror", "true");
-    await runJob("/api/multiplier/variations", form, () => setCreative(null));
+    await runJob("/api/multiplier/variations", form, () => { setCreative(null); setDraft(null); });
   }
 
   async function remove(id: string) {
@@ -373,6 +427,7 @@ export default function MultiplierPage() {
                 return;
               }
               setCreative(file);
+              setDraft(null);
             }} />
           <button type="button" disabled={sending} onClick={() => creativeInput.current?.click()}
             className="mt-3 flex w-full flex-col items-center justify-center gap-2 rounded-[18px] border border-dashed border-border px-4 py-8 text-sm text-muted-foreground hover:border-brand hover:text-foreground disabled:opacity-60">
@@ -389,6 +444,113 @@ export default function MultiplierPage() {
               </>
             )}
           </button>
+        </div>
+
+        <div className="space-y-4 rounded-[18px] border border-border bg-card p-4">
+          <p className="font-medium">Extras <span className="ml-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold">BETA</span></p>
+
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">Legenda</p>
+            <div className="flex flex-wrap gap-1.5">
+              {([["none", "Sem legenda"], ["auto", "Automática"], ["review", "Revisar o texto"]] as const).map(([key, label]) => (
+                <button key={key} type="button" disabled={sending || draftBusy} onClick={() => setCaptionMode(key)}
+                  className={cn("rounded-full border px-3 py-1 text-sm", captionMode === key ? "border-transparent bg-primary text-primary-foreground" : "border-border text-muted-foreground")}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            {captionMode === "auto" && (
+              <p className="text-xs text-muted-foreground">O áudio é transcrito e a legenda entra palavra por palavra em todas as variações. Se o vídeo já tem legenda gravada, ela não some: a nova fica por cima.</p>
+            )}
+            {captionMode === "review" && (
+              <div className="space-y-2">
+                {!draft ? (
+                  <>
+                    <p className="text-xs text-muted-foreground">Transcrevemos o vídeo e você corrige o texto antes de criar as variações.</p>
+                    <Button type="button" size="sm" variant="outline" disabled={!creative || draftBusy || sending} onClick={prepareCaptions}>
+                      {draftBusy ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+                      {draftBusy ? (draftPct < 100 ? `Enviando… ${Math.round(draftPct)}%` : "Transcrevendo o áudio… pode levar um ou dois minutos") : "Gerar legenda"}
+                    </Button>
+                    {!creative && <p className="text-xs text-muted-foreground">Adicione o criativo primeiro.</p>}
+                  </>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground">Corrija o que precisar. O tempo de cada frase é mantido.</p>
+                    <div className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
+                      {draft.lines.map((line, index) => (
+                        <div key={index} className="flex items-center gap-2">
+                          <span className="w-12 shrink-0 text-right text-[11px] tabular-nums text-muted-foreground">{formatDuration(line.start)}</span>
+                          <input
+                            aria-label={`Legenda ${index + 1}`}
+                            value={line.text}
+                            maxLength={200}
+                            disabled={sending}
+                            onChange={(event) => setDraft((current) => current && {
+                              ...current,
+                              lines: current.lines.map((item, i) => (i === index ? { ...item, text: event.target.value } : item)),
+                            })}
+                            className="w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm" />
+                        </div>
+                      ))}
+                    </div>
+                    <Button type="button" size="sm" variant="ghost" disabled={sending} onClick={() => setDraft(null)}>Gerar de novo</Button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">Logo ou marca d&apos;água</p>
+            <input ref={logoInput} type="file" accept="image/png,image/jpeg,image/webp" hidden
+              onChange={(event) => { const file = event.target.files?.[0] || null; event.target.value = ""; if (file) setLogo(file); }} />
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="button" size="sm" variant="outline" disabled={sending} onClick={() => logoInput.current?.click()}>
+                <Upload className="size-4" /> {logo ? "Trocar logo" : "Adicionar logo"}
+              </Button>
+              {logo && (
+                <>
+                  <span className="max-w-[12rem] truncate text-xs text-muted-foreground">{logo.name}</span>
+                  <button type="button" className="text-xs underline text-muted-foreground" disabled={sending} onClick={() => setLogo(null)}>Remover</button>
+                </>
+              )}
+            </div>
+            {logo && (
+              <div className="flex flex-wrap gap-1.5">
+                {LOGO_POSITIONS.map((item) => (
+                  <button key={item.key} type="button" disabled={sending} onClick={() => setLogoPos(item.key)}
+                    className={cn("rounded-full border px-3 py-1 text-xs", logoPos === item.key ? "border-transparent bg-primary text-primary-foreground" : "border-border text-muted-foreground")}>
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">Música de fundo</p>
+            <input ref={musicInput} type="file" accept="audio/*,.mp3,.m4a,.wav,.aac,.ogg" hidden
+              onChange={(event) => { const file = event.target.files?.[0] || null; event.target.value = ""; if (file) setMusic(file); }} />
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="button" size="sm" variant="outline" disabled={sending} onClick={() => musicInput.current?.click()}>
+                <Upload className="size-4" /> {music ? "Trocar música" : "Adicionar música"}
+              </Button>
+              {music && (
+                <>
+                  <span className="max-w-[12rem] truncate text-xs text-muted-foreground">{music.name}</span>
+                  <button type="button" className="text-xs underline text-muted-foreground" disabled={sending} onClick={() => setMusic(null)}>Remover</button>
+                </>
+              )}
+            </div>
+            {music && (
+              <label className="flex items-center gap-3 text-xs text-muted-foreground">
+                Volume da música
+                <input type="range" min={5} max={60} step={5} value={musicVolume} disabled={sending}
+                  onChange={(event) => setMusicVolume(Number(event.target.value))} />
+                <span className="tabular-nums">{musicVolume}%</span>
+              </label>
+            )}
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3 rounded-[18px] border border-border bg-card p-4">
@@ -448,7 +610,7 @@ export default function MultiplierPage() {
             <input type="checkbox" checked={mirror} onChange={(e) => setMirror(e.target.checked)} disabled={sending} />
             Espelhar (inverte textos no vídeo)
           </label>
-          <Button className="ml-auto" disabled={!creative || sending || (pickMode === "custom" && effects.length === 0)} onClick={startVariations}>
+          <Button className="ml-auto" disabled={!creative || sending || draftBusy || (pickMode === "custom" && effects.length === 0) || (captionMode === "review" && !draft)} onClick={startVariations}>
             {sending ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
             {sending ? "Aguarde…" : "Criar variações"}
           </Button>
