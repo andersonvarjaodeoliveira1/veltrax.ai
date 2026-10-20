@@ -5,7 +5,7 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowRight, CornerDownLeft, Download, Film, FolderOpen, Layers, LogOut, Plus, Search, Shield,
+  ArrowRight, CornerDownLeft, Download, Film, FolderOpen, Layers, LogOut, Plus, Search, Shield, Workflow,
 } from "lucide-react";
 import { toast } from "sonner";
 import { signOut, useSession } from "@/lib/auth-client";
@@ -30,6 +30,7 @@ const NAV: NavItem[] = [
   { href: "/list", label: "Library", icon: Film, match: (p) => p.startsWith("/list") || p.startsWith("/tasks") },
   { href: "/folders", label: "Folders", icon: FolderOpen, match: (p) => p.startsWith("/folders") },
   { href: "/multiplicador", label: "Multiplicador", icon: Layers, match: (p) => p.startsWith("/multiplicador"), badge: "BETA" },
+  { href: "/automacao", label: "Automação", icon: Workflow, match: (p) => p.startsWith("/automacao"), badge: "BETA" },
   { href: DOWNLOADER_URL, label: "Baixar vídeo", icon: Download, match: () => false, external: true },
 ];
 
