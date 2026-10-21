@@ -1084,6 +1084,18 @@ export function CloneWizard() {
                 </ol>
               </>
             )}
+            <section className="space-y-4 rounded-[18px] border border-border bg-card p-5">
+              <p className="font-medium">Como o vídeo termina</p>
+              <Group label="Idioma da fala" hint="A voz e os textos do vídeo saem neste idioma.">
+                <Chips label="Idioma da fala" value={p.language} onPick={chooseLanguage} options={LANGUAGES.map((l) => ({ value: l.value, text: l.text }))} />
+              </Group>
+              <Group label="Palavra-chave da CTA (o que a pessoa comenta)">
+                <KeywordPicker keyword={p.keyword} keepCase={p.keepCase} placeholder="Ou escreva outra palavra" onChange={(keyword) => patch({ keyword })} onKeepCase={(keepCase) => patch({ keepCase, keyword: keepCase ? p.keyword : p.keyword.toUpperCase() })} />
+              </Group>
+              <p className="rounded-[12px] bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                No final o vídeo diz: <span className="text-foreground">“{p.cta.replace("{KEYWORD}", p.keyword.trim() || "PALAVRA")}”</span>
+              </p>
+            </section>
             <details className="rounded-[14px] border border-border p-3 text-sm">
               <summary className="cursor-pointer font-medium">Falar sobre o meu produto (opcional)</summary>
               <div className="mt-3">{productFields}</div>
@@ -1094,14 +1106,8 @@ export function CloneWizard() {
                 <Group label="Quantos vídeos">
                   <Chips label="Quantos vídeos" value={p.count} onPick={(count) => patch({ count })} options={COUNT_OPTIONS.map((n) => ({ value: n, text: String(n) }))} />
                 </Group>
-                <Group label="Idioma da fala" hint="A voz e os textos do vídeo saem neste idioma.">
-                  <Chips label="Idioma da fala" value={p.language} onPick={chooseLanguage} options={LANGUAGES.map((l) => ({ value: l.value, text: l.text }))} />
-                </Group>
                 <Group label="Quantas cenas" hint="Cada cena tem cerca de 8 segundos.">
                   <Chips label="Quantas cenas" value={p.sceneCount} onPick={chooseScenes} options={[1, 2, 3, 4, 5, 6].map((n) => ({ value: n, text: n === 1 ? "1 cena" : `${n} cenas` }))} />
-                </Group>
-                <Group label="Palavra-chave da CTA">
-                  <KeywordPicker keyword={p.keyword} keepCase={p.keepCase} placeholder="Ou escreva outra palavra" onChange={(keyword) => patch({ keyword })} onKeepCase={(keepCase) => patch({ keepCase, keyword: keepCase ? p.keyword : p.keyword.toUpperCase() })} />
                 </Group>
               </div>
             </details>
