@@ -221,6 +221,7 @@ it("lets the member pick count, keyword and CTA by clicking", async () => {
 
 function mockAuto(opts: { failVideo?: boolean } = {}) {
   const log: string[] = [];
+  window.localStorage.setItem("gv-clonagem-mode", "auto");
   vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: () => "blob:x", revokeObjectURL: () => {} }));
   let n = 0;
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
@@ -299,3 +300,18 @@ it("counts the generated images and videos and lists each generation with its ti
   expect(within(panel).getAllByText(/pronta em/)).toHaveLength(6);
   expect(within(panel).getByText(/cerca de 15 segundos/)).toBeInTheDocument();
 }, 15000);
+
+it("defaults to the free Flow Lower Priority mode and remembers the choice", async () => {
+  mockAuto();
+  window.localStorage.removeItem("gv-clonagem-mode");
+  const user = userEvent.setup();
+  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ step: 1, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora." }));
+  render(<CloneWizard />);
+  const free = await screen.findByRole("radio", { name: /Flow · Lower Priority/ });
+  expect(free).toHaveAttribute("aria-checked", "true");
+  expect(screen.queryByRole("button", { name: "Criar meus vídeos automaticamente" })).not.toBeInTheDocument();
+  expect(screen.getByText(/Veo 3\.1 Lite \[Lower Priority\]/)).toBeInTheDocument();
+  await user.click(screen.getByRole("radio", { name: /Automático \(pago\)/ }));
+  expect(await screen.findByRole("button", { name: "Criar meus vídeos automaticamente" })).toBeInTheDocument();
+  expect(window.localStorage.getItem("gv-clonagem-mode")).toBe("auto");
+});

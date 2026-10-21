@@ -43,6 +43,7 @@ type Built = { state: "running" | "done" | "error"; jobId?: string; note?: strin
 type Task = { id: string; label: string; state: "running" | "done" | "error"; start: number; ms?: number; note?: string };
 
 const KEY = "gv-clonagem-v2";
+const MODE_KEY = "gv-clonagem-mode";
 const STEPS = ["Referência", "Avatares", "Imagens", "CTA", "Animações", "Download", "Montagem"];
 const SCENES = 3;
 const NO_MIX: Mix = { hooks: [], bodies: [], ctas: [] };
@@ -274,7 +275,10 @@ export function CloneWizard() {
   const [auto, setAuto] = useState<{ label: string; done: number; total: number } | null>(null);
   const [genBusy, setGenBusy] = useState<Record<string, boolean>>({});
   const [canResume, setCanResume] = useState(false);
+  // Padrão: Flow em Lower Priority (sem custo). O automático pago só roda se o membro escolher.
+  const [mode, setMode] = useState<"free" | "auto">("free");
   const [genLog, setGenLog] = useState<Record<string, { kind: "image" | "video"; label: string; state: "running" | "done" | "error"; start: number; ms?: number }>>({});
+  const paid = Boolean(render?.enabled) && mode === "auto";
   const stopRef = useRef(false);
   const projRef = useRef<Project>(EMPTY);
   const [built, setBuilt] = useState<Record<number, Built>>({});
@@ -297,6 +301,13 @@ export function CloneWizard() {
   }, [busy, tasks, genLog]);
 
   useEffect(() => { projRef.current = p; }, [p]);
+  useEffect(() => {
+    try { if (window.localStorage.getItem(MODE_KEY) === "auto") setMode("auto"); } catch { /* storage unavailable */ }
+  }, []);
+  const chooseMode = (next: "free" | "auto") => {
+    setMode(next);
+    try { window.localStorage.setItem(MODE_KEY, next); } catch { /* storage unavailable */ }
+  };
   useEffect(() => {
     if (!ready) return;
     fetch(`${RENDER}/status`).then((r) => (r.ok ? r.json() : null)).then((data) => { setRender(data?.enabled === true ? { enabled: true } : null); if (data?.enabled === true) setP((cur) => (cur.keyword.trim() ? cur : { ...cur, keyword: "QUERO" })); }).catch(() => setRender(null));
@@ -742,7 +753,7 @@ export function CloneWizard() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      {canResume && !auto && render?.enabled && (
+      {canResume && !auto && paid && (
         <Button type="button" variant="outline" onClick={() => void runAll()}>Continuar de onde parou</Button>
       )}
 
@@ -786,6 +797,11 @@ export function CloneWizard() {
                 <textarea value={p.notes} onChange={(event) => patch({ notes: event.target.value })} rows={2} maxLength={600} className={inputClass} />
               </Field>
               {render?.enabled && (
+                <Group label="Como gerar as imagens e as cenas" hint={mode === "free" ? "Você gera no Flow com Veo 3.1 Lite [Lower Priority]. O Flow mostra “A geração vai usar 0 créditos”." : "A ferramenta gera sozinha pela API do Google. Esse modo é cobrado por uso."}>
+                  <Chips label="Como gerar" value={mode} onPick={chooseMode} options={[{ value: "free" as const, text: "Flow · Lower Priority (sem custo)" }, { value: "auto" as const, text: "Automático (pago)" }]} />
+                </Group>
+              )}
+              {paid && (
                 <div className="space-y-3 rounded-[14px] border border-primary/40 bg-primary/10 p-4">
                   <p className="font-medium">Criar tudo automaticamente</p>
                   <p className="text-xs text-muted-foreground">Escolha as opções e clique. A ferramenta escreve, gera as imagens, anima as cenas e monta os vídeos prontos.</p>
@@ -912,7 +928,7 @@ export function CloneWizard() {
               <p className="text-sm text-muted-foreground">
                 Copie cada prompt para o Flow (Nano Banana) e gere a imagem. Confira rosto, cenário e ação e aprove só as boas. A imagem aprovada é a base da animação. Não avance com uma imagem que você não aprovou.
               </p>
-              <details open={!render?.enabled} className="rounded-[14px] border border-border p-3 text-sm">
+              <details open={!paid} className="rounded-[14px] border border-border p-3 text-sm">
                 <summary className="cursor-pointer text-muted-foreground">Prefere gerar no Flow, sem gastar créditos?</summary>
                 <div className="mt-3">
               <div className="space-y-2 rounded-[14px] border border-[#5BD69A]/40 bg-[#5BD69A]/10 p-3 text-sm">
@@ -950,7 +966,7 @@ export function CloneWizard() {
                               <input type="file" accept="image/*" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) attach(key, file, "image"); }} />
                             </label>
                           )}
-                          {render?.enabled && (
+                          {paid && (
                             <Button type="button" size="sm" variant="outline" disabled={working || genBusy[`image-${key}`]} onClick={() => void genOne("image", vi, si)}>
                               {genBusy[`image-${key}`] ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
                               {genBusy[`image-${key}`] ? "Gerando…" : imgs[key] ? "Gerar outra imagem" : "Gerar a imagem aqui"}
@@ -1018,7 +1034,7 @@ export function CloneWizard() {
               <p className="text-sm text-muted-foreground">
                 As imagens aprovadas viram cenas animadas. No Flow, use a imagem aprovada como primeiro quadro, no modo de menor prioridade (lower priority), cole o prompt e gere. Assista e confira a fala, os movimentos e a continuidade antes de baixar.
               </p>
-              <details open={!render?.enabled} className="rounded-[14px] border border-border p-3 text-sm">
+              <details open={!paid} className="rounded-[14px] border border-border p-3 text-sm">
                 <summary className="cursor-pointer text-muted-foreground">Prefere gerar no Flow, sem gastar créditos?</summary>
                 <div className="mt-3">
               <div className="space-y-2 rounded-[14px] border border-[#5BD69A]/40 bg-[#5BD69A]/10 p-3 text-sm">
@@ -1048,7 +1064,7 @@ export function CloneWizard() {
                         </div>
                         <p className="rounded-lg bg-muted/40 p-3 text-sm">{prompt}</p>
                         {si === SCENES - 1 && <p className="text-xs text-[#F5B454]">Revise a CTA e a palavra-chave na cena final.</p>}
-                        {render?.enabled && (
+                        {paid && (
                           <Button type="button" size="sm" variant="outline" disabled={working || genBusy[`video-${key}`]} onClick={() => void genOne("video", vi, si)}>
                             {genBusy[`video-${key}`] ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
                             {genBusy[`video-${key}`] ? "Animando… leva alguns minutos" : clip ? "Gerar outra vez" : "Gerar a cena aqui"}
