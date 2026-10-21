@@ -23,12 +23,13 @@ type TabKey = "criar" | "copys" | "flow" | "prontos" | "clonagem" | "ajustes";
 
 const STORAGE_KEY = "gv-automacao-v1";
 const TONES = ["Direto e amigável", "Emocional", "Urgente", "Divertido"];
+// Clonagem é o caminho principal; as demais abas ficam como apoio (modo manual).
+const MAIN_TAB = { key: "clonagem" as const, label: "Clonar um vídeo", hint: "suba o vídeo e o resto é automático" };
 const TABS: { key: TabKey; label: string; hint: string }[] = [
   { key: "criar", label: "Criar", hint: "pedir criativos novos" },
   { key: "copys", label: "Copys", hint: "revisar e aprovar" },
   { key: "flow", label: "Flow", hint: "gerar os vídeos" },
   { key: "prontos", label: "Prontos", hint: "para baixar" },
-  { key: "clonagem", label: "Clonagem", hint: "clonar um vídeo (BETA)" },
   { key: "ajustes", label: "Ajustes", hint: "nichos e padrões" },
 ];
 
@@ -63,7 +64,7 @@ function captionOf(item: Creative) {
 
 export default function AutomationPage() {
   const [ready, setReady] = useState(false);
-  const [tab, setTab] = useState<TabKey>("criar");
+  const [tab, setTab] = useState<TabKey>("clonagem");
   const [creatives, setCreatives] = useState<Creative[]>([]);
   const [niches, setNiches] = useState<string[]>(["Geral"]);
   const [tone, setTone] = useState(TONES[0]);
@@ -224,27 +225,40 @@ export default function AutomationPage() {
         </p>
       </div>
 
+      {tab !== "clonagem" && (
       <Alert>
         <AlertDescription>
           Os textos e os prompts de vídeo são gerados pela IA. O vídeo é gerado por você no Flow, em lower priority, e enviado aqui. Para criar variações, baixe o vídeo e envie na aba Variações do Multiplicador. Os vídeos ficam só nesta página: se você atualizar, envie de novo.
         </AlertDescription>
       </Alert>
+      )}
 
-      <nav aria-label="Etapas" className="flex flex-wrap gap-2">
-        {TABS.map((item) => {
-          const count = item.key === "criar" || item.key === "ajustes" || item.key === "clonagem" ? 0 : counts[item.key];
-          return (
-            <button key={item.key} type="button" onClick={() => setTab(item.key)} aria-current={tab === item.key}
-              className={cn("rounded-[14px] border px-4 py-2 text-left text-sm transition-colors",
-                tab === item.key ? "border-transparent bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:text-foreground")}>
-              <span className="flex items-center gap-2 font-medium">
-                {item.label}
-                {count > 0 && <span className="rounded-full bg-background/20 px-1.5 text-[11px] tabular-nums">{count}</span>}
-              </span>
-              <span className="block text-[11px] opacity-80">{item.hint}</span>
-            </button>
-          );
-        })}
+      <nav aria-label="Etapas" className="space-y-2">
+        <button type="button" onClick={() => setTab(MAIN_TAB.key)} aria-current={tab === MAIN_TAB.key}
+          className={cn("w-full rounded-[18px] border px-5 py-4 text-left transition-all sm:w-auto sm:min-w-[320px]",
+            tab === MAIN_TAB.key ? "border-transparent bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white shadow-[0_12px_30px_-14px_#7B3FE4]" : "border-[#A98BFF]/50 bg-card hover:border-[#A98BFF]")}>
+          <span className="flex items-center gap-2 text-base font-semibold">
+            {MAIN_TAB.label}
+            <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-semibold">BETA</span>
+          </span>
+          <span className="block text-xs opacity-85">{MAIN_TAB.hint}</span>
+        </button>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 text-[11px] uppercase tracking-wide text-muted-foreground">Modo manual</span>
+          {TABS.map((item) => {
+            const count = item.key === "criar" || item.key === "ajustes" ? 0 : counts[item.key as "copys" | "flow" | "prontos"];
+            return (
+              <button key={item.key} type="button" onClick={() => setTab(item.key)} aria-current={tab === item.key}
+                className={cn("rounded-full border px-3 py-1 text-xs transition-colors",
+                  tab === item.key ? "border-transparent bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:text-foreground")}>
+                <span className="flex items-center gap-1.5 font-medium">
+                  {item.label}
+                  {count > 0 && <span className="rounded-full bg-background/20 px-1.5 text-[10px] tabular-nums">{count}</span>}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </nav>
 
       {error && (
