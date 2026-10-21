@@ -64,6 +64,15 @@ const EMPTY: Project = {
   approved: {},
   checks: {},
 };
+const HINTS = [
+  "Escolha o vídeo que você quer copiar e clique em “Separar em cenas”.",
+  "Diga quantos vídeos quer e clique em “Gerar variações”.",
+  "Copie cada prompt, gere a imagem no Flow e marque “Aprovada”.",
+  "Escreva o produto e a palavra-chave, depois clique em “Travar a CTA”.",
+  "Copie cada prompt no Flow e envie aqui o vídeo de cada cena.",
+  "Baixe as cenas, se quiser guardar uma cópia.",
+  "Clique em “Montar todos os vídeos” e espere. Seus vídeos finais aparecem aqui.",
+];
 const CAPCUT_STEPS = ["Importar os arquivos do vídeo", "Colocar as cenas na sequência correta", "Ajustar as junções entre as cenas", "Revisar a CTA e a palavra-chave", "Exportar"];
 
 function load(): Project {
@@ -121,6 +130,8 @@ export function CloneWizard() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [clips, setClips] = useState<Record<string, { url: string; name: string; file: File }>>({});
+  const [batch, setBatch] = useState<{ done: number; total: number } | null>(null);
+  const [assembling, setAssembling] = useState(false);
   const [built, setBuilt] = useState<Record<number, Built>>({});
   const [imgs, setImgs] = useState<Record<string, string>>({});
   const [now, setNow] = useState(() => Date.now());
@@ -135,10 +146,10 @@ export function CloneWizard() {
     try { window.localStorage.setItem(KEY, JSON.stringify(p)); } catch { /* storage unavailable */ }
   }, [ready, p]);
   useEffect(() => {
-    if (!busy) return;
+    if (!busy && !tasks.some((task) => task.state === "running")) return;
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
-  }, [busy]);
+  }, [busy, tasks]);
 
   const patch = (change: Partial<Project>) => setP((current) => ({ ...current, ...change }));
   const keywordOrDefault = p.keyword.trim() || "PALAVRA";
@@ -295,6 +306,7 @@ export function CloneWizard() {
     if (files.some((file) => !file)) return;
     setError(null);
     setBuilt((current) => ({ ...current, [vi]: { state: "running" } }));
+    setAssembling(true);
     const taskId = startTask(`Montando o vídeo ${pad(vi + 1)}`);
     const fail = (note: string) => {
       setBuilt((current) => ({ ...current, [vi]: { state: "error", note } }));
@@ -328,14 +340,18 @@ export function CloneWizard() {
       fail("A montagem demorou demais. Veja em Multiplicador se ela terminou.");
     } catch {
       fail("Não foi possível montar agora. Verifique a conexão e tente de novo.");
+    } finally {
+      setAssembling(false);
     }
   }, [clips]);
 
   async function assembleAll() {
-    for (let vi = 0; vi < p.variations.length; vi += 1) {
-      if (built[vi]?.state === "done") continue;
-      if (Array.from({ length: SCENES }, (_, si) => clips[`${vi}-${si}`]).every(Boolean)) await assemble(vi);
+    const todo = p.variations.map((_, vi) => vi).filter((vi) => built[vi]?.state !== "done" && Array.from({ length: SCENES }, (_, si) => clips[`${vi}-${si}`]).every(Boolean));
+    for (const [index, vi] of todo.entries()) {
+      setBatch({ done: index, total: todo.length });
+      await assemble(vi);
     }
+    setBatch(null);
   }
 
   function reset() {
@@ -357,6 +373,12 @@ export function CloneWizard() {
   const ctaValid = p.copyMode === "mix" ? mixReady : p.cta.includes("{KEYWORD}");
   const canNext = [p.scenes.length === SCENES && copyReady, p.variations.length > 0, allApproved, p.ctaLocked, p.videos.length > 0, true, false][p.step - 1];
   const working = busy !== null;
+  const runningTask = tasks.find((task) => task.state === "running");
+  const steps = ["Preparando tudo…", "Trabalhando nisso…", "Quase lá…"];
+  const secs = runningTask ? Math.max(0, (now - runningTask.start) / 1000) : 0;
+  // Uma só barra: sobe rápido no começo e desacelera, nunca chega a 100% antes de terminar.
+  const eased = 95 * (1 - Math.exp(-secs / (assembling ? 60 : 18)));
+  const pct = batch ? Math.min(98, ((batch.done + eased / 100) / batch.total) * 100) : eased;
 
   const copyButton = (id: string, value: string, label = "Copiar") => (
     <Button key={id} type="button" size="sm" variant="outline" onClick={() => copy(id, value)}>
@@ -421,6 +443,22 @@ export function CloneWizard() {
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_260px]">
         <section className="space-y-4 rounded-[18px] border border-border bg-card p-5">
+          <p className="text-sm font-medium text-primary">Passo {p.step} de {STEPS.length}: <span className="font-normal text-foreground">{HINTS[p.step - 1]}</span></p>
+          {runningTask && (
+            <div role="status" aria-live="polite" className="space-y-1.5 rounded-[14px] border border-primary/40 bg-primary/10 p-3">
+              <div className="flex items-center justify-between gap-2 text-sm">
+                <span className="font-medium">{runningTask.label}{batch ? ` (${Math.min(batch.done + 1, batch.total)} de ${batch.total})` : ""}</span>
+                <span className="tabular-nums text-xs text-muted-foreground">{Math.round(pct)}%</span>
+              </div>
+              <div role="progressbar" aria-label="Progresso" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)} className="h-2 overflow-hidden rounded-full bg-border">
+                <div className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#7B3FE4] transition-[width] duration-700" style={{ width: `${pct}%` }} />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {steps[Math.min(steps.length - 1, Math.floor(secs / 12))]} Pode esperar aqui, não precisa fazer nada.
+                {assembling ? " Montar o vídeo leva de 1 a 3 minutos." : ""}
+              </p>
+            </div>
+          )}
           {p.step === 1 && (
             <>
               {heading("1 · REFERÊNCIA — A COPY VALIDADA É O TRONCO")}

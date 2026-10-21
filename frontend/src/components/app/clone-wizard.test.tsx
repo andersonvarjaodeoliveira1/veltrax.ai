@@ -189,3 +189,14 @@ it("explains when another assembly is already running", async () => {
   await user.click(screen.getByRole("button", { name: "Montar este vídeo" }));
   expect(await screen.findByText(/Já existe uma montagem em andamento/)).toBeInTheDocument();
 });
+
+it("shows one progress bar with what is happening and a simple hint per step", async () => {
+  vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+  const user = userEvent.setup();
+  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ step: 1, reference: "x".repeat(30) }));
+  render(<CloneWizard />);
+  expect(screen.getByText(/Passo 1 de 7/)).toBeInTheDocument();
+  await user.click(await screen.findByRole("button", { name: "Separar em cenas" }));
+  expect(await screen.findAllByRole("progressbar")).toHaveLength(1);
+  expect(screen.getByText(/Pode esperar aqui/)).toBeInTheDocument();
+});
