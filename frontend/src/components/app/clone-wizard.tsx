@@ -584,6 +584,13 @@ export function CloneWizard() {
               <p className="text-sm text-muted-foreground">
                 Copie cada prompt para o Flow (Nano Banana) e gere a imagem. Confira rosto, cenário e ação e aprove só as boas. A imagem aprovada é a base da animação. Não avance com uma imagem que você não aprovou.
               </p>
+              <div className="space-y-2 rounded-[14px] border border-[#5BD69A]/40 bg-[#5BD69A]/10 p-3 text-sm">
+                <p className="font-medium">Sem gastar créditos: use o modo de baixa prioridade do Flow</p>
+                <p className="text-xs text-muted-foreground">Entre no Flow com a sua conta, escolha a opção de baixa prioridade (lower priority) do modelo, cole o prompt e gere. Demora um pouco mais, mas não usa créditos.</p>
+                <a href="https://labs.google/fx/tools/flow" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-1.5 text-sm hover:text-foreground">
+                  Abrir o Flow <ExternalLink className="size-3.5" />
+                </a>
+              </div>
               <div className="flex flex-wrap items-center gap-3">
                 {generateButton("images", "Gerar prompts de imagem", p.images.length > 0, "Criando os prompts de imagem")}
                 {p.images.length > 0 && <span className="text-sm text-muted-foreground tabular-nums">{approvedCount} de {total} aprovadas</span>}
@@ -666,6 +673,13 @@ export function CloneWizard() {
               <p className="text-sm text-muted-foreground">
                 As imagens aprovadas viram cenas animadas. No Flow, use a imagem aprovada como primeiro quadro, no modo de menor prioridade (lower priority), cole o prompt e gere. Assista e confira a fala, os movimentos e a continuidade antes de baixar.
               </p>
+              <div className="space-y-2 rounded-[14px] border border-[#5BD69A]/40 bg-[#5BD69A]/10 p-3 text-sm">
+                <p className="font-medium">Sem gastar créditos: use o modo de baixa prioridade do Flow</p>
+                <p className="text-xs text-muted-foreground">No Flow, escolha a opção de baixa prioridade (lower priority) do modelo, use a imagem aprovada como primeiro quadro e cole o prompt. Demora um pouco mais, mas não usa créditos. Depois envie o vídeo aqui.</p>
+                <a href="https://labs.google/fx/tools/flow" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-1.5 text-sm hover:text-foreground">
+                  Abrir o Flow <ExternalLink className="size-3.5" />
+                </a>
+              </div>
               <div className="flex flex-wrap gap-2">{generateButton("videos", "Gerar prompts de animação", p.videos.length > 0, "Criando os prompts de animação", !p.ctaLocked)}</div>
               {p.videos.map((set, vi) => (
                 <div key={vi} className="space-y-3 rounded-[14px] border border-border p-4">
