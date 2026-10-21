@@ -262,9 +262,14 @@ async def _fallback_models() -> list[Any]:
     from ...ai import _build_transcript_model
 
     cfg = get_config()
-    if not str(cfg.llm).startswith("google-gla:"):
-        return []
-    names = os.getenv("CLONE_LLM_FALLBACKS", "google-gla:gemini-3.8-flash,google-gla:gemini-3-flash,google-gla:gemini-2.5-flash-lite")
+    default = ("google-gla:gemini-3.5-flash-lite,google-gla:gemini-3.6-flash,google-gla:gemini-flash-lite-latest,"
+               "google-gla:gemma-4-26b-a4b-it,google-gla:gemini-3.8-flash,google-gla:gemini-3-flash")
+    names = os.getenv("CLONE_LLM_FALLBACKS", default)
+    if getattr(cfg, "anthropic_api_key", None):
+        # Com chave da Anthropic configurada, o Claude entra como reserva final (nunca depende da cota gratuita do Google).
+        names += "," + os.getenv("CLONE_CLAUDE_FALLBACK", "anthropic:claude-sonnet-5-5")
+    if not getattr(cfg, "google_api_key", None) and not str(cfg.llm).startswith("google-gla:"):
+        names = ",".join(n for n in names.split(",") if not n.startswith("google-gla:"))
     out: list[Any] = []
     for name in [n.strip() for n in names.split(",") if n.strip() and n.strip() != cfg.llm]:
         try:
