@@ -1,9 +1,13 @@
-"""Clonagem de Vídeo (BETA): turns a reference video's structure into new ad variations.
+"""Clonagem de Vídeo (BETA), following the "Protocolo Árvore".
+
+The validated copy is the trunk, the variations are the branches: every variation keeps the
+same message and spoken lines; only the avatar and the way it is shown change. The call to
+action is kept separate so it can be locked and stays identical in all variations.
 
 Four independent stages so the UI can regenerate any one of them:
-variations -> scripts -> images -> videos. Each stage is one LLM call and receives the
-output of the previous one from the client. Isolated from the Multiplier jobs: this module
-only reuses its auth and small text helpers.
+scenes -> variations -> images -> videos. Each stage is one LLM call and receives the output of
+the previous ones from the client. Isolated from the Multiplier jobs: this module only reuses
+its auth and small text helpers.
 """
 
 from __future__ import annotations
@@ -23,57 +27,83 @@ from .multiplier import _check_script_rate, _clip, _user_id
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/multiplier/clone", tags=["multiplier-clone"])
 
-SCENES = 3  # ~8 seconds each, ~24 second ad
+SCENES = 3  # ~8 seconds each (one Veo clip), ~24 second video
 MAX_VARIATIONS = 5
 MAX_AVATARS = 4
-STAGES = ("variations", "scripts", "images", "videos")
+MIX_OPTIONS = 3
+STAGES = ("scenes", "mix", "variations", "images", "videos")
 
-RULES = """Originality rules:
-- Use the reference video only for its STRUCTURE: hook pattern, pacing and persuasion beats. Never copy its wording, names, brands or the look of real people.
-- No celebrities or real people, no children, no medical or before/after claims, no violence, no logos or on-screen brand names.
-- Do not invent product facts that were not given."""
+SAFETY = """Safety rules for everything you write:
+- No celebrities or real people, no children, no violence, no logos or on-screen brand names.
+- No medical or before/after claims, and do not invent product facts that were not given."""
 
-VARIATIONS_SYSTEM = f"""You plan short vertical ad variations cloned from a reference video's structure.
-You receive the reference transcript, optional notes, a keyword, a call to action and a list of avatars (may be empty).
-Return exactly N variations. Each one has a different angle (for example curiosity, problem and solution, storytelling, myth-busting, quick demo, social proof style) and uses one avatar (rotate through the avatars; if there are none, use a neutral description of an everyday person).
-Fields: title (3-6 words, Brazilian Portuguese), angle (one short sentence, Brazilian Portuguese), avatar (the avatar name, or "Pessoa comum"), summary (1-2 sentences in Brazilian Portuguese about what happens).
-{RULES}"""
+SCENES_SYSTEM = f"""You analyse a validated ad (the "trunk" copy) and split it into exactly {SCENES} scenes of about 8 seconds each, in order.
+You receive the transcript of the reference video and/or notes about it.
+Preserve the message, the mechanism and the sequence. Do not add new ideas.
+For each scene return:
+- what: one sentence in Brazilian Portuguese about what happens and is shown in the scene.
+- line: the spoken text of the scene in Brazilian Portuguese, taken from the transcript, same words and order. Condense only if it is longer than about 22 words. If there is no transcript, write it from the notes.
+The final call to action is added separately later, so the last scene's line must stop BEFORE any call to action (such as "comment X to get it"). Do not include it.
+{SAFETY}"""
 
-SCRIPTS_SYSTEM = f"""You write spoken ad scripts in Brazilian Portuguese, one per variation, in the same order.
-Each script has exactly {SCENES} lines, one per 8-second scene, each at most 22 words, natural and conversational.
-Line 1 is the hook (at most 18 words) and must stop the scroll. Line {SCENES} must END with the exact call to action sentence you are given, word for word.
-Follow each variation's angle. Keep the reference's pacing, not its words.
-{RULES}"""
+MIX_SYSTEM = f"""You write alternative openings, bodies and calls to action for the same video, so they can be mixed into new versions.
+You receive the {SCENES} scenes of the validated ad (what happens and the spoken line) and, optionally, the product.
+Keep the same offer, mechanism and promise; only change the way it is said. Write in Brazilian Portuguese, natural and spoken.
+Return:
+- hooks: N alternative openings (scene 1), each at most 18 words, each with a different angle (curiosity, problem, bold claim, question...).
+- bodies: N alternative middles (scene 2), each at most 22 words, same mechanism, different wording or example.
+- ctas: N alternative closings (scene 3), each at most 20 words, each asking to comment the keyword. Each CTA MUST contain the literal text {{KEYWORD}}, exactly once.
+{SAFETY}"""
+
+VARIATIONS_SYSTEM = f"""You plan N variations of the same video. The message and the spoken lines stay EXACTLY the same in all variations: only who presents it and how it is shown change.
+You receive the scenes (what happens and the spoken line), an avatar mode and, for "own", a list of avatars.
+Return exactly N variations. Each has:
+- title: 3-6 words in Brazilian Portuguese.
+- avatar: the avatar name (for "random", invent a short first name).
+- look: 15-30 words in English describing the person's appearance (age range, hair, clothing). Make each variation clearly different from the others.
+- setting: short, in Brazilian Portuguese, where and how it is filmed (for example "dentro do carro, câmera frontal").
+- summary: one sentence in Brazilian Portuguese on how this variation presents the same message.
+Avatar mode "own": use the given avatars in rotation and copy their look word for word (translate to English if needed). Avatar mode "random": invent N different everyday adult avatars.
+{SAFETY}"""
 
 IMAGES_SYSTEM = f"""You write first-frame image prompts for an image model (Nano Banana), 9:16 vertical, one set per variation in the same order.
 Each set has exactly {SCENES} prompts in English, one per scene, 250-450 characters each: UGC style, phone camera, natural light.
-Every prompt must restate the avatar's look in the same words, so the character stays consistent across scenes, then describe the setting, pose and framing of that scene.
-{RULES}"""
+Every prompt must restate the variation's look in the same words, so the same person appears in all scenes, then use the variation's setting and show what happens in that scene.
+No text on screen.
+{SAFETY}"""
 
-VIDEOS_SYSTEM = f"""You write text-to-video prompts for Google Flow / Veo, 9:16 vertical, 8 seconds each, one set per variation in the same order.
-Each set has exactly {SCENES} prompts in English, one per scene, 350-600 characters each: UGC style filmed on a phone, natural light.
-Restate the avatar's look in the same words in every prompt. Describe the action, camera movement and mood.
-Put the scene's spoken line in double quotes, in Brazilian Portuguese, word for word as given, said to camera.
-{RULES}"""
+VIDEOS_SYSTEM = f"""You write image-to-video prompts for Google Flow / Veo, 9:16 vertical, 8 seconds each, one set per variation in the same order.
+The approved image of the scene is used as the first frame, so do not redescribe the person's appearance: describe the movement, the camera and the mood, and keep the same person and setting.
+Each set has exactly {SCENES} prompts in English, one per scene, 250-500 characters each.
+Put the scene's spoken line in double quotes, in Brazilian Portuguese, word for word as given, said to camera. Never change, shorten or translate it.
+{SAFETY}"""
+
+
+class _Scene(BaseModel):
+    what: str
+    line: str
+
+
+class _Scenes(BaseModel):
+    items: list[_Scene]
+
+
+class _Mix(BaseModel):
+    hooks: list[str]
+    bodies: list[str]
+    ctas: list[str]
 
 
 class _Variation(BaseModel):
     title: str
-    angle: str
     avatar: str
+    look: str
+    setting: str
     summary: str
 
 
 class _Variations(BaseModel):
     items: list[_Variation]
-
-
-class _Lines(BaseModel):
-    lines: list[str] = Field(description=f"Exactly {SCENES} spoken lines")
-
-
-class _Scripts(BaseModel):
-    items: list[_Lines]
 
 
 class _Prompts(BaseModel):
@@ -88,21 +118,22 @@ def _text(value: Any, limit: int) -> str:
     return _clip(" ".join(str(value or "").split()), limit)
 
 
-def _context(data: dict[str, Any]) -> dict[str, Any]:
+def _context(data: dict[str, Any], need_cta: bool = False) -> dict[str, Any]:
     reference = _text(data.get("reference"), 4000)
     notes = _text(data.get("notes"), 600)
-    keyword = _text(data.get("keyword"), 30).upper()
-    cta_template = _text(data.get("cta"), 200)
     if len(reference) < 20 and len(notes) < 20:
         raise HTTPException(status_code=400, detail="Send the reference transcript or describe the video")
-    if not keyword:
+    keyword = _text(data.get("keyword"), 30).upper()
+    if need_cta and not keyword:
         raise HTTPException(status_code=400, detail="Keyword is required")
-    cta = (cta_template or "Comente {KEYWORD} para receber").replace("{KEYWORD}", keyword)
+    cta_template = _text(data.get("cta"), 200) or "Comente {KEYWORD} para assistir o vídeo completo"
+    cta = cta_template.replace("{KEYWORD}", keyword or "PALAVRA")
     avatars: list[dict[str, str]] = []
     raw_avatars = data.get("avatars")
     for raw in raw_avatars[:MAX_AVATARS] if isinstance(raw_avatars, list) else []:
         if isinstance(raw, dict) and str(raw.get("name") or "").strip():
             avatars.append({"name": _text(raw.get("name"), 40), "look": _text(raw.get("look"), 300)})
+    mode = "own" if data.get("avatar_mode") == "own" and avatars else "random"
     try:
         count = int(data.get("count") or 3)
     except (TypeError, ValueError):
@@ -110,11 +141,27 @@ def _context(data: dict[str, Any]) -> dict[str, Any]:
     return {
         "reference": reference,
         "notes": notes,
+        "product": _text(data.get("product"), 120),
         "keyword": keyword,
         "cta": cta,
         "avatars": avatars,
+        "mode": mode,
         "count": max(1, min(MAX_VARIATIONS, count)),
     }
+
+
+def _scenes_in(data: dict[str, Any]) -> list[dict[str, str]]:
+    raw = data.get("scenes")
+    if not isinstance(raw, list) or len(raw) < SCENES:
+        raise HTTPException(status_code=400, detail="Generate the scenes first")
+    out = [
+        {"what": _text(item.get("what"), 240), "line": _text(item.get("line"), 300)}
+        for item in raw[:SCENES]
+        if isinstance(item, dict) and str(item.get("line") or "").strip()
+    ]
+    if len(out) < SCENES:
+        raise HTTPException(status_code=400, detail="Generate the scenes first")
+    return out
 
 
 def _variations_in(data: dict[str, Any], count: int) -> list[dict[str, str]]:
@@ -127,8 +174,9 @@ def _variations_in(data: dict[str, Any], count: int) -> list[dict[str, str]]:
             out.append(
                 {
                     "title": _text(item.get("title"), 80),
-                    "angle": _text(item.get("angle"), 200),
                     "avatar": _text(item.get("avatar"), 40) or "Pessoa comum",
+                    "look": _text(item.get("look"), 300) or "an everyday adult",
+                    "setting": _text(item.get("setting"), 160),
                     "summary": _text(item.get("summary"), 300),
                 }
             )
@@ -137,24 +185,11 @@ def _variations_in(data: dict[str, Any], count: int) -> list[dict[str, str]]:
     return out
 
 
-def _avatar_look(avatars: list[dict[str, str]], name: str) -> str:
-    for avatar in avatars:
-        if avatar["name"].lower() == name.lower():
-            return avatar["look"] or "an everyday person"
-    return "an everyday person"
-
-
-def _lines_in(data: dict[str, Any], total: int) -> list[list[str]]:
-    raw = data.get("scripts")
-    if not isinstance(raw, list) or len(raw) < total:
-        raise HTTPException(status_code=400, detail="Generate the scripts first")
-    out: list[list[str]] = []
-    for item in raw[:total]:
-        lines = item.get("lines") if isinstance(item, dict) else None
-        if not isinstance(lines, list) or len(lines) < SCENES:
-            raise HTTPException(status_code=400, detail="Generate the scripts first")
-        out.append([_text(line, 220) for line in lines[:SCENES]])
-    return out
+def _spoken(scenes: list[dict[str, str]], cta: str) -> list[str]:
+    """Spoken lines per scene. The locked CTA closes the last scene, identical everywhere."""
+    lines = [scene["line"] for scene in scenes]
+    lines[-1] = _text(f"{lines[-1].rstrip()} {cta}", 400)
+    return lines
 
 
 async def _build_model() -> Any:
@@ -188,79 +223,94 @@ async def _run(system: str, output_type: type[BaseModel], prompt: str, model: An
     return result.output
 
 
-def _brief(ctx: dict[str, Any]) -> str:
-    avatars = "\n".join(f"- {a['name']}: {a['look'] or 'no description'}" for a in ctx["avatars"]) or "(none)"
-    return (
-        f"Reference transcript:\n{ctx['reference'] or '(not provided)'}\n\n"
-        f"Notes about the reference:\n{ctx['notes'] or '(none)'}\n\n"
-        f"Keyword: {ctx['keyword']}\nCall to action sentence: {ctx['cta']}\n\nAvatars:\n{avatars}"
+def _fail() -> HTTPException:
+    return HTTPException(status_code=502, detail="Could not generate this step. Try again.")
+
+
+async def stage_scenes(ctx: dict[str, Any], model: Any = None) -> list[dict[str, str]]:
+    prompt = f"Reference transcript:\n{ctx['reference'] or '(not provided)'}\n\nNotes about the video:\n{ctx['notes'] or '(none)'}"
+    out = await _run(SCENES_SYSTEM, _Scenes, prompt, model)
+    scenes = [{"what": _text(s.what, 240), "line": _text(s.line, 300)} for s in out.items if s.line.strip()]
+    if len(scenes) < SCENES:
+        raise _fail()
+    return scenes[:SCENES]
+
+
+async def stage_mix(ctx: dict[str, Any], scenes: list[dict[str, str]], model: Any = None) -> dict[str, list[str]]:
+    prompt = f"N = {MIX_OPTIONS}\nProduct: {ctx['product'] or '(not given)'}\n\nScenes:\n{_scene_block(scenes, [scene['line'] for scene in scenes])}"
+    out = await _run(MIX_SYSTEM, _Mix, prompt, model)
+    hooks = [_text(v, 160) for v in out.hooks if v.strip()][:MIX_OPTIONS]
+    bodies = [_text(v, 220) for v in out.bodies if v.strip()][:MIX_OPTIONS]
+    ctas = [_text(v, 200) for v in out.ctas if v.strip() and v.count("{KEYWORD}") == 1][:MIX_OPTIONS]
+    if len(hooks) < 2 or len(bodies) < 2 or len(ctas) < 2:
+        raise _fail()
+    return {"hooks": hooks, "bodies": bodies, "ctas": ctas}
+
+
+def _scene_block(scenes: list[dict[str, str]], lines: list[str] | None = None) -> str:
+    return "\n".join(
+        f"Scene {i}: {scene['what']}" + (f"\n   Spoken line: \"{lines[i - 1]}\"" if lines else "")
+        for i, scene in enumerate(scenes, 1)
     )
 
 
-def _fit(items: list[Any], total: int) -> None:
-    if len(items) < total:
-        raise HTTPException(status_code=502, detail="Could not generate this step. Try again.")
-
-
-async def stage_variations(ctx: dict[str, Any], model: Any = None) -> list[dict[str, str]]:
+async def stage_variations(ctx: dict[str, Any], scenes: list[dict[str, str]], model: Any = None) -> list[dict[str, str]]:
     count = ctx["count"]
-    out = await _run(VARIATIONS_SYSTEM, _Variations, f"N = {count}\n\n{_brief(ctx)}", model)
+    avatars = "\n".join(f"- {a['name']}: {a['look'] or 'no description'}" for a in ctx["avatars"]) or "(none)"
+    prompt = f"N = {count}\nAvatar mode: {ctx['mode']}\n\nScenes:\n{_scene_block(scenes)}\n\nAvatars:\n{avatars}"
+    out = await _run(VARIATIONS_SYSTEM, _Variations, prompt, model)
     items = [
         {
             "title": _text(v.title, 80),
-            "angle": _text(v.angle, 200),
             "avatar": _text(v.avatar, 40) or "Pessoa comum",
+            "look": _text(v.look, 300),
+            "setting": _text(v.setting, 160),
             "summary": _text(v.summary, 300),
         }
         for v in out.items
-        if v.title.strip()
+        if v.title.strip() and v.look.strip()
     ]
-    _fit(items, count)
+    if len(items) < count:
+        raise _fail()
     return items[:count]
 
 
-async def stage_scripts(ctx: dict[str, Any], variations: list[dict[str, str]], model: Any = None) -> list[dict[str, list[str]]]:
-    listing = "\n".join(f"{n}. {v['title']} | angle: {v['angle']} | avatar: {v['avatar']} | {v['summary']}" for n, v in enumerate(variations, 1))
-    out = await _run(SCRIPTS_SYSTEM, _Scripts, f"{_brief(ctx)}\n\nVariations:\n{listing}", model)
-    _fit(out.items, len(variations))
-    scripts: list[dict[str, list[str]]] = []
-    for item in out.items[: len(variations)]:
-        lines = [_text(line, 220) for line in item.lines if line.strip()][:SCENES]
-        if len(lines) < SCENES:
-            raise HTTPException(status_code=502, detail="Could not generate this step. Try again.")
-        if ctx["cta"].lower() not in lines[-1].lower():
-            lines[-1] = _text(f"{lines[-1].rstrip()} {ctx['cta']}", 260)
-        scripts.append({"lines": lines})
-    return scripts
+def _lines_in(data: dict[str, Any], scenes: list[dict[str, str]], cta: str, total: int) -> list[list[str]]:
+    """Spoken lines per variation. Mixed versions send their own lines; otherwise every variation
+    says the same trunk lines and the locked CTA closes the last scene."""
+    raw = data.get("lines")
+    if isinstance(raw, list) and len(raw) >= total:
+        out = [[_text(line, 400) for line in item[:SCENES]] for item in raw[:total] if isinstance(item, list) and len(item) >= SCENES]
+        if len(out) == total and all(all(line for line in item) for item in out):
+            return out
+        raise HTTPException(status_code=400, detail="Generate the scenes first")
+    return [_spoken(scenes, cta) for _ in range(total)]
 
 
-async def _scene_prompts(system: str, ctx: dict[str, Any], variations: list[dict[str, str]], lines: list[list[str]], with_lines: bool, model: Any) -> list[dict[str, list[str]]]:
-    blocks = []
-    for number, (variation, spoken) in enumerate(zip(variations, lines), 1):
-        scene_text = "\n".join(f"   Scene {i}: \"{line}\"" for i, line in enumerate(spoken, 1))
-        header = "Spoken lines (put each in its scene)" if with_lines else "Spoken lines (context only, do not write them in the image prompt)"
-        blocks.append(
-            f"{number}. {variation['title']} ({variation['angle']})\n"
-            f"   Avatar look: {_avatar_look(ctx['avatars'], variation['avatar'])}\n"
-            f"   {header}:\n{scene_text}"
-        )
+async def _scene_prompts(system: str, scenes: list[dict[str, str]], variations: list[dict[str, str]], lines: list[list[str]] | None, model: Any):
+    blocks = [
+        f"{number}. {v['title']}\n   Look: {v['look']}\n   Setting: {v['setting'] or 'free'}\n   Scenes:\n"
+        + "\n".join(f"   {line}" for line in _scene_block(scenes, lines[number - 1] if lines else None).splitlines())
+        for number, v in enumerate(variations, 1)
+    ]
     out = await _run(system, _PromptSets, "\n\n".join(blocks), model)
-    _fit(out.items, len(variations))
+    if len(out.items) < len(variations):
+        raise _fail()
     sets: list[dict[str, list[str]]] = []
     for item in out.items[: len(variations)]:
         prompts = [_text(p, 900) for p in item.prompts if p.strip()][:SCENES]
         if len(prompts) < SCENES:
-            raise HTTPException(status_code=502, detail="Could not generate this step. Try again.")
+            raise _fail()
         sets.append({"prompts": prompts})
     return sets
 
 
-async def stage_images(ctx: dict[str, Any], variations: list[dict[str, str]], lines: list[list[str]], model: Any = None):
-    return await _scene_prompts(IMAGES_SYSTEM, ctx, variations, lines, False, model)
+async def stage_images(ctx: dict[str, Any], scenes: list[dict[str, str]], variations: list[dict[str, str]], model: Any = None):
+    return await _scene_prompts(IMAGES_SYSTEM, scenes, variations, None, model)
 
 
-async def stage_videos(ctx: dict[str, Any], variations: list[dict[str, str]], lines: list[list[str]], model: Any = None):
-    return await _scene_prompts(VIDEOS_SYSTEM, ctx, variations, lines, True, model)
+async def stage_videos(ctx: dict[str, Any], scenes: list[dict[str, str]], variations: list[dict[str, str]], lines: list[list[str]], model: Any = None):
+    return await _scene_prompts(VIDEOS_SYSTEM, scenes, variations, lines, model)
 
 
 @router.post("/generate")
@@ -275,14 +325,17 @@ async def generate(request: Request, db: AsyncSession = Depends(get_db)):
     stage = str(data.get("stage") or "")
     if stage not in STAGES:
         raise HTTPException(status_code=400, detail="Unknown step")
-    ctx = _context(data)
+    ctx = _context(data, need_cta=stage == "videos")
     _check_script_rate(user_id)
+    if stage == "scenes":
+        return {"stage": stage, "items": await stage_scenes(ctx)}
+    scenes = _scenes_in(data)
+    if stage == "mix":
+        return {"stage": stage, **(await stage_mix(ctx, scenes))}
     if stage == "variations":
-        return {"stage": stage, "items": await stage_variations(ctx)}
+        return {"stage": stage, "items": await stage_variations(ctx, scenes)}
     variations = _variations_in(data, ctx["count"])
-    if stage == "scripts":
-        return {"stage": stage, "items": await stage_scripts(ctx, variations)}
-    lines = _lines_in(data, len(variations))
     if stage == "images":
-        return {"stage": stage, "items": await stage_images(ctx, variations, lines)}
-    return {"stage": stage, "items": await stage_videos(ctx, variations, lines)}
+        return {"stage": stage, "items": await stage_images(ctx, scenes, variations)}
+    lines = _lines_in(data, scenes, ctx["cta"], len(variations))
+    return {"stage": stage, "items": await stage_videos(ctx, scenes, variations, lines)}
