@@ -751,6 +751,24 @@ export function CloneWizard() {
   const autoPct = auto ? Math.min(99, (auto.done / Math.max(1, auto.total)) * 100) : 0;
   const pct = auto ? autoPct : batch ? Math.min(98, ((batch.done + eased / 100) / batch.total) * 100) : eased;
 
+  // Pacote único para a ferramenta ClipGringa dentro do Flow (BETA): tudo o que foi coletado, em um clique.
+  const flowPackage = () => JSON.stringify({
+    app: "clipgringa-flow",
+    version: 1,
+    keyword: p.keyword.trim(),
+    cta: p.cta,
+    sceneCount: p.sceneCount,
+    model: "Veo 3.1 - Lite [Lower Priority]",
+    videos: p.variations.map((variation, vi) => ({
+      title: variation.title,
+      scenes: Array.from({ length: p.sceneCount }, (_, si) => ({
+        imagePrompt: p.images[vi]?.prompts[si] ?? "",
+        videoPrompt: p.videos[vi]?.prompts[si] ?? "",
+        file: fileName(vi, si, "x.mp4"),
+      })),
+    })),
+  }, null, 2);
+
   const copyButton = (id: string, value: string, label = "Copiar") => (
     <Button key={id} type="button" size="sm" variant="outline" onClick={() => copy(id, value)}>
       {copied === id ? <Check className="size-3.5" /> : <ClipboardCopy className="size-3.5" />}
@@ -1116,6 +1134,13 @@ export function CloneWizard() {
                   </Button>
                 )}
               </div>
+              {p.videos.length > 0 && (
+                <div className="space-y-2 rounded-[14px] border border-border p-3 text-sm">
+                  <p className="font-medium">Ferramenta ClipGringa no Flow <span className="ml-1 rounded-full bg-[#7B3FE4]/20 px-2 py-0.5 text-[10px] font-semibold text-[#A98BFF]">BETA</span></p>
+                  <p className="text-xs text-muted-foreground">Copia tudo de uma vez (prompts de imagem e de animação de todos os vídeos). Cole na ferramenta ClipGringa dentro do Flow e gere no Lower Priority.</p>
+                  {copyButton("flow-pack", flowPackage(), "Copiar pacote para o Flow")}
+                </div>
+              )}
               {p.videos.map((set, vi) => (
                 <div key={vi} className="space-y-3 rounded-[14px] border border-border p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">

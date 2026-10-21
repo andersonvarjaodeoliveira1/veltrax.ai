@@ -77,6 +77,12 @@ it("follows the Árvore protocol and locks the CTA before the animations", async
   // 5 · animations
   await user.click(screen.getByRole("button", { name: "Gerar prompts de animação" }));
   expect((await screen.findAllByText("Cena 1 · Video01_Cena01.mp4")).length).toBeGreaterThan(0);
+  // Flow package (BETA): one click copies every prompt for the Flow tool
+  await user.click(screen.getByRole("button", { name: "Copiar pacote para o Flow" }));
+  const pack = JSON.parse(await navigator.clipboard.readText());
+  expect(pack).toMatchObject({ app: "clipgringa-flow", version: 1, keyword: "LIMON", sceneCount: 3 });
+  expect(pack.videos).toHaveLength(2);
+  expect(pack.videos[1].scenes[2]).toEqual({ imagePrompt: "prompt c", videoPrompt: "prompt c", file: "Video02_Cena03.mp4" });
   await user.click(next());
 
   // 6 · download: names follow Video01_Cena01.mp4
