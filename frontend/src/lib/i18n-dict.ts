@@ -24,6 +24,7 @@ const E: Record<string, Entry> = {
   "Could not sign out. Please try again.": { pt: "Não foi possível sair. Tente novamente.", es: "No se pudo cerrar sesión. Inténtalo de nuevo." },
   "Baixar vídeo": { pt: "Baixar vídeo", es: "Descargar video" },
   "API e Flow": { pt: "API e Flow", es: "API y Flow" },
+  "Minhas APIs": { pt: "Minhas APIs", es: "Mis APIs" },
   "videos this period": { pt: "vídeos neste período", es: "videos en este período" },
   "Pick a plan to start clipping": { pt: "Escolha um plano para começar", es: "Elige un plan para empezar" },
   "What's new": { pt: "Novidades", es: "Novedades" },
