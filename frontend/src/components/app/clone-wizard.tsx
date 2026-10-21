@@ -46,6 +46,8 @@ type Task = { id: string; label: string; state: "running" | "done" | "error"; st
 
 const KEY = "gv-clonagem-v2";
 const MODE_KEY = "gv-clonagem-mode";
+// Ferramenta "ClipGringa — Gerar Vídeos" no Flow (BETA). Trocar pelo link compartilhado quando for liberada aos membros.
+const FLOW_TOOL_URL = "https://flow.google.com/project/50e752e7-9a93-4477-8e3a-9bd266ec636b/tool/fccd23dc-ee0d-437a-9f45-a5ad87ccefce";
 const NEXT_HINTS = [
   "separe a referência em cenas (botão “Separar em cenas”) e, se escolheu variar a copy, gere os ganchos, corpos e CTAs.",
   "clique em “Gerar variações”.",
@@ -1159,8 +1161,13 @@ export function CloneWizard() {
               {p.videos.length > 0 && (
                 <div className="space-y-2 rounded-[14px] border border-border p-3 text-sm">
                   <p className="font-medium">Ferramenta ClipGringa no Flow <span className="ml-1 rounded-full bg-[#7B3FE4]/20 px-2 py-0.5 text-[10px] font-semibold text-[#A98BFF]">BETA</span></p>
-                  <p className="text-xs text-muted-foreground">Copia tudo de uma vez (prompts de imagem e de animação de todos os vídeos). Cole na ferramenta ClipGringa dentro do Flow e gere no Lower Priority.</p>
-                  {copyButton("flow-pack", flowPackage(), "Copiar pacote para o Flow")}
+                  <p className="text-xs text-muted-foreground">Um clique copia tudo (prompts de imagem e de animação de todos os vídeos) e abre a ferramenta ClipGringa no Flow. Lá, clique em “Colar pacote” e depois em “Gerar tudo”.</p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" size="sm" className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white" onClick={() => { void copy("flow-send", flowPackage()); window.open(FLOW_TOOL_URL, "_blank", "noopener"); }}>
+                      <ExternalLink className="size-3.5" /> Enviar para o Flow
+                    </Button>
+                    {copyButton("flow-pack", flowPackage(), "Copiar pacote para o Flow")}
+                  </div>
                 </div>
               )}
               {p.videos.map((set, vi) => (
