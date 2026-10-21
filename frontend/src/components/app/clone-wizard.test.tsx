@@ -145,7 +145,7 @@ it("assembles the three scene videos of a project on the server", async () => {
   let sent: FormData | undefined;
   vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: () => "blob:x", revokeObjectURL: () => {} }));
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
-    if (String(url).endsWith("/api/multiplier/jobs") && init?.method === "POST") {
+    if (String(url).endsWith("/clone/render/assemble-scenes") && init?.method === "POST") {
       sent = init.body as FormData;
       return new Response(JSON.stringify({ id: "job1", status: "processing" }), { status: 200 });
     }
@@ -169,10 +169,7 @@ it("assembles the three scene videos of a project on the server", async () => {
   await user.click(screen.getByRole("button", { name: "Montar este vídeo" }));
   const link = await screen.findByRole("link", { name: /Baixar vídeo 01/, }, { timeout: 8000 });
   expect(link).toHaveAttribute("href", "/api/multiplier/jobs/job1/outputs/1?download=true");
-  expect(sent?.getAll("hooks")).toHaveLength(1);
-  expect(sent?.getAll("bodies")).toHaveLength(1);
-  expect(sent?.getAll("ctas")).toHaveLength(1);
-  expect(sent?.get("aspect")).toBe("9:16");
+  expect(sent?.getAll("scenes")).toHaveLength(3);
 }, 15000);
 
 it("explains when another assembly is already running", async () => {
@@ -241,7 +238,7 @@ function mockAuto(opts: { failVideo?: boolean } = {}) {
     }
     if (/\/clone\/render\/vid\d+$/.test(u)) return json({ status: "ready" });
     if (/\/clone\/render\/(img|vid)\d+\/file$/.test(u)) return new Response(new Blob(["x"]), { status: 200 });
-    if (u.endsWith("/api/multiplier/jobs") && init?.method === "POST") { log.push("assemble"); return json({ id: "job9" }); }
+    if (u.endsWith("/clone/render/assemble-scenes") && init?.method === "POST") { log.push("assemble"); return json({ id: "job9" }); }
     if (u.includes("/api/multiplier/jobs/job9")) return json({ status: "completed" });
     return json({ detail: "nope" }, 500);
   }));
@@ -330,4 +327,26 @@ it("keeps the typed case when the member authorizes writing it their own way", a
   await user.clear(input);
   await user.type(input, "Quero Agora");
   expect(input).toHaveValue("Quero Agora");
+});
+
+it("lets the member choose 1 to 3 scenes and generates only that many", async () => {
+  const log = mockAuto();
+  const user = userEvent.setup();
+  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ step: 1, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora.", count: 1 }));
+  render(<CloneWizard />);
+  await user.click(await screen.findByRole("radio", { name: "1 cena" }));
+  await user.click(screen.getByRole("button", { name: "Criar meus vídeos automaticamente" }));
+  await screen.findByRole("link", { name: /Baixar vídeo 01/ }, { timeout: 8000 });
+  expect(log.filter((x) => x === "image")).toHaveLength(1);
+  expect(log.filter((x) => x === "video")).toHaveLength(1);
+}, 15000);
+
+it("generates all missing images at once from the images step", async () => {
+  const log = mockAuto();
+  const user = userEvent.setup();
+  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ step: 3, reference: "x".repeat(30), scenes, variations: [variations[0]], images: [prompts[0]], sceneCount: 3 }));
+  render(<CloneWizard />);
+  await user.click(await screen.findByRole("button", { name: "Gerar todas as imagens" }));
+  await waitFor(() => expect(log.filter((x) => x === "image")).toHaveLength(3), { timeout: 5000 });
+  expect(await screen.findByText("3 de 3 aprovadas")).toBeInTheDocument();
 });

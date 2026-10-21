@@ -14,6 +14,7 @@ Rotas (todas sob /multiplier/clone/render):
 
 import asyncio
 import base64
+import shutil
 import hashlib
 import json
 import logging
@@ -27,11 +28,25 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...config import get_config
 from ...database import get_db
-from .multiplier import _root, _user_id
+from ...utils.async_helpers import run_in_thread
+from .multiplier import (
+    ASPECTS,
+    MAX_JOBS_PER_USER,
+    _job_dir,
+    _read_group,
+    _render_gate,
+    _root,
+    _running as _assembling,
+    _save_progress,
+    _user_id,
+    ensure_audio,
+    render_combination,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/multiplier/clone/render", tags=["clone-render"])
@@ -344,3 +359,53 @@ async def get_file(item_id: str, request: Request, download: bool = False, db: A
         content_disposition_type="attachment" if download else "inline",
         headers={"Cache-Control": "private, no-store"},
     )
+
+
+# ---- montagem das cenas (1 a 3) num vídeo final ------------------------------------
+async def _run_scenes_job(job_id: str, files: list[Path]) -> None:
+    width, height = ASPECTS["9:16"]
+    job_dir = _job_dir(job_id)
+    outputs: list[dict[str, Any]] = [{"index": 1, "label": "Video", "hook": 1, "body": 1, "cta": 1, "status": "pending"}]
+    try:
+        async with _render_gate:
+            prepared = [await run_in_thread(ensure_audio, item) for item in files]
+            target = job_dir / "out_001.mp4"
+            await run_in_thread(render_combination, prepared, target, width, height)
+        outputs[0].update(status="ready", filename=target.name)
+        await _save_progress(job_id, status="completed", done=1, outputs=json.dumps(outputs))
+    except Exception as exc:
+        logger.warning("clone assemble %s failed: %s", job_id, exc)
+        outputs[0]["status"] = "error"
+        await _save_progress(job_id, status="error", error="Could not join the scenes. Check that the videos open normally.", outputs=json.dumps(outputs))
+    finally:
+        _assembling.pop(job_id, None)
+        shutil.rmtree(job_dir / "in", ignore_errors=True)
+
+
+@router.post("/assemble-scenes", include_in_schema=False)
+async def assemble_scenes(request: Request, db: AsyncSession = Depends(get_db)):
+    user_id = await _user_id(request, db)
+    if user_id in _assembling.values():
+        raise HTTPException(status_code=409, detail="You already have a multiplication running. Wait for it to finish.")
+    total_jobs = (await db.execute(text("SELECT COUNT(*) FROM multiplier_jobs WHERE user_id = :u"), {"u": user_id})).scalar_one()
+    if total_jobs >= MAX_JOBS_PER_USER:
+        raise HTTPException(status_code=409, detail="Job limit reached. Delete older ones first.")
+    form = await request.form()
+    job_id = str(uuid.uuid4())
+    job_dir = _job_dir(job_id)
+    try:
+        files = await _read_group(form, "scenes", 3, job_dir)
+        if not files:
+            raise HTTPException(status_code=400, detail="Send at least 1 scene")
+    except Exception:
+        shutil.rmtree(job_dir, ignore_errors=True)
+        raise
+    await db.execute(
+        text("INSERT INTO multiplier_jobs (id, user_id, status, aspect, total, done, outputs) VALUES (:id, :user_id, 'processing', '9:16', 1, 0, '[]')"),
+        {"id": job_id, "user_id": user_id},
+    )
+    await db.commit()
+    _assembling[job_id] = user_id
+    task = asyncio.create_task(_run_scenes_job(job_id, files))
+    task.add_done_callback(lambda _t: None)
+    return {"id": job_id, "total": 1, "status": "processing"}
