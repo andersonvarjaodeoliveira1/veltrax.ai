@@ -52,6 +52,7 @@ test("admins create a draft, publish, edit and hide it through the announcements
     session: { id: "session", userId: "admin", expiresAt: "2099-01-01T00:00:00Z" },
     user: { id: "admin", name: "Alex", email: "alex@example.com", is_admin: true, emailVerified: true },
   } }));
+  await page.route("**/api/admin/unlock", route => route.fulfill({ json: { unlocked: true } }));
   await page.route("**/api/tasks/billing-summary", route => route.fulfill({ json: { monetization_enabled: false } }));
   await page.route("**/api/announcements", route => route.fulfill({ json: { announcements: items.filter(item => item.isPublished) } }));
   await page.route("**/api/admin/announcements", route => {

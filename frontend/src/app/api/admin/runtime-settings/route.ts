@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireAdminUnlocked } from "@/server/admin-lock";
 
 import { createTextProxyResponse, fetchBackend } from "@/server/backend-api";
 import { getServerSession } from "@/server/session";
@@ -13,6 +14,9 @@ async function requireAdmin() {
   if (!isAdmin) {
     return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
   }
+
+  const locked = await requireAdminUnlocked(session.user.id);
+  if (locked) return { error: locked };
 
   return { session };
 }

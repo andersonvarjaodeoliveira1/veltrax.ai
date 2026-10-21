@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAdminUnlocked } from "@/server/admin-lock";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
@@ -14,6 +15,9 @@ async function requireAdmin() {
   if (!isAdmin) {
     return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
   }
+
+  const locked = await requireAdminUnlocked(session.user.id);
+  if (locked) return { error: locked };
 
   return { session };
 }

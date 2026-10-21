@@ -273,3 +273,15 @@ it("stops with a clear message when the daily limit ends and can continue later"
   expect(await screen.findByText("Você chegou ao limite de hoje. Tente de novo amanhã.", undefined, { timeout: 8000 })).toBeInTheDocument();
   expect(await screen.findByRole("button", { name: "Continuar de onde parou" })).toBeEnabled();
 }, 15000);
+
+it("lets the member type any keyword in the automatic panel", async () => {
+  mockAuto();
+  const user = userEvent.setup();
+  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ step: 1, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora.", count: 1 }));
+  render(<CloneWizard />);
+  const input = await screen.findByLabelText("Escrever outra palavra-chave");
+  await user.clear(input);
+  await user.type(input, "limon");
+  expect(input).toHaveValue("LIMON");
+  expect(screen.getByRole("button", { name: "Criar meus vídeos automaticamente" })).toBeEnabled();
+});

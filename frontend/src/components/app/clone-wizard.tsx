@@ -772,8 +772,9 @@ export function CloneWizard() {
                   <Group label="Quantos vídeos">
                     <Chips label="Quantos vídeos" value={p.count} onPick={(count) => patch({ count })} options={[1, 2, 3].map((n) => ({ value: n, text: String(n) }))} />
                   </Group>
-                  <Group label="Palavra-chave da CTA">
+                  <Group label="Palavra-chave da CTA" hint="Escolha uma ou escreva a sua.">
                     <Chips label="Palavra-chave" value={p.keyword} onPick={(keyword) => patch({ keyword })} options={KEYWORDS.map((k) => ({ value: k, text: k }))} />
+                    <input value={p.keyword} onChange={(event) => patch({ keyword: event.target.value.toUpperCase() })} maxLength={30} placeholder="Ou escreva outra palavra" aria-label="Escrever outra palavra-chave" className={inputClass} />
                   </Group>
                   <Button type="button" onClick={() => void runAll()} disabled={working || (p.reference.trim().length < 20 && p.notes.trim().length < 20) || !p.keyword.trim()}>
                     {Object.keys(p.gen).length > 0 || p.scenes.length > 0 ? "Continuar de onde parou" : "Criar meus vídeos automaticamente"}

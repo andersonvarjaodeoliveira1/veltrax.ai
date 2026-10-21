@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { getAuthTrustedOrigins } from "@/lib/auth-origins";
+import { requireAdminUnlocked } from "@/server/admin-lock";
 import { getServerSession } from "@/server/session";
 
-export async function requireAnnouncementAdmin(request?: Request) {
+export async function requireAnnouncementAdmin(request?: Request, options: { allowLocked?: boolean } = {}) {
   const session = await getServerSession();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!(session.user as { is_admin?: boolean }).is_admin) {
@@ -19,6 +20,7 @@ export async function requireAnnouncementAdmin(request?: Request) {
   if (request && origin && origin !== new URL(request.url).origin && !trustedOrigins.includes(origin)) {
     return NextResponse.json({ error: "Cross-origin writes are not allowed" }, { status: 403 });
   }
+  if (!options.allowLocked) return requireAdminUnlocked(session.user.id);
   return null;
 }
 

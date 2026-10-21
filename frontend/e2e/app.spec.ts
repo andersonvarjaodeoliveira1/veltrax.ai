@@ -44,6 +44,10 @@ test("admin user can access the admin dashboard", async ({ page }) => {
   await signIn(page, seed.admin.email, seed.admin.password);
 
   await page.goto("/admin");
+  // O Admin fica trancado: confirma a senha da conta antes de abrir.
+  await expect(page.getByText("Admin protegido")).toBeVisible();
+  await page.getByLabel("Senha da sua conta").fill(seed.admin.password);
+  await page.getByRole("button", { name: "Desbloquear o Admin" }).click();
   await expect(page.getByText(/admin dashboard/i)).toBeVisible();
   await expect(
     page.getByRole("heading", { name: /currently processing tasks/i }),
