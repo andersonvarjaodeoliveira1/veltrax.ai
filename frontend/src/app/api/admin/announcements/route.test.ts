@@ -2,9 +2,11 @@ import { GET, POST } from "./route";
 import { PATCH } from "./[id]/route";
 import { GET as publicFeed } from "../../announcements/route";
 import { getServerSession } from "@/server/session";
+import { requireAdminUnlocked } from "@/server/admin-lock";
 import { getPrismaClient } from "@/server/prisma";
 
 vi.mock("@/server/session", () => ({ getServerSession: vi.fn() }));
+vi.mock("@/server/admin-lock", () => ({ requireAdminUnlocked: vi.fn() }));
 vi.mock("@/server/prisma", () => ({ getPrismaClient: vi.fn() }));
 
 const body = { title: "New update", description: "An update", href: "/affiliate", action: "Learn more", isPublished: false, publishedAt: "2026-10-11T00:00:00Z" };
@@ -18,6 +20,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://clipgringa.gringatools.com");
   vi.mocked(getServerSession).mockResolvedValue({ user: { id: "admin", is_admin: true } } as never);
+  vi.mocked(requireAdminUnlocked).mockResolvedValue(null);
   vi.mocked(getPrismaClient).mockReturnValue({ announcement } as never);
   announcement.findMany.mockResolvedValue([]);
   announcement.create.mockResolvedValue({ id: "stored-id", ...body });
@@ -86,4 +89,10 @@ it("publishes only visible announcements whose publication date has arrived", as
     where: { isPublished: true, publishedAt: { lte: expect.any(Date) } },
   }));
   expect(getServerSession).not.toHaveBeenCalled();
+});
+
+it("stays closed to an admin who has not confirmed the password", async () => {
+  vi.mocked(requireAdminUnlocked).mockResolvedValue(Response.json({ error: "Admin locked" }, { status: 403 }) as never);
+  expect((await GET()).status).toBe(403);
+  expect(announcement.findMany).not.toHaveBeenCalled();
 });

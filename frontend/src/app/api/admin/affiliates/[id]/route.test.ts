@@ -3,8 +3,10 @@ import { getStripeClient } from "@/lib/stripe";
 import { sendAffiliateEmail } from "@/server/affiliates";
 import { getPrismaClient } from "@/server/prisma";
 import { getServerSession } from "@/server/session";
+import { requireAdminUnlocked } from "@/server/admin-lock";
 
 vi.mock("@/server/session", () => ({ getServerSession: vi.fn() }));
+vi.mock("@/server/admin-lock", () => ({ requireAdminUnlocked: vi.fn() }));
 vi.mock("@/server/prisma", () => ({ getPrismaClient: vi.fn() }));
 vi.mock("@/lib/stripe", () => ({ getStripeClient: vi.fn() }));
 vi.mock("@/server/affiliates", async (importOriginal) => ({
@@ -27,6 +29,7 @@ describe("/api/admin/affiliates/[id]", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(getServerSession).mockResolvedValue({ user: { id: "admin-1", is_admin: true } } as never);
+    vi.mocked(requireAdminUnlocked).mockResolvedValue(null);
     vi.mocked(getPrismaClient).mockReturnValue({ affiliate, user } as never);
     vi.mocked(getStripeClient).mockReturnValue({ promotionCodes } as never);
     affiliate.findUnique.mockResolvedValue(pending);
