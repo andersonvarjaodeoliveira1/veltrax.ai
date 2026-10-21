@@ -73,6 +73,19 @@ const HINTS = [
   "Baixe as cenas, se quiser guardar uma cópia.",
   "Clique em “Montar todos os vídeos” e espere. Seus vídeos finais aparecem aqui.",
 ];
+const KEYWORDS = ["QUERO", "EU QUERO", "LINK", "INFO", "GUIA", "AULA"];
+const CTA_PRESETS = [
+  "Comente {KEYWORD} para assistir o vídeo completo",
+  "Comente {KEYWORD} que eu te mando o link",
+  "Escreva {KEYWORD} nos comentários e receba o passo a passo",
+  "Comente {KEYWORD} agora e veja como funciona",
+];
+const LOOK_PRESETS: [string, string][] = [
+  ["Mulher jovem", "Mulher de 25 anos, cabelo castanho solto, camiseta branca"],
+  ["Homem jovem", "Homem de 28 anos, cabelo curto, camiseta escura"],
+  ["Mulher 40+", "Mulher de 42 anos, cabelo ondulado, blusa clara"],
+  ["Homem 40+", "Homem de 45 anos, barba curta, camisa polo"],
+];
 const CAPCUT_STEPS = ["Importar os arquivos do vídeo", "Colocar as cenas na sequência correta", "Ajustar as junções entre as cenas", "Revisar a CTA e a palavra-chave", "Exportar"];
 
 function load(): Project {
@@ -110,6 +123,19 @@ function mixPick(mix: Mix, vi: number) {
     body: { index: (vi * 2 + 1) % Math.max(1, mix.bodies.length), text: at(mix.bodies, vi * 2 + 1) },
     cta: { index: (vi * 2 + 2) % Math.max(1, mix.ctas.length), text: at(mix.ctas, vi * 2 + 2) },
   };
+}
+
+function Chips<T extends string | number>({ label, options, value, onPick, disabled }: { label: string; options: { value: T; text: string }[]; value?: T; onPick: (value: T) => void; disabled?: boolean }) {
+  return (
+    <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-2">
+      {options.map((option) => (
+        <button key={String(option.value)} type="button" role="radio" aria-checked={value === option.value} disabled={disabled} onClick={() => onPick(option.value)}
+          className={cn("rounded-full border px-3.5 py-1.5 text-sm disabled:opacity-50", value === option.value ? "border-transparent bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:text-foreground")}>
+          {option.text}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
@@ -537,6 +563,12 @@ export function CloneWizard() {
                         onChange={(event) => patch({ avatars: p.avatars.map((a) => (a.id === avatar.id ? { ...a, name: event.target.value } : a)) })} />
                       <input value={avatar.look} maxLength={300} placeholder="Mulher de 30 anos, cabelo castanho, camiseta branca" aria-label="Aparência do avatar" className={inputClass}
                         onChange={(event) => patch({ avatars: p.avatars.map((a) => (a.id === avatar.id ? { ...a, look: event.target.value } : a)) })} />
+                      <div className="flex flex-wrap gap-1.5 sm:col-span-3">
+                        {LOOK_PRESETS.map(([text, look]) => (
+                          <button key={text} type="button" onClick={() => patch({ avatars: p.avatars.map((a) => (a.id === avatar.id ? { ...a, look, name: a.name || text } : a)) })}
+                            className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground hover:text-foreground">{text}</button>
+                        ))}
+                      </div>
                       <Button type="button" variant="ghost" size="icon" aria-label="Remover avatar" onClick={() => patch({ avatars: p.avatars.filter((a) => a.id !== avatar.id) })}>
                         <Trash2 className="size-4" />
                       </Button>
@@ -551,10 +583,8 @@ export function CloneWizard() {
                 </div>
               )}
               <div className="flex flex-wrap items-end gap-3">
-                <Field label="Quantos vídeos (galhos)">
-                  <select value={p.count} onChange={(event) => patch({ count: Number(event.target.value) })} className={cn(inputClass, "w-28")}>
-                    {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
-                  </select>
+                <Field label="Quantos vídeos">
+                  <Chips label="Quantos vídeos" value={p.count} onPick={(count) => patch({ count })} options={[1, 2, 3, 4, 5].map((n) => ({ value: n, text: String(n) }))} />
                 </Field>
                 {generateButton("variations", "Gerar variações", p.variations.length > 0, "Planejando as variações", p.avatarMode === "own" && !p.avatars.some((a) => a.name.trim()))}
               </div>
@@ -643,12 +673,18 @@ export function CloneWizard() {
                   <input value={p.product} onChange={(event) => patch({ product: event.target.value })} disabled={p.ctaLocked} maxLength={120} className={inputClass} />
                 </Field>
                 <Field label="Palavra-chave">
-                  <input value={p.keyword} onChange={(event) => patch({ keyword: event.target.value.toUpperCase() })} disabled={p.ctaLocked} maxLength={30} placeholder="LIMON" className={inputClass} />
+                  <div className="space-y-2">
+                    <Chips label="Palavras sugeridas" disabled={p.ctaLocked} value={p.keyword} onPick={(keyword) => patch({ keyword })} options={KEYWORDS.map((k) => ({ value: k, text: k }))} />
+                    <input value={p.keyword} onChange={(event) => patch({ keyword: event.target.value.toUpperCase() })} disabled={p.ctaLocked} maxLength={30} placeholder="LIMON" aria-label="Ou escreva a sua palavra" className={inputClass} />
+                  </div>
                 </Field>
               </div>
               {p.copyMode === "same" && (
                 <Field label="Frase da CTA" hint="Use {KEYWORD} onde a palavra-chave deve aparecer.">
-                  <input value={p.cta} onChange={(event) => patch({ cta: event.target.value })} disabled={p.ctaLocked} maxLength={200} className={inputClass} />
+                  <div className="space-y-2">
+                    <Chips label="Frases prontas" disabled={p.ctaLocked} value={p.cta} onPick={(cta) => patch({ cta })} options={CTA_PRESETS.map((c) => ({ value: c, text: c.replace("{KEYWORD}", "…") }))} />
+                    <input value={p.cta} onChange={(event) => patch({ cta: event.target.value })} disabled={p.ctaLocked} maxLength={200} aria-label="Ou escreva a sua frase" className={inputClass} />
+                  </div>
                 </Field>
               )}
               <div className="space-y-2 rounded-[14px] border border-border p-3 text-sm">

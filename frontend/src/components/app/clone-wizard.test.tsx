@@ -200,3 +200,21 @@ it("shows one progress bar with what is happening and a simple hint per step", a
   expect(await screen.findAllByRole("progressbar")).toHaveLength(1);
   expect(screen.getByText(/Pode esperar aqui/)).toBeInTheDocument();
 });
+
+it("lets the member pick count, keyword and CTA by clicking", async () => {
+  const calls = mockApi();
+  const user = userEvent.setup();
+  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ step: 2, reference: "x".repeat(30), scenes }));
+  render(<CloneWizard />);
+  await user.click(await screen.findByRole("radio", { name: "5" }));
+  await user.click(screen.getByRole("button", { name: "Gerar variações" }));
+  await screen.findByText(/Ideia 1/);
+  expect(calls[0].body.count).toBe(5);
+
+  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ step: 4, reference: "x".repeat(30), scenes, variations: [variations[0]] }));
+  cleanup();
+  render(<CloneWizard />);
+  await user.click(await screen.findByRole("radio", { name: "EU QUERO" }));
+  await user.click(screen.getByRole("radio", { name: /Comente … que eu te mando o link/ }));
+  expect(screen.getByText(/Comente EU QUERO que eu te mando o link/)).toBeInTheDocument();
+});
