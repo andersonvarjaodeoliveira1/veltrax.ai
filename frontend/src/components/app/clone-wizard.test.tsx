@@ -394,6 +394,8 @@ it("simple mode: upload one video and everything is prepared automatically, read
 
   await user.click(await screen.findByRole("button", { name: "Pular, continuar sem produto" }));
   expect(await screen.findByText(/Tudo pronto: 2 vídeos × 3 cenas/)).toBeInTheDocument();
+  expect(screen.getAllByRole("button", { name: "Copiar prompt da imagem" })).toHaveLength(6);
+  expect(screen.getAllByRole("button", { name: "Copiar prompt da animação" })).toHaveLength(6);
   expect(calls.map((c) => c.stage)).toEqual(["scenes", "variations", "images", "videos"]);
   expect(calls[3].body.keyword).toBe("QUERO");
 

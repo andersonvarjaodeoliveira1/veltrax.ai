@@ -1143,6 +1143,29 @@ export function CloneWizard() {
               {copied === "flow-send" && <p className="text-xs text-[#5BD69A]">Copiado. Cole na ferramenta do Flow.</p>}
             </section>
 
+            <details className="rounded-[18px] border border-[#F5B454]/40 bg-[#F5B454]/10 p-5 text-sm" data-testid="guided-flow">
+              <summary className="cursor-pointer font-medium">Sem créditos no Flow? Gere de graça no Flow normal (Lower Priority)</summary>
+              <ol className="mt-3 list-decimal space-y-1 pl-5 text-muted-foreground">
+                <li>Abra o <a href="https://flow.google.com" target="_blank" rel="noopener noreferrer" className="text-[#A98BFF] underline">Flow</a> e, para cada cena, cole o <b>prompt da imagem</b> (Nano Banana, 9:16, x1).</li>
+                <li>Depois anime a imagem: modelo <b>Veo 3.1 - Lite [Lower Priority]</b>, 8s, x1, e cole o <b>prompt da animação</b>.</li>
+                <li>Baixe com o nome indicado (Video01_Cena01.mp4…) e envie todos aqui embaixo.</li>
+              </ol>
+              <div className="mt-4 space-y-3">
+                {p.variations.map((variation, vi) => (
+                  <div key={vi} className="space-y-2">
+                    <p className="font-medium">Vídeo {pad(vi + 1)} · {variation.title}</p>
+                    {Array.from({ length: p.sceneCount }, (_, si) => (
+                      <div key={si} className="flex flex-wrap items-center gap-2 rounded-[12px] border border-border bg-card px-3 py-2">
+                        <span className="min-w-28 text-xs tabular-nums text-muted-foreground">Cena {pad(si + 1)} · {fileName(vi, si, "x.mp4")}</span>
+                        {copyButton(`g-img-${vi}-${si}`, p.images[vi]?.prompts[si] ?? "", "Copiar prompt da imagem")}
+                        {copyButton(`g-vid-${vi}-${si}`, p.videos[vi]?.prompts[si] ?? "", "Copiar prompt da animação")}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </details>
+
             <section className="space-y-3 rounded-[18px] border border-border bg-card p-5">
               <p className="font-medium">Já gerou no Flow? Envie os vídeos aqui</p>
               <p className="text-xs text-muted-foreground">Escolha todos de uma vez. Os arquivos que o Flow baixa (Video01_Cena01.mp4…) já se encaixam sozinhos.</p>
