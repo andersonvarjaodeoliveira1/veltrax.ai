@@ -19,6 +19,9 @@ it("asks for the account password before showing the admin", async () => {
 
   expect(await screen.findByText("Admin protegido")).toBeInTheDocument();
   expect(screen.queryByText("Conteúdo do admin")).not.toBeInTheDocument();
+  const field = screen.getByLabelText("Senha da sua conta");
+  expect(field).toHaveAttribute("autocomplete", "new-password"); // o gerenciador de senhas não oferece nem salva
+  expect(field.closest("form")).toBeNull();
 
   await user.type(screen.getByLabelText("Senha da sua conta"), "errada");
   await user.click(screen.getByRole("button", { name: "Desbloquear o Admin" }));

@@ -32,8 +32,7 @@ export function AdminGate({ children }: { children: React.ReactNode }) {
     return () => { document.removeEventListener("visibilitychange", refresh); clearInterval(timer); };
   }, [check]);
 
-  async function unlock(event: React.FormEvent) {
-    event.preventDefault();
+  async function unlock() {
     if (!password || busy) return;
     setBusy(true);
     setError(null);
@@ -66,18 +65,19 @@ export function AdminGate({ children }: { children: React.ReactNode }) {
         <h1 className="text-lg font-semibold">Admin protegido</h1>
       </div>
       <p className="text-sm text-muted-foreground">Por segurança, confirme a senha da sua conta para abrir o Admin. O acesso fica liberado por 30 minutos.</p>
-      <form onSubmit={unlock} className="space-y-3">
+      {/* Sem <form> e com autocomplete novo: o navegador não oferece nem salva a senha aqui. */}
+      <div className="space-y-3">
         <label className="block space-y-1 text-sm">
           <span className="text-muted-foreground">Senha da sua conta</span>
-          <input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} maxLength={256}
+          <input type="password" name="admin-confirm" autoComplete="new-password" data-lpignore="true" data-1p-ignore="true" data-form-type="other" value={password} onChange={(event) => setPassword(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void unlock(); }} maxLength={256}
             className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
         </label>
         {error && <p role="alert" className="text-sm text-[#F0466B]">{error}</p>}
-        <Button type="submit" className="w-full" disabled={busy || !password}>
+        <Button type="button" className="w-full" onClick={() => void unlock()} disabled={busy || !password}>
           {busy ? <Loader2 className="size-4 animate-spin" /> : null}
           Desbloquear o Admin
         </Button>
-      </form>
+      </div>
     </div>
   );
 }
