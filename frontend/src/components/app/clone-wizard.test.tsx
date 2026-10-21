@@ -285,3 +285,17 @@ it("lets the member type any keyword in the automatic panel", async () => {
   expect(input).toHaveValue("LIMON");
   expect(screen.getByRole("button", { name: "Criar meus vídeos automaticamente" })).toBeEnabled();
 });
+
+it("counts the generated images and videos and lists each generation with its time", async () => {
+  mockAuto();
+  const user = userEvent.setup();
+  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ step: 1, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora.", count: 1 }));
+  render(<CloneWizard />);
+  await user.click(await screen.findByRole("button", { name: "Criar meus vídeos automaticamente" }));
+  await screen.findByRole("link", { name: /Baixar vídeo 01/ }, { timeout: 8000 });
+  const panel = screen.getByLabelText("Gerações");
+  expect(within(panel).getByText("Imagens").nextSibling).toHaveTextContent("3 de 3");
+  expect(within(panel).getByText("Vídeos").nextSibling).toHaveTextContent("3 de 3");
+  expect(within(panel).getAllByText(/pronta em/)).toHaveLength(6);
+  expect(within(panel).getByText(/cerca de 15 segundos/)).toBeInTheDocument();
+}, 15000);

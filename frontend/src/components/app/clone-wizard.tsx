@@ -274,6 +274,7 @@ export function CloneWizard() {
   const [auto, setAuto] = useState<{ label: string; done: number; total: number } | null>(null);
   const [genBusy, setGenBusy] = useState<Record<string, boolean>>({});
   const [canResume, setCanResume] = useState(false);
+  const [genLog, setGenLog] = useState<Record<string, { kind: "image" | "video"; label: string; state: "running" | "done" | "error"; start: number; ms?: number }>>({});
   const stopRef = useRef(false);
   const projRef = useRef<Project>(EMPTY);
   const [built, setBuilt] = useState<Record<number, Built>>({});
@@ -290,10 +291,10 @@ export function CloneWizard() {
     try { window.localStorage.setItem(KEY, JSON.stringify(p)); } catch { /* storage unavailable */ }
   }, [ready, p]);
   useEffect(() => {
-    if (!busy && !tasks.some((task) => task.state === "running")) return;
+    if (!busy && !tasks.some((task) => task.state === "running") && !Object.values(genLog).some((item) => item.state === "running")) return;
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
-  }, [busy, tasks]);
+  }, [busy, tasks, genLog]);
 
   useEffect(() => { projRef.current = p; }, [p]);
   useEffect(() => {
@@ -500,7 +501,15 @@ export function CloneWizard() {
     const key = `${vi}-${si}`;
     const prompt = proj.images[vi]?.prompts[si];
     if (!prompt) return;
-    const id = await renderImage(prompt);
+    const log = `i-${key}`;
+    const label = `Vídeo ${pad(vi + 1)} · cena ${si + 1}`;
+    setGenLog((cur) => ({ ...cur, [log]: { kind: "image", label, state: "running", start: Date.now() } }));
+    let id: string;
+    try { id = await renderImage(prompt); } catch (err) {
+      setGenLog((cur) => ({ ...cur, [log]: { ...cur[log], state: "error", ms: Date.now() - cur[log].start } }));
+      throw err;
+    }
+    setGenLog((cur) => ({ ...cur, [log]: { ...cur[log], state: "done", ms: Date.now() - cur[log].start } }));
     setImgs((current) => ({ ...current, [key]: `${RENDER}/${id}/file` }));
     setP((current) => ({ ...current, gen: { ...current.gen, [key]: { image: id } }, approved: { ...current.approved, [key]: true }, final: {} }));
   }, []);
@@ -510,7 +519,14 @@ export function CloneWizard() {
     const key = `${vi}-${si}`;
     const prompt = proj.videos[vi]?.prompts[si];
     if (!prompt) return null;
-    const id = await renderVideo(prompt, proj.gen[key]?.image, () => stopRef.current);
+    const log = `v-${key}`;
+    setGenLog((cur) => ({ ...cur, [log]: { kind: "video", label: `Vídeo ${pad(vi + 1)} · cena ${si + 1}`, state: "running", start: Date.now() } }));
+    let id: string;
+    try { id = await renderVideo(prompt, proj.gen[key]?.image, () => stopRef.current); } catch (err) {
+      setGenLog((cur) => ({ ...cur, [log]: { ...cur[log], state: "error", ms: Date.now() - cur[log].start } }));
+      throw err;
+    }
+    setGenLog((cur) => ({ ...cur, [log]: { ...cur[log], state: "done", ms: Date.now() - cur[log].start } }));
     const { blob, file } = await fileOf(id, fileName(vi, si, "x.mp4"), "video/mp4");
     setClips((current) => { if (current[key]) URL.revokeObjectURL(current[key].url); return { ...current, [key]: { url: URL.createObjectURL(blob), name: file.name, file } }; });
     setP((current) => ({ ...current, gen: { ...current.gen, [key]: { ...current.gen[key], video: id } }, final: {} }));
@@ -638,6 +654,7 @@ export function CloneWizard() {
     Object.values(clips).forEach((clip) => URL.revokeObjectURL(clip.url));
     Object.values(imgs).forEach((url) => URL.revokeObjectURL(url));
     setClips({});
+    setGenLog({});
     setGenBusy({});
     setBuilt({});
     setImgs({});
@@ -659,6 +676,9 @@ export function CloneWizard() {
   const secs = runningTask ? Math.max(0, (now - runningTask.start) / 1000) : 0;
   // Uma só barra: sobe rápido no começo e desacelera, nunca chega a 100% antes de terminar.
   const eased = 95 * (1 - Math.exp(-secs / (assembling ? 60 : 18)));
+  const remainingImages = Math.max(0, total - Object.keys(imgs).length);
+  const remainingVideos = Math.max(0, total - Object.keys(clips).length);
+  const etaMin = Math.max(1, Math.ceil((remainingImages * 15 + remainingVideos * 180) / 3 / 60 + (p.variations.length - Object.keys(p.final).length) * 1.5));
   const autoPct = auto ? Math.min(99, (auto.done / Math.max(1, auto.total)) * 100) : 0;
   const pct = auto ? autoPct : batch ? Math.min(98, ((batch.done + eased / 100) / batch.total) * 100) : eased;
 
@@ -740,7 +760,7 @@ export function CloneWizard() {
               </div>
               <div className="flex items-center justify-between gap-2">
                 <p className="text-xs text-muted-foreground">
-                  {auto ? "Estamos fazendo tudo por você. Pode esperar aqui, não precisa fazer nada." : `${steps[Math.min(steps.length - 1, Math.floor(secs / 12))]} Pode esperar aqui, não precisa fazer nada.`}
+                  {auto ? `Estamos fazendo tudo por você. Tempo estimado: cerca de ${etaMin} min. Pode esperar aqui, não precisa fazer nada.` : `${steps[Math.min(steps.length - 1, Math.floor(secs / 12))]} Pode esperar aqui, não precisa fazer nada.`}
                   {assembling ? " Montar o vídeo leva de 1 a 3 minutos." : ""}
                 </p>
                 {auto && <button type="button" onClick={() => { stopRef.current = true; }} className="shrink-0 text-xs underline text-muted-foreground">Parar</button>}
@@ -897,7 +917,7 @@ export function CloneWizard() {
                 <div className="mt-3">
               <div className="space-y-2 rounded-[14px] border border-[#5BD69A]/40 bg-[#5BD69A]/10 p-3 text-sm">
                 <p className="font-medium">Sem gastar créditos: use o modo de baixa prioridade do Flow</p>
-                <p className="text-xs text-muted-foreground">Entre no Flow com a sua conta, escolha a opção de baixa prioridade (lower priority) do modelo, cole o prompt e gere. Demora um pouco mais, mas não usa créditos.</p>
+                <p className="text-xs text-muted-foreground">No Flow, escolha a imagem (Nano Banana, x1), cole o prompt e gere. Se aparecer a opção [Lower Priority], escolha ela.</p>
                 <a href="https://labs.google/fx/tools/flow" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-1.5 text-sm hover:text-foreground">
                   Abrir o Flow <ExternalLink className="size-3.5" />
                 </a>
@@ -1003,7 +1023,7 @@ export function CloneWizard() {
                 <div className="mt-3">
               <div className="space-y-2 rounded-[14px] border border-[#5BD69A]/40 bg-[#5BD69A]/10 p-3 text-sm">
                 <p className="font-medium">Sem gastar créditos: use o modo de baixa prioridade do Flow</p>
-                <p className="text-xs text-muted-foreground">No Flow, escolha a opção de baixa prioridade (lower priority) do modelo, use a imagem aprovada como primeiro quadro e cole o prompt. Demora um pouco mais, mas não usa créditos. Depois envie o vídeo aqui.</p>
+                <p className="text-xs text-muted-foreground">No Flow, escolha o modelo “Veo 3.1 - Lite [Lower Priority]”, 8s e x1. O Flow mostra “A geração vai usar 0 créditos”. Use a imagem aprovada como primeiro quadro, cole o prompt, gere e depois envie o vídeo aqui.</p>
                 <a href="https://labs.google/fx/tools/flow" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-1.5 text-sm hover:text-foreground">
                   Abrir o Flow <ExternalLink className="size-3.5" />
                 </a>
@@ -1185,6 +1205,31 @@ export function CloneWizard() {
                 </li>
               ))}
             </ul>
+          )}
+          {total > 0 && (
+            <div className="space-y-2 border-t border-border pt-3 text-xs" aria-label="Gerações">
+              <h3 className="font-semibold tracking-wide text-muted-foreground">GERAÇÕES</h3>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-lg border border-border p-2"><p className="text-muted-foreground">Imagens</p><p className="text-base font-semibold tabular-nums">{Object.keys(imgs).length} de {total}</p></div>
+                <div className="rounded-lg border border-border p-2"><p className="text-muted-foreground">Vídeos</p><p className="text-base font-semibold tabular-nums">{Object.keys(clips).length} de {total}</p></div>
+              </div>
+              <p className="text-muted-foreground">Tempo de cada uma: imagem cerca de 15 segundos; cena animada de 1 a 6 minutos.</p>
+              <ul className="space-y-1">
+                {Object.entries(genLog).sort((x, y) => y[1].start - x[1].start).slice(0, 8).map(([id, item]) => {
+                  const secs = Math.max(0, Math.round((item.ms ?? now - item.start) / 1000));
+                  const time = secs >= 60 ? `${Math.floor(secs / 60)} min ${secs % 60}s` : `${secs}s`;
+                  return (
+                    <li key={id} className="flex items-center gap-2">
+                      {item.state === "running" && <Loader2 className="size-3.5 animate-spin text-primary" />}
+                      {item.state === "done" && <Check className="size-3.5 text-[#5BD69A]" />}
+                      {item.state === "error" && <X className="size-3.5 text-[#F0466B]" />}
+                      <span className="flex-1">{item.kind === "image" ? "Imagem" : "Cena animada"} · {item.label}</span>
+                      <span className="tabular-nums text-muted-foreground">{item.state === "running" ? `gerando ${time}` : item.state === "error" ? "falhou" : `pronta em ${time}`}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
           )}
           <p className="border-t border-border pt-3 text-[11px] text-muted-foreground">Seu projeto é salvo neste navegador. Imagens e vídeos enviados não ficam salvos se você atualizar a página.</p>
         </aside>
