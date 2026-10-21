@@ -46,6 +46,7 @@ type Task = { id: string; label: string; state: "running" | "done" | "error"; st
 
 const KEY = "gv-clonagem-v2";
 const MODE_KEY = "gv-clonagem-mode";
+const COUNT_OPTIONS = [1, 2, 3, 4, 5, 7, 10];
 const STEPS = ["Referência", "Avatares", "Imagens", "CTA", "Animações", "Download", "Montagem"];
 const NO_MIX: Mix = { hooks: [], bodies: [], ctas: [] };
 const EMPTY: Project = {
@@ -241,7 +242,8 @@ function Chips<T extends string | number>({ label, options, value, onPick, disab
     <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-2">
       {options.map((option) => (
         <button key={String(option.value)} type="button" role="radio" aria-checked={value === option.value} disabled={disabled} onClick={() => onPick(option.value)}
-          className={cn("rounded-full border px-3.5 py-1.5 text-sm disabled:opacity-50", value === option.value ? "border-transparent bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:text-foreground")}>
+          className={cn("min-h-10 rounded-full border px-4 py-2 text-sm font-medium transition-all duration-150 hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#A98BFF] disabled:opacity-50 disabled:hover:translate-y-0",
+            value === option.value ? "border-transparent bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white shadow-[0_6px_18px_-8px_#7B3FE4]" : "border-border bg-card/60 text-muted-foreground hover:border-[#A98BFF]/60 hover:text-foreground")}>
           {option.text}
         </button>
       ))}
@@ -276,8 +278,8 @@ function Field({ label, children, hint }: { label: string; children: React.React
 
 function Group({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
   return (
-    <div className="space-y-1 text-sm">
-      <span className="block text-muted-foreground">{label}</span>
+    <div className="space-y-2 text-sm">
+      <span className="block font-medium text-foreground">{label}</span>
       {children}
       {hint && <span className="block text-xs text-muted-foreground">{hint}</span>}
     </div>
@@ -748,6 +750,7 @@ export function CloneWizard() {
   const remainingImages = Math.max(0, total - Object.keys(imgs).length);
   const remainingVideos = Math.max(0, total - Object.keys(clips).length);
   const etaMin = Math.max(1, Math.ceil((remainingImages * 15 + remainingVideos * 180) / 3 / 60 + (p.variations.length - Object.keys(p.final).length) * 1.5));
+  const nowItems = Object.values(genLog).filter((item) => item.state === "running").map((item) => `${item.kind === "image" ? "imagem" : "animação"} · ${item.label}`).slice(0, 3);
   const autoPct = auto ? Math.min(99, (auto.done / Math.max(1, auto.total)) * 100) : 0;
   const pct = auto ? autoPct : batch ? Math.min(98, ((batch.done + eased / 100) / batch.total) * 100) : eased;
 
@@ -798,6 +801,9 @@ export function CloneWizard() {
 
   return (
     <div className="space-y-5">
+      <div aria-hidden className="h-1.5 overflow-hidden rounded-full bg-border">
+        <div className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#7B3FE4] transition-[width] duration-500" style={{ width: `${(p.step / STEPS.length) * 100}%` }} />
+      </div>
       <ol aria-label="Etapas da clonagem" className="flex flex-wrap items-center gap-2 text-xs">
         {STEPS.map((name, index) => {
           const number = index + 1;
@@ -837,7 +843,7 @@ export function CloneWizard() {
         <section className="space-y-4 rounded-[18px] border border-border bg-card p-5">
           <p className="text-sm font-medium text-primary">Passo {p.step} de {STEPS.length}: <span className="font-normal text-foreground">{HINTS[p.step - 1]}</span></p>
           {(auto || runningTask) && (
-            <div role="status" aria-live="polite" className="space-y-1.5 rounded-[14px] border border-primary/40 bg-primary/10 p-3">
+            <div role="status" aria-live="polite" className="sticky top-2 z-10 space-y-2 rounded-[18px] border border-[#A98BFF]/40 bg-[#141316]/95 p-4 shadow-[0_12px_32px_-18px_#7B3FE4] backdrop-blur">
               <div className="flex items-center justify-between gap-2 text-sm">
                 <span className="font-medium">{auto ? auto.label : runningTask?.label}{!auto && batch ? ` (${Math.min(batch.done + 1, batch.total)} de ${batch.total})` : ""}</span>
                 <span className="tabular-nums text-xs text-muted-foreground">{Math.round(pct)}%</span>
@@ -845,6 +851,12 @@ export function CloneWizard() {
               <div role="progressbar" aria-label="Progresso" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)} className="h-2 overflow-hidden rounded-full bg-border">
                 <div className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#7B3FE4] transition-[width] duration-700" style={{ width: `${pct}%` }} />
               </div>
+              {nowItems.length > 0 && (
+                <p className="text-xs">
+                  <span className="text-muted-foreground">Agora: </span>
+                  {nowItems.join(" · ")}
+                </p>
+              )}
               <div className="flex items-center justify-between gap-2">
                 <p className="text-xs text-muted-foreground">
                   {auto ? `Estamos fazendo tudo por você. Tempo estimado: cerca de ${etaMin} min. Pode esperar aqui, não precisa fazer nada.` : `${steps[Math.min(steps.length - 1, Math.floor(secs / 12))]} Pode esperar aqui, não precisa fazer nada.`}
@@ -881,16 +893,17 @@ export function CloneWizard() {
                 <Chips label="Quantas cenas" value={p.sceneCount} onPick={chooseScenes} disabled={working} options={[1, 2, 3].map((n) => ({ value: n, text: n === 1 ? "1 cena" : `${n} cenas` }))} />
               </Group>
               {paid && (
-                <div className="space-y-3 rounded-[14px] border border-primary/40 bg-primary/10 p-4">
-                  <p className="font-medium">Criar tudo automaticamente</p>
+                <div className="space-y-4 rounded-[18px] border border-[#A98BFF]/40 bg-gradient-to-br from-[#7B3FE4]/25 via-[#7B3FE4]/10 to-transparent p-5 shadow-[0_18px_40px_-24px_#7B3FE4]">
+                  <p className="text-lg font-semibold">Criar tudo automaticamente</p>
                   <p className="text-xs text-muted-foreground">Escolha as opções e clique. A ferramenta escreve, gera as imagens, anima as cenas e monta os vídeos prontos.</p>
                   <Group label="Quantos vídeos">
-                    <Chips label="Quantos vídeos" value={p.count} onPick={(count) => patch({ count })} options={[1, 2, 3].map((n) => ({ value: n, text: String(n) }))} />
+                    <Chips label="Quantos vídeos" value={p.count} onPick={(count) => patch({ count })} options={COUNT_OPTIONS.map((n) => ({ value: n, text: String(n) }))} />
+                    <p className="text-xs text-muted-foreground">{p.count} {p.count === 1 ? "vídeo" : "vídeos"} × {p.sceneCount} {p.sceneCount === 1 ? "cena" : "cenas"} = {p.count * p.sceneCount} cenas para animar. Tempo estimado: cerca de {Math.max(2, Math.ceil((p.count * p.sceneCount * (15 + 180)) / 3 / 60))} min, e o app avisa cada etapa.</p>
                   </Group>
                   <Group label="Palavra-chave da CTA">
                     <KeywordPicker keyword={p.keyword} keepCase={p.keepCase} placeholder="Ou escreva outra palavra" onChange={(keyword) => patch({ keyword })} onKeepCase={(keepCase) => patch({ keepCase, keyword: keepCase ? p.keyword : p.keyword.toUpperCase() })} />
                   </Group>
-                  <Button type="button" onClick={() => void runAll()} disabled={working || (p.reference.trim().length < 20 && p.notes.trim().length < 20) || !p.keyword.trim()}>
+                  <Button type="button" size="lg" className="w-full rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white sm:w-auto" onClick={() => void runAll()} disabled={working || (p.reference.trim().length < 20 && p.notes.trim().length < 20) || !p.keyword.trim()}>
                     {Object.keys(p.gen).length > 0 || p.scenes.length > 0 ? "Continuar de onde parou" : "Criar meus vídeos automaticamente"}
                   </Button>
                 </div>
@@ -976,7 +989,7 @@ export function CloneWizard() {
               )}
               <div className="flex flex-wrap items-end gap-3">
                 <Group label="Quantos vídeos">
-                  <Chips label="Quantos vídeos" value={p.count} onPick={(count) => patch({ count })} options={[1, 2, 3, 4, 5].map((n) => ({ value: n, text: String(n) }))} />
+                  <Chips label="Quantos vídeos" value={p.count} onPick={(count) => patch({ count })} options={COUNT_OPTIONS.map((n) => ({ value: n, text: String(n) }))} />
                 </Group>
                 {generateButton("variations", "Gerar variações", p.variations.length > 0, "Planejando as variações", p.avatarMode === "own" && !p.avatars.some((a) => a.name.trim()))}
               </div>

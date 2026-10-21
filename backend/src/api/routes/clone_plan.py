@@ -29,7 +29,7 @@ router = APIRouter(prefix="/multiplier/clone", tags=["multiplier-clone"])
 
 MAX_SCENES = 3  # ~8 seconds each (one Veo clip); the member picks 1 to 3
 SCENES = MAX_SCENES
-MAX_VARIATIONS = 5
+MAX_VARIATIONS = 10
 MAX_AVATARS = 4
 MIX_OPTIONS = 3
 STAGES = ("scenes", "mix", "variations", "images", "videos")
