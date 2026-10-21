@@ -426,3 +426,35 @@ it("simple mode: product name, one sentence and photos reach the prompts", async
   const pack = JSON.parse(await navigator.clipboard.readText());
   expect(pack.product).toEqual({ name: "Creme Sol", info: "hidrata a pele", look: "white round jar with a green lid" });
 });
+
+describe("idle project", () => {
+  const stored = { step: 1, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora.", scenes };
+  const open = (minutesAgo: number, sent = false) => {
+    window.localStorage.removeItem("gv-clonagem-view");
+    window.localStorage.setItem("gv-clonagem-v2", JSON.stringify(stored));
+    window.localStorage.setItem("gv-clonagem-touch", String(Date.now() - minutesAgo * 60_000));
+    if (sent) window.localStorage.setItem("gv-clonagem-sent", "1");
+  };
+
+  it("deletes a project left idle for more than 10 minutes and starts a new one", async () => {
+    open(11);
+    render(<CloneWizard />);
+    expect(await screen.findByText(/foi apagado\. Este é um projeto novo/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Escolher o vídeo que quero clonar/ })).toBeInTheDocument();
+    expect(JSON.parse(window.localStorage.getItem("gv-clonagem-v2") ?? "{}").reference).toBe("");
+  });
+
+  it("keeps a recent project", async () => {
+    open(5);
+    render(<CloneWizard />);
+    expect(await screen.findByRole("button", { name: /Preparar meus vídeos|Continuar de onde parou/ })).toBeInTheDocument();
+    expect(screen.queryByText(/foi apagado/)).not.toBeInTheDocument();
+  });
+
+  it("gives more time after the project was sent to the Flow", async () => {
+    open(30, true);
+    render(<CloneWizard />);
+    expect(await screen.findByRole("button", { name: /Preparar meus vídeos|Continuar de onde parou/ })).toBeInTheDocument();
+    expect(screen.queryByText(/foi apagado/)).not.toBeInTheDocument();
+  });
+});

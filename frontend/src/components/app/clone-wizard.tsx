@@ -49,6 +49,10 @@ type Task = { id: string; label: string; state: "running" | "done" | "error"; st
 const KEY = "gv-clonagem-v2";
 const MODE_KEY = "gv-clonagem-mode";
 const VIEW_KEY = "gv-clonagem-view";
+const TOUCH_KEY = "gv-clonagem-touch";
+const SENT_KEY = "gv-clonagem-sent";
+const IDLE_MS = 10 * 60 * 1000; // projeto parado: some e começa um novo
+const WAIT_FLOW_MS = 2 * 60 * 60 * 1000; // depois de enviar ao Flow a pessoa precisa de tempo para gerar e voltar
 // Ferramenta "ClipGringa — Gerar Vídeos" no Flow (BETA). Trocar pelo link compartilhado quando for liberada aos membros.
 const FLOW_TOOL_URL = "https://flow.google.com/project/50e752e7-9a93-4477-8e3a-9bd266ec636b/tool/fccd23dc-ee0d-437a-9f45-a5ad87ccefce";
 const NEXT_HINTS = [
@@ -339,14 +343,41 @@ export function CloneWizard() {
   const [now, setNow] = useState(() => Date.now());
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const savedRef = useRef<string | null>(null);
   useEffect(() => {
-    setP(load());
+    const loaded = load();
+    savedRef.current = JSON.stringify(loaded);
+    setP(loaded);
     setReady(true);
   }, []);
   useEffect(() => {
     if (!ready) return;
-    try { window.localStorage.setItem(KEY, JSON.stringify(p)); } catch { /* storage unavailable */ }
+    try {
+      const json = JSON.stringify(p);
+      if (savedRef.current !== json) {
+        savedRef.current = json;
+        window.localStorage.setItem(KEY, json);
+        window.localStorage.setItem(TOUCH_KEY, String(Date.now()));
+      }
+    } catch { /* storage unavailable */ }
   }, [ready, p]);
+  // Projeto parado por mais de 10 minutos (ou 2 horas, se já foi enviado ao Flow) é apagado e vira um projeto novo.
+  const [expiredNote, setExpiredNote] = useState(false);
+  const hasContent = p.reference.trim().length > 0 || p.scenes.length > 0 || p.variations.length > 0;
+  useEffect(() => {
+    if (!ready || !hasContent || busy !== null || auto !== null) return;
+    const check = () => {
+      try {
+        const touched = Number(window.localStorage.getItem(TOUCH_KEY) || 0);
+        const limit = window.localStorage.getItem(SENT_KEY) === "1" ? WAIT_FLOW_MS : IDLE_MS;
+        if (touched && Date.now() - touched > limit) { resetRef.current(); setExpiredNote(true); }
+      } catch { /* storage unavailable */ }
+    };
+    check();
+    const id = setInterval(check, 30_000);
+    document.addEventListener("visibilitychange", check);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", check); };
+  }, [ready, hasContent, busy, auto]);
   useEffect(() => {
     if (!busy && !tasks.some((task) => task.state === "running") && !Object.values(genLog).some((item) => item.state === "running")) return;
     const id = setInterval(() => setNow(Date.now()), 1000);
@@ -798,7 +829,10 @@ export function CloneWizard() {
     }
   }
 
+  const resetRef = useRef<() => void>(() => undefined);
+  const markSent = () => { try { window.localStorage.setItem(SENT_KEY, "1"); } catch { /* storage unavailable */ } };
   function reset() {
+    try { window.localStorage.removeItem(SENT_KEY); window.localStorage.removeItem(TOUCH_KEY); } catch { /* storage unavailable */ }
     productPhotos.forEach((photo) => URL.revokeObjectURL(photo.url));
     setProductPhotos([]);
     setLookState("idle");
@@ -813,6 +847,7 @@ export function CloneWizard() {
     setError(null);
     setP(EMPTY);
   }
+  resetRef.current = reset;
 
   const total = p.variations.length * p.sceneCount;
   const approvedCount = Object.entries(p.approved).filter(([key, value]) => value && p.images[Number(key.split("-")[0])]).length;
@@ -891,6 +926,7 @@ export function CloneWizard() {
       if (projRef.current.reference.trim().length >= 20) await runAll(true);
     };
     const sendToFlow = () => {
+      markSent();
       void copy("flow-send", flowPackage());
       window.open(FLOW_TOOL_URL, "_blank", "noopener");
     };
@@ -908,6 +944,11 @@ export function CloneWizard() {
           </div>
         </div>
 
+        {expiredNote && !hasContent && (
+          <p role="note" className="rounded-[14px] border border-border bg-card p-3 text-sm text-muted-foreground">
+            O projeto anterior ficou parado por mais de 10 minutos e foi apagado. Este é um projeto novo.
+          </p>
+        )}
         {error && (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
@@ -1430,7 +1471,7 @@ export function CloneWizard() {
                   <p className="font-medium">Ferramenta ClipGringa no Flow <span className="ml-1 rounded-full bg-[#7B3FE4]/20 px-2 py-0.5 text-[10px] font-semibold text-[#A98BFF]">BETA</span></p>
                   <p className="text-xs text-muted-foreground">Um clique copia tudo (prompts de imagem e de animação de todos os vídeos) e abre a ferramenta ClipGringa no Flow. Lá, clique em “Colar pacote” e depois em “Gerar tudo”.</p>
                   <div className="flex flex-wrap gap-2">
-                    <Button type="button" size="sm" className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white" onClick={() => { void copy("flow-send", flowPackage()); window.open(FLOW_TOOL_URL, "_blank", "noopener"); }}>
+                    <Button type="button" size="sm" className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white" onClick={() => { markSent(); void copy("flow-send", flowPackage()); window.open(FLOW_TOOL_URL, "_blank", "noopener"); }}>
                       <ExternalLink className="size-3.5" /> Enviar para o Flow
                     </Button>
                     {copyButton("flow-pack", flowPackage(), "Copiar pacote para o Flow")}
