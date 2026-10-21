@@ -119,6 +119,15 @@ const CTA_PRESETS = [
   "Escreva {KEYWORD} nos comentários e receba o passo a passo",
   "Comente {KEYWORD} agora e veja como funciona",
 ];
+const CTA_BY_LANG: Record<string, string[]> = {
+  "pt-BR": CTA_PRESETS,
+  en: ["Comment {KEYWORD} to watch the full video", "Comment {KEYWORD} and I'll send you the link", "Type {KEYWORD} below and get the step by step", "Comment {KEYWORD} now and see how it works"],
+  es: ["Comenta {KEYWORD} para ver el video completo", "Comenta {KEYWORD} y te mando el enlace", "Escribe {KEYWORD} en los comentarios y recibe el paso a paso", "Comenta {KEYWORD} ahora y mira cómo funciona"],
+  fr: ["Commente {KEYWORD} pour voir la vidéo complète", "Commente {KEYWORD} et je t'envoie le lien"],
+  de: ["Kommentiere {KEYWORD}, um das ganze Video zu sehen", "Schreib {KEYWORD} in die Kommentare und ich schicke dir den Link"],
+  it: ["Scrivi {KEYWORD} nei commenti per vedere il video completo", "Scrivi {KEYWORD} e ti mando il link"],
+};
+const ALL_CTAS = Object.values(CTA_BY_LANG).flat();
 const LOOK_PRESETS: [string, string][] = [
   ["Mulher jovem", "Mulher de 25 anos, cabelo castanho solto, camiseta branca"],
   ["Homem jovem", "Homem de 28 anos, cabelo curto, camiseta escura"],
@@ -414,7 +423,7 @@ export function CloneWizard() {
     setClips((current) => { Object.values(current).forEach((clip) => URL.revokeObjectURL(clip.url)); return {}; });
     setImgs({});
     setBuilt({});
-    const isDefault = (text: string) => LANGUAGES.some((item) => item.cta === text) || !text.trim();
+    const isDefault = (text: string) => ALL_CTAS.includes(text) || !text.trim();
     setP((cur) => ({ ...cur, language, cta: isDefault(cur.cta) ? LANGUAGES.find((item) => item.value === language)?.cta ?? cur.cta : cur.cta, scenes: [], mix: NO_MIX, variations: [], images: [], videos: [], approved: {}, checks: {}, gen: {}, final: {} }));
   };
   const chooseMode = (next: "free" | "auto") => {
@@ -1091,6 +1100,10 @@ export function CloneWizard() {
               </Group>
               <Group label="Palavra-chave da CTA (o que a pessoa comenta)">
                 <KeywordPicker keyword={p.keyword} keepCase={p.keepCase} placeholder="Ou escreva outra palavra" onChange={(keyword) => patch({ keyword })} onKeepCase={(keepCase) => patch({ keepCase, keyword: keepCase ? p.keyword : p.keyword.toUpperCase() })} />
+              </Group>
+              <Group label="Frase final (o que a pessoa ouve no fim)" hint="Escolha uma pronta ou escreva a sua. Use {KEYWORD} onde vai a palavra-chave.">
+                <Chips label="Frases prontas" value={p.cta} onPick={(cta) => patch({ cta })} options={(CTA_BY_LANG[p.language] ?? CTA_PRESETS).map((c) => ({ value: c, text: c.replace("{KEYWORD}", "…") }))} />
+                <input value={p.cta} onChange={(event) => patch({ cta: event.target.value })} maxLength={200} aria-label="Escreva a sua frase final" placeholder="Ou escreva a sua frase, ex.: Comente {KEYWORD} e receba o guia" className={inputClass} />
               </Group>
               <p className="rounded-[12px] bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
                 No final o vídeo diz: <span className="text-foreground">“{p.cta.replace("{KEYWORD}", p.keyword.trim() || "PALAVRA")}”</span>
