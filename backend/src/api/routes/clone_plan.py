@@ -68,18 +68,25 @@ Return exactly N variations. Each has:
 Avatar mode "own": use the given avatars in rotation and copy their look word for word (translate to English if needed). Avatar mode "random": invent N different everyday adult avatars.
 {SAFETY}"""
 
-def images_system(n: int) -> str:
+PRODUCT_IMAGES = """
+A product is given. Show it naturally in the scenes where it fits (held in hand, on the table, being used), not necessarily in all of them. When it appears, describe it with the exact words of the product look so it is the same object every time. Never write a brand name, logo or readable label text."""
+
+PRODUCT_VIDEOS = """
+A product is given. In scenes where the first frame shows it, describe how the person handles it (shows it to the camera, holds it up, points at it). Never write a brand name, logo or readable label text."""
+
+
+def images_system(n: int, product: bool = False) -> str:
     return f"""You write first-frame image prompts for an image model (Nano Banana), 9:16 vertical, one set per variation in the same order.
 Each set has exactly {n} prompt{"s" if n != 1 else ""} in English, one per scene, 250-450 characters each: UGC style, phone camera, natural light.
 Every prompt must restate the variation's look in the same words, so the same person appears in all scenes, then use the variation's setting and show what happens in that scene.
-No text on screen.
+No text on screen.{PRODUCT_IMAGES if product else ""}
 {SAFETY}"""
 
-def videos_system(n: int) -> str:
+def videos_system(n: int, product: bool = False) -> str:
     return f"""You write image-to-video prompts for Google Flow / Veo, 9:16 vertical, 8 seconds each, one set per variation in the same order.
 The approved image of the scene is used as the first frame, so do not redescribe the person's appearance: describe the movement, the camera and the mood, and keep the same person and setting.
 Each set has exactly {n} prompt{"s" if n != 1 else ""} in English, one per scene, 250-500 characters each.
-Put the scene's spoken line in double quotes, in Brazilian Portuguese, word for word as given, said to camera. Never change, shorten or translate it.
+Put the scene's spoken line in double quotes, in Brazilian Portuguese, word for word as given, said to camera. Never change, shorten or translate it.{PRODUCT_VIDEOS if product else ""}
 {SAFETY}"""
 
 
@@ -153,6 +160,9 @@ def _context(data: dict[str, Any], need_cta: bool = False) -> dict[str, Any]:
         "reference": reference,
         "notes": notes,
         "product": _text(data.get("product"), 120),
+        "product_info": _text(data.get("product_info"), 400),
+        "product_look": _text(data.get("product_look"), 500),
+        "show_product": data.get("show_product") is not False,
         "keyword": keyword,
         "cta": cta,
         "avatars": avatars,
@@ -248,8 +258,17 @@ async def stage_scenes(ctx: dict[str, Any], model: Any = None) -> list[dict[str,
     return scenes[:n]
 
 
+def _product_block(ctx: dict[str, Any]) -> str:
+    """Optional product facts for the prompts. Empty when the member gave none (or turned it off)."""
+    if not ctx.get("show_product") or not (ctx.get("product") or ctx.get("product_info") or ctx.get("product_look")):
+        return ""
+    parts = [f"Product name: {ctx['product']}" if ctx.get("product") else "", f"What it is / what it does: {ctx['product_info']}" if ctx.get("product_info") else "",
+             f"Product look (use these exact words when it appears): {ctx['product_look']}" if ctx.get("product_look") else ""]
+    return "\n".join(part for part in parts if part)
+
+
 async def stage_mix(ctx: dict[str, Any], scenes: list[dict[str, str]], model: Any = None) -> dict[str, list[str]]:
-    prompt = f"N = {MIX_OPTIONS}\nProduct: {ctx['product'] or '(not given)'}\n\nScenes:\n{_scene_block(scenes, [scene['line'] for scene in scenes])}"
+    prompt = f"N = {MIX_OPTIONS}\nProduct: {_product_block(ctx) or ctx['product'] or '(not given)'}\n\nScenes:\n{_scene_block(scenes, [scene['line'] for scene in scenes])}"
     out = await _run(MIX_SYSTEM, _Mix, prompt, model)
     hooks = [_text(v, 160) for v in out.hooks if v.strip()][:MIX_OPTIONS]
     bodies = [_text(v, 220) for v in out.bodies if v.strip()][:MIX_OPTIONS]
@@ -300,13 +319,14 @@ def _lines_in(data: dict[str, Any], scenes: list[dict[str, str]], cta: str, tota
     return [_spoken(scenes, cta) for _ in range(total)]
 
 
-async def _scene_prompts(system: str, scenes: list[dict[str, str]], variations: list[dict[str, str]], lines: list[list[str]] | None, model: Any):
+async def _scene_prompts(system: str, scenes: list[dict[str, str]], variations: list[dict[str, str]], lines: list[list[str]] | None, model: Any, product: str = ""):
     blocks = [
         f"{number}. {v['title']}\n   Look: {v['look']}\n   Setting: {v['setting'] or 'free'}\n   Scenes:\n"
         + "\n".join(f"   {line}" for line in _scene_block(scenes, lines[number - 1] if lines else None).splitlines())
         for number, v in enumerate(variations, 1)
     ]
-    out = await _run(system, _PromptSets, "\n\n".join(blocks), model)
+    head = f"Product:\n{product}\n\n" if product else ""
+    out = await _run(system, _PromptSets, head + "\n\n".join(blocks), model)
     if len(out.items) < len(variations):
         raise _fail()
     sets: list[dict[str, list[str]]] = []
@@ -319,11 +339,13 @@ async def _scene_prompts(system: str, scenes: list[dict[str, str]], variations: 
 
 
 async def stage_images(ctx: dict[str, Any], scenes: list[dict[str, str]], variations: list[dict[str, str]], model: Any = None):
-    return await _scene_prompts(images_system(len(scenes)), scenes, variations, None, model)
+    product = _product_block(ctx)
+    return await _scene_prompts(images_system(len(scenes), bool(product)), scenes, variations, None, model, product)
 
 
 async def stage_videos(ctx: dict[str, Any], scenes: list[dict[str, str]], variations: list[dict[str, str]], lines: list[list[str]], model: Any = None):
-    return await _scene_prompts(videos_system(len(scenes)), scenes, variations, lines, model)
+    product = _product_block(ctx)
+    return await _scene_prompts(videos_system(len(scenes), bool(product)), scenes, variations, lines, model, product)
 
 
 @router.post("/generate")
@@ -352,3 +374,58 @@ async def generate(request: Request, db: AsyncSession = Depends(get_db)):
         return {"stage": stage, "items": await stage_images(ctx, scenes, variations)}
     lines = _lines_in(data, scenes, ctx["cta"], len(variations))
     return {"stage": stage, "items": await stage_videos(ctx, scenes, variations, lines)}
+
+
+class _Look(BaseModel):
+    description: str = Field(description="Short English description of the product's appearance, empty if no product is visible")
+
+
+PRODUCT_LOOK_SYSTEM = f"""You look at photos of ONE product and describe how it looks so an image model can draw the same object again.
+Write 20-50 words in English: shape, size, colors, material, packaging, lid or cap. Do NOT write brand names, logos or any readable text on it.
+If the photos do not show a product, return an empty description.
+{SAFETY}"""
+
+PHOTO_TYPES = {"image/png", "image/jpeg", "image/webp"}
+MAX_PHOTO_BYTES = 5 * 1024 * 1024
+
+
+@router.post("/product-look")
+async def product_look(request: Request, db: AsyncSession = Depends(get_db)):
+    """Reads up to 3 product photos and returns a short description of the product's look. Photos are not stored."""
+    user_id = await _user_id(request, db)
+    form = await request.form()
+    photos = [item for item in form.getlist("images") if hasattr(item, "read")][:3]
+    if not photos:
+        raise HTTPException(status_code=400, detail="Send at least one product photo")
+    from pydantic_ai import BinaryContent
+
+    parts: list[Any] = ["Describe the product shown in these photos."]
+    for photo in photos:
+        kind = (getattr(photo, "content_type", "") or "").lower()
+        data = await photo.read()
+        if kind not in PHOTO_TYPES:
+            raise HTTPException(status_code=400, detail="Send PNG, JPG or WebP photos")
+        if len(data) > MAX_PHOTO_BYTES:
+            raise HTTPException(status_code=413, detail="Each photo can have up to 5 MB")
+        parts.append(BinaryContent(data=data, media_type=kind))
+    _check_script_rate(user_id)
+    out = await _run_parts(PRODUCT_LOOK_SYSTEM, _Look, parts)
+    return {"look": _text(out.description, 500)}
+
+
+async def _run_parts(system: str, output_type: type[BaseModel], parts: list[Any], model: Any = None) -> Any:
+    from pydantic_ai import Agent
+
+    if model is None:
+        model = await _build_model()
+    agent = Agent(model, output_type=output_type, system_prompt=system, output_retries=2)
+    try:
+        result = await asyncio.wait_for(agent.run(parts), timeout=120)
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="AI took too long. Try again.")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("clone product look failed")
+        raise HTTPException(status_code=502, detail="Could not read the photos. Try again.")
+    return result.output

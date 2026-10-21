@@ -22,6 +22,8 @@ type Project = {
   reference: string;
   notes: string;
   product: string;
+  productInfo: string;
+  productLook: string;
   keyword: string;
   keepCase: boolean;
   sceneCount: number;
@@ -66,6 +68,8 @@ const EMPTY: Project = {
   reference: "",
   notes: "",
   product: "",
+  productInfo: "",
+  productLook: "",
   keyword: "",
   keepCase: false,
   sceneCount: 3,
@@ -187,6 +191,8 @@ async function callStage(stage: Stage, proj: Project): Promise<{ items?: unknown
       reference: proj.reference,
       notes: proj.notes,
       product: proj.product,
+      product_info: proj.productInfo,
+      product_look: proj.productLook,
       keyword: proj.keyword,
       keep_case: proj.keepCase,
       scene_count: proj.sceneCount,
@@ -315,6 +321,8 @@ export function CloneWizard() {
   // Padrão: Flow em Lower Priority (sem custo). O automático pago só roda se o membro escolher.
   const [mode, setMode] = useState<"free" | "auto">("free");
   const [simple, setSimple] = useState(true);
+  const [productPhotos, setProductPhotos] = useState<{ url: string; name: string }[]>([]);
+  const [lookState, setLookState] = useState<"idle" | "reading" | "done" | "failed">("idle");
   useEffect(() => {
     try { if (window.localStorage.getItem(VIEW_KEY) === "advanced") setSimple(false); } catch { /* storage unavailable */ }
   }, []);
@@ -450,6 +458,26 @@ export function CloneWizard() {
       setClips((current) => { if (current[key]) URL.revokeObjectURL(current[key].url); return { ...current, [key]: { url, name: file.name, file } }; });
     } else {
       setImgs((current) => { if (current[key]) URL.revokeObjectURL(current[key]); return { ...current, [key]: url }; });
+    }
+  }
+
+  /** Fotos do produto (até 3): a IA descreve o produto para ele aparecer igual nas cenas. Não bloqueia o resto se falhar. */
+  async function addProductPhotos(files: File[]) {
+    const images = files.filter((file) => /^image\/(png|jpe?g|webp)$/i.test(file.type)).slice(0, 3);
+    if (!images.length) { setError("Envie fotos do produto em PNG, JPG ou WebP."); return; }
+    setError(null);
+    setProductPhotos((current) => { current.forEach((photo) => URL.revokeObjectURL(photo.url)); return images.map((file) => ({ url: URL.createObjectURL(file), name: file.name })); });
+    setLookState("reading");
+    try {
+      const form = new FormData();
+      images.forEach((file) => form.append("images", file));
+      const response = await fetch("/api/multiplier/clone/product-look", { method: "POST", body: form });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || typeof data?.look !== "string") throw new Error("failed");
+      patch({ productLook: data.look, videos: [], ctaLocked: false });
+      setLookState(data.look.trim() ? "done" : "failed");
+    } catch {
+      setLookState("failed");
     }
   }
 
@@ -771,6 +799,9 @@ export function CloneWizard() {
   }
 
   function reset() {
+    productPhotos.forEach((photo) => URL.revokeObjectURL(photo.url));
+    setProductPhotos([]);
+    setLookState("idle");
     Object.values(clips).forEach((clip) => URL.revokeObjectURL(clip.url));
     Object.values(imgs).forEach((url) => URL.revokeObjectURL(url));
     setClips({});
@@ -809,6 +840,7 @@ export function CloneWizard() {
     version: 1,
     keyword: p.keyword.trim(),
     cta: p.cta,
+    product: p.product || p.productInfo || p.productLook ? { name: p.product, info: p.productInfo, look: p.productLook } : undefined,
     sceneCount: p.sceneCount,
     model: "Veo 3.1 - Lite [Lower Priority]",
     videos: p.variations.map((variation, vi) => ({
@@ -924,6 +956,41 @@ export function CloneWizard() {
                 </ol>
               </>
             )}
+            <details className="rounded-[14px] border border-border p-3 text-sm">
+              <summary className="cursor-pointer font-medium">Falar sobre o meu produto (opcional)</summary>
+              <div className="mt-3 space-y-3">
+                <p className="text-xs text-muted-foreground">Se quiser que o produto apareça nos vídeos, conte um pouco ou envie fotos. A mensagem do vídeo de referência não muda.</p>
+                <Field label="Nome do produto">
+                  <input value={p.product} onChange={(event) => patch({ product: event.target.value })} maxLength={120} placeholder="Ex.: Creme Hidratante Sol" className={inputClass} />
+                </Field>
+                <Field label="Em uma frase: o que ele faz?">
+                  <textarea value={p.productInfo} onChange={(event) => patch({ productInfo: event.target.value })} rows={2} maxLength={400} placeholder="Ex.: hidrata a pele por 24 horas, sem deixar oleosa" className={inputClass} />
+                </Field>
+                <Group label="Fotos do produto (até 3)">
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-dashed border-border px-4 py-2 text-sm hover:text-foreground">
+                    <Upload className="size-4" /> {productPhotos.length ? "Trocar as fotos" : "Escolher fotos"}
+                    <input type="file" multiple accept="image/png,image/jpeg,image/webp" aria-label="Fotos do produto" className="sr-only"
+                      onChange={(event) => { const files = Array.from(event.target.files ?? []); event.target.value = ""; if (files.length) void addProductPhotos(files); }} />
+                  </label>
+                  {productPhotos.length > 0 && (
+                    <div className="flex flex-wrap gap-2 pt-2">
+                      {productPhotos.map((photo) => (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img key={photo.url} src={photo.url} alt={photo.name} className="size-16 rounded-lg border border-border object-cover" />
+                      ))}
+                    </div>
+                  )}
+                  {lookState === "reading" && <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Loader2 className="size-3.5 animate-spin" /> Olhando as fotos do seu produto…</p>}
+                  {lookState === "done" && <p className="text-xs text-[#5BD69A]">Produto reconhecido: o ClipGringa vai mostrá-lo igual nas cenas.</p>}
+                  {lookState === "failed" && <p className="text-xs text-[#F5B454]">Não consegui ler as fotos agora. Os vídeos saem normalmente, só sem a descrição do produto.</p>}
+                </Group>
+                {(p.product || p.productInfo || p.productLook) && (
+                  <button type="button" className="text-xs underline text-muted-foreground" onClick={() => { productPhotos.forEach((photo) => URL.revokeObjectURL(photo.url)); setProductPhotos([]); setLookState("idle"); patch({ product: "", productInfo: "", productLook: "", videos: [], ctaLocked: false }); }}>
+                    Não falar do produto
+                  </button>
+                )}
+              </div>
+            </details>
             <details className="rounded-[14px] border border-border p-3 text-sm">
               <summary className="cursor-pointer text-muted-foreground">Ajustes (opcional)</summary>
               <div className="mt-3 space-y-4">

@@ -395,3 +395,34 @@ it("simple mode: upload one video and everything is prepared automatically, read
   expect(await screen.findByText("6 de 6 cenas recebidas")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Montar todos os vídeos" })).toBeEnabled();
 });
+
+it("simple mode: product name, one sentence and photos reach the prompts", async () => {
+  const calls = mockApi();
+  const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>;
+  vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: () => "blob:x", revokeObjectURL: () => {} }));
+  let photoForm: FormData | null = null;
+  vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+    if (String(url).includes("/captions/draft")) return new Response(JSON.stringify({ lines: [{ text: "Você sabe por que o seu vídeo não viraliza? Eu explico agora." }] }), { status: 200 });
+    if (String(url).includes("/clone/product-look")) { photoForm = init?.body as FormData; return new Response(JSON.stringify({ look: "white round jar with a green lid" }), { status: 200 }); }
+    return base(url, init);
+  }));
+  window.localStorage.removeItem("gv-clonagem-view");
+  const user = userEvent.setup();
+  render(<CloneWizard />);
+
+  await user.click(await screen.findByText("Falar sobre o meu produto (opcional)"));
+  await user.type(screen.getByLabelText("Nome do produto"), "Creme Sol");
+  await user.type(screen.getByLabelText("Em uma frase: o que ele faz?"), "hidrata a pele");
+  await user.upload(screen.getByLabelText("Fotos do produto"), new File(["x"], "creme.png", { type: "image/png" }));
+  expect(await screen.findByText(/Produto reconhecido/)).toBeInTheDocument();
+  expect((photoForm as unknown as FormData).getAll("images")).toHaveLength(1);
+
+  await user.upload(screen.getByLabelText("Escolher o vídeo para clonar"), new File(["x"], "ref.mp4", { type: "video/mp4" }));
+  expect(await screen.findByText(/Tudo pronto/)).toBeInTheDocument();
+  const images = calls.find((c) => c.stage === "images");
+  expect(images?.body).toMatchObject({ product: "Creme Sol", product_info: "hidrata a pele", product_look: "white round jar with a green lid" });
+  vi.stubGlobal("open", vi.fn());
+  await user.click(screen.getByRole("button", { name: /Enviar para o Flow/ }));
+  const pack = JSON.parse(await navigator.clipboard.readText());
+  expect(pack.product).toEqual({ name: "Creme Sol", info: "hidrata a pele", look: "white round jar with a green lid" });
+});
