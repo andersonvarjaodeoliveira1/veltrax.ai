@@ -1136,18 +1136,24 @@ export function CloneWizard() {
                   <li key={vi}>Vídeo {pad(vi + 1)} · {variation.title}</li>
                 ))}
               </ul>
-              <p className="text-sm">Agora vamos criar no Flow. Ao clicar, copiamos tudo e abrimos a ferramenta. Lá, clique em <b>Colar pacote do ClipGringa</b> e depois em <b>Gerar tudo</b>.</p>
-              <Button type="button" size="lg" className="w-full rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] py-7 text-base text-white sm:w-auto" onClick={sendToFlow}>
-                <ExternalLink className="size-5" /> Enviar para o Flow
-              </Button>
-              {copied === "flow-send" && <p className="text-xs text-[#5BD69A]">Copiado. Cole na ferramenta do Flow.</p>}
+              <p className="text-sm">Agora vamos criar no Flow em <b>Lower Priority</b> (sem gastar créditos). Siga o passo a passo logo abaixo: copie o prompt de cada cena, gere no Flow e envie os vídeos aqui.</p>
+              <details className="rounded-[12px] border border-border p-3 text-xs text-muted-foreground">
+                <summary className="cursor-pointer">BETA · Tenho créditos no Flow e quero gerar pela ferramenta</summary>
+                <div className="mt-3 space-y-2">
+                  <p>A ferramenta gasta créditos do Flow. Ao clicar, copiamos tudo e abrimos a ferramenta. Lá, clique em <b>Colar pacote do ClipGringa</b> e depois em <b>Gerar tudo</b>.</p>
+                  <Button type="button" size="sm" variant="outline" className="rounded-full" onClick={sendToFlow}>
+                    <ExternalLink className="size-4" /> Enviar para o Flow
+                  </Button>
+                  {copied === "flow-send" && <p className="text-xs text-[#5BD69A]">Copiado. Cole na ferramenta do Flow.</p>}
+                </div>
+              </details>
             </section>
 
-            <details className="rounded-[18px] border border-[#F5B454]/40 bg-[#F5B454]/10 p-5 text-sm" data-testid="guided-flow">
-              <summary className="cursor-pointer font-medium">Sem créditos no Flow? Gere de graça no Flow normal (Lower Priority)</summary>
+            <details open className="rounded-[18px] border border-[#7B3FE4]/50 bg-[#7B3FE4]/10 p-5 text-sm" data-testid="guided-flow">
+              <summary className="cursor-pointer text-base font-semibold">Gerar no Flow · Lower Priority (sem custo)</summary>
               <ol className="mt-3 list-decimal space-y-1 pl-5 text-muted-foreground">
                 <li>Abra o <a href="https://flow.google.com" target="_blank" rel="noopener noreferrer" className="text-[#A98BFF] underline">Flow</a> e, para cada cena, cole o <b>prompt da imagem</b> (Nano Banana, 9:16, x1).</li>
-                <li>Depois anime a imagem: modelo <b>Veo 3.1 - Lite [Lower Priority]</b>, 8s, x1, e cole o <b>prompt da animação</b>.</li>
+                <li>Depois anime a imagem: modelo <b>Veo 3.1 - Lite [Lower Priority]</b> (o Flow mostra “A geração vai usar 0 créditos”), 8s, x1, e cole o <b>prompt da animação</b>.</li>
                 <li>Baixe com o nome indicado (Video01_Cena01.mp4…) e envie todos aqui embaixo.</li>
               </ol>
               <div className="mt-4 space-y-3">
