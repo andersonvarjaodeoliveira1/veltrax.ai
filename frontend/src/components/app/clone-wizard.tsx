@@ -46,7 +46,16 @@ type Task = { id: string; label: string; state: "running" | "done" | "error"; st
 
 const KEY = "gv-clonagem-v2";
 const MODE_KEY = "gv-clonagem-mode";
-const COUNT_OPTIONS = [1, 2, 3, 4, 5, 7, 10];
+const NEXT_HINTS = [
+  "separe a referência em cenas (botão “Separar em cenas”) e, se escolheu variar a copy, gere os ganchos, corpos e CTAs.",
+  "clique em “Gerar variações”.",
+  "gere os prompts de imagem e marque todas as imagens como aprovadas.",
+  "digite a palavra-chave e clique em “Travar a CTA”.",
+  "clique em “Gerar prompts de animação”.",
+  "",
+  "",
+];
+const COUNT_OPTIONS =[1, 2, 3, 4, 5, 7, 10];
 const STEPS = ["Referência", "Avatares", "Imagens", "CTA", "Animações", "Download", "Montagem"];
 const NO_MIX: Mix = { hooks: [], bodies: [], ctas: [] };
 const EMPTY: Project = {
@@ -1300,6 +1309,11 @@ export function CloneWizard() {
             </>
           )}
 
+          {p.step < STEPS.length && !canNext && !working && (
+            <p role="note" className="rounded-[14px] border border-[#F5B454]/40 bg-[#F5B454]/10 p-3 text-sm text-[#F5B454]">
+              Para liberar o Próximo: {NEXT_HINTS[p.step - 1]}
+            </p>
+          )}
           <div className="flex items-center justify-between border-t border-border pt-4">
             <Button type="button" variant="ghost" onClick={() => patch({ step: Math.max(1, p.step - 1) })} disabled={p.step === 1 || working}>Voltar</Button>
             {p.step < STEPS.length && <Button type="button" onClick={() => patch({ step: p.step + 1 })} disabled={!canNext || working}>Próximo</Button>}
