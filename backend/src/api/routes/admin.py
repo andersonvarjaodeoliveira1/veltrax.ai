@@ -77,6 +77,16 @@ SETTING_METADATA = {
         "description": "Optional B-roll stock footage provider key.",
         "input_type": "password",
     },
+    "VEO_API_KEY": {
+        "label": "Veo / Flow API key",
+        "description": "Credential for Veo video generation (Automação, BETA).",
+        "input_type": "password",
+    },
+    "VEO_PROJECT_ID": {
+        "label": "Veo / Flow Google Cloud project",
+        "description": "Google Cloud project number used for Veo (Automação, BETA).",
+        "input_type": "text",
+    },
 }
 
 

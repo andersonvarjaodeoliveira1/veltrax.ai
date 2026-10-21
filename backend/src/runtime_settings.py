@@ -24,6 +24,8 @@ RUNTIME_SETTING_KEYS: tuple[str, ...] = (
     "YOUTUBE_DATA_API_KEY",
     "APIFY_API_TOKEN",
     "PEXELS_API_KEY",
+    "VEO_API_KEY",
+    "VEO_PROJECT_ID",
 )
 
 PROCESS_ENV_SETTING_KEYS = frozenset(

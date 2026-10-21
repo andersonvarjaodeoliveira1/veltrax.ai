@@ -60,6 +60,8 @@ class Config:
         self.videoscale_download_timeout_seconds = int(os.getenv("VIDEOSCALE_DOWNLOAD_TIMEOUT_SECONDS", "3600"))
         self.videoscale_transfer_timeout_seconds = int(os.getenv("VIDEOSCALE_TRANSFER_TIMEOUT_SECONDS", "900"))
         self.apify_api_token = self._get_runtime_setting("APIFY_API_TOKEN")
+        self.veo_api_key = self._get_runtime_setting("VEO_API_KEY")
+        self.veo_project_id = self._get_runtime_setting("VEO_PROJECT_ID")
         self.youtube_download_provider = self._normalize_youtube_download_provider(
             os.getenv("YOUTUBE_DOWNLOAD_PROVIDER", "yt_dlp")
         )
@@ -203,6 +205,8 @@ class Config:
             "YOUTUBE_DATA_API_KEY": self.youtube_data_api_key,
             "APIFY_API_TOKEN": self.apify_api_token,
             "PEXELS_API_KEY": self.pexels_api_key,
+            "VEO_API_KEY": self.veo_api_key,
+            "VEO_PROJECT_ID": self.veo_project_id,
         }
 
     @staticmethod
