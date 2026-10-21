@@ -46,6 +46,7 @@ type Task = { id: string; label: string; state: "running" | "done" | "error"; st
 
 const KEY = "gv-clonagem-v2";
 const MODE_KEY = "gv-clonagem-mode";
+const VIEW_KEY = "gv-clonagem-view";
 // Ferramenta "ClipGringa — Gerar Vídeos" no Flow (BETA). Trocar pelo link compartilhado quando for liberada aos membros.
 const FLOW_TOOL_URL = "https://flow.google.com/project/50e752e7-9a93-4477-8e3a-9bd266ec636b/tool/fccd23dc-ee0d-437a-9f45-a5ad87ccefce";
 const NEXT_HINTS = [
@@ -313,6 +314,14 @@ export function CloneWizard() {
   const [canResume, setCanResume] = useState(false);
   // Padrão: Flow em Lower Priority (sem custo). O automático pago só roda se o membro escolher.
   const [mode, setMode] = useState<"free" | "auto">("free");
+  const [simple, setSimple] = useState(true);
+  useEffect(() => {
+    try { if (window.localStorage.getItem(VIEW_KEY) === "advanced") setSimple(false); } catch { /* storage unavailable */ }
+  }, []);
+  const chooseView = (next: "simple" | "advanced") => {
+    setSimple(next === "simple");
+    try { window.localStorage.setItem(VIEW_KEY, next); } catch { /* storage unavailable */ }
+  };
   const [genLog, setGenLog] = useState<Record<string, { kind: "image" | "video"; label: string; state: "running" | "done" | "error"; start: number; ms?: number }>>({});
   const paid = Boolean(render?.enabled) && mode === "auto";
   const stopRef = useRef(false);
@@ -442,6 +451,30 @@ export function CloneWizard() {
     } else {
       setImgs((current) => { if (current[key]) URL.revokeObjectURL(current[key]); return { ...current, [key]: url }; });
     }
+  }
+
+  /** Vários vídeos de uma vez: reconhece Video01_Cena02.mp4 (nome que a ferramenta do Flow já salva) e encaixa cada um no lugar certo. */
+  function attachMany(files: File[]) {
+    const videos = files.filter((file) => file.type.startsWith("video/"));
+    if (!videos.length) { setError("Envie arquivos de vídeo (mp4, mov ou webm)."); return; }
+    setError(null);
+    const proj = projRef.current;
+    const unknown: string[] = [];
+    const matched = videos.map((file) => {
+      const m = /video\D*(\d+)\D+cena\D*(\d+)/i.exec(file.name);
+      const vi = m ? Number(m[1]) - 1 : -1;
+      const si = m ? Number(m[2]) - 1 : -1;
+      return { file, key: vi >= 0 && vi < proj.variations.length && si >= 0 && si < proj.sceneCount ? `${vi}-${si}` : null };
+    });
+    // Sem nomes reconhecíveis, mas a quantidade bate: segue a ordem dos arquivos.
+    const byOrder = matched.every((item) => !item.key) && videos.length === proj.variations.length * proj.sceneCount;
+    const sorted = byOrder ? [...videos].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })) : [];
+    matched.forEach((item, i) => {
+      const key = byOrder ? `${Math.floor(i / proj.sceneCount)}-${i % proj.sceneCount}` : item.key;
+      const file = byOrder ? sorted[i] : item.file;
+      if (key) attach(key, file, "video"); else unknown.push(item.file.name);
+    });
+    if (unknown.length) setError(`Não reconheci o nome de: ${unknown.join(", ")}. Use nomes como Video01_Cena01.mp4.`);
   }
 
   function toggle(map: "approved" | "checks", key: string, value: boolean) {
@@ -634,22 +667,25 @@ export function CloneWizard() {
   }
 
   /** Do vídeo de referência até os vídeos finais montados, sem parar no meio. Pode ser retomado. */
-  async function runAll() {
+  /** `textOnly`: só escreve tudo (cenas, variações, prompts) e para, pronto para enviar ao Flow. Não gera imagens nem vídeos. */
+  async function runAll(textOnly = false) {
     stopRef.current = false;
     setError(null);
     setCanResume(false);
     let proj = projRef.current;
     if (proj.reference.trim().length < 20 && proj.notes.trim().length < 20) { setError(ptError("Send the reference")); return; }
+    if (!proj.keyword.trim() && textOnly) { proj = { ...proj, keyword: "QUERO" }; projRef.current = proj; setP(proj); }
     if (!proj.keyword.trim()) { setError("Escolha a palavra-chave da CTA antes de começar."); return; }
-    const taskId = startTask("Criando seus vídeos automaticamente");
+    const taskId = startTask(textOnly ? "Preparando seus vídeos" : "Criando seus vídeos automaticamente");
     let doneW = 0;
     const missing = (cur: Project) => {
       const n = cur.variations.length || cur.count;
       const keys = Array.from({ length: n * cur.sceneCount }, (_, i) => `${Math.floor(i / cur.sceneCount)}-${i % cur.sceneCount}`);
+      const heavy = textOnly ? 0 : keys.filter((k) => !cur.gen[k]?.image).length * AUTO_WEIGHT.image + keys.filter((k) => !cur.gen[k]?.video).length * AUTO_WEIGHT.video
+        + Array.from({ length: n }, (_, vi) => vi).filter((vi) => !cur.final[vi]).length * AUTO_WEIGHT.final;
       return (cur.scenes.length === cur.sceneCount ? 0 : AUTO_WEIGHT.text) + (cur.copyMode === "mix" && !isMixReady(cur.mix) ? AUTO_WEIGHT.text : 0)
         + (cur.variations.length ? 0 : AUTO_WEIGHT.text) + (cur.images.length === cur.variations.length && cur.images.length ? 0 : AUTO_WEIGHT.text)
-        + keys.filter((k) => !cur.gen[k]?.image).length * AUTO_WEIGHT.image + (cur.videos.length === cur.variations.length && cur.videos.length ? 0 : AUTO_WEIGHT.text)
-        + keys.filter((k) => !cur.gen[k]?.video).length * AUTO_WEIGHT.video + Array.from({ length: n }, (_, vi) => vi).filter((vi) => !cur.final[vi]).length * AUTO_WEIGHT.final;
+        + (cur.videos.length === cur.variations.length && cur.videos.length ? 0 : AUTO_WEIGHT.text) + heavy;
     };
     const mark = (label: string, cur: Project, weight = 0) => { doneW += weight; setAuto({ label, done: doneW, total: doneW + missing(cur) }); };
     const sync = () => new Promise<void>((resolve) => setTimeout(resolve, 80));
@@ -674,8 +710,9 @@ export function CloneWizard() {
       const all = Array.from({ length: n * proj.sceneCount }, (_, i) => ({ vi: Math.floor(i / proj.sceneCount), si: i % proj.sceneCount }));
 
       patch({ step: 3 });
+      if (textOnly) patch({ approved: Object.fromEntries(all.map(({ vi, si }) => [`${vi}-${si}`, true])) });
       let imageCount = 0;
-      await pool(all.filter(({ vi, si }) => !proj.gen[`${vi}-${si}`]?.image), 3, async ({ vi, si }) => {
+      await pool(textOnly ? [] : all.filter(({ vi, si }) => !proj.gen[`${vi}-${si}`]?.image), 3, async ({ vi, si }) => {
         check();
         mark(`Criando as imagens (${imageCount + 1} de ${all.length})`, projRef.current);
         await genImage(vi, si, proj);
@@ -689,6 +726,7 @@ export function CloneWizard() {
       if (proj.videos.length !== n || !proj.videos.length) await text("videos", "Escrevendo os prompts das animações", 5);
       await sync();
       proj = projRef.current;
+      if (textOnly) { endTask(taskId, "done"); return; }
 
       patch({ step: 5 });
       let videoCount = 0;
@@ -809,6 +847,168 @@ export function CloneWizard() {
       {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
     </div>
   );
+
+  if (simple) {
+    const ready = p.videos.length > 0 && p.ctaLocked;
+    const sceneTotal = p.variations.length * p.sceneCount;
+    const received = Object.keys(clips).length;
+    const hasReference = p.reference.trim().length >= 20;
+    const startSimple = async (file: File) => {
+      await readReference(file);
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      if (projRef.current.reference.trim().length >= 20) await runAll(true);
+    };
+    const sendToFlow = () => {
+      void copy("flow-send", flowPackage());
+      window.open(FLOW_TOOL_URL, "_blank", "noopener");
+    };
+    const assembling_ = Object.values(built).some((b) => b.state === "running");
+    return (
+      <div className="space-y-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-semibold">Clonar um vídeo</h2>
+            <p className="text-sm text-muted-foreground">Suba o vídeo. O resto é automático.</p>
+          </div>
+          <div className="flex gap-4 text-xs text-muted-foreground">
+            <button type="button" onClick={reset} disabled={working} className="underline disabled:opacity-50">Novo projeto</button>
+            <button type="button" onClick={() => chooseView("advanced")} className="underline">Modo avançado</button>
+          </div>
+        </div>
+
+        {error && (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {(auto || runningTask) && (
+          <div role="status" aria-live="polite" className="space-y-2 rounded-[18px] border border-[#A98BFF]/40 bg-[#141316]/95 p-4 shadow-[0_12px_32px_-18px_#7B3FE4]">
+            <div className="flex items-center justify-between gap-2 text-sm">
+              <span className="font-medium">{auto ? auto.label : runningTask?.label}</span>
+              <span className="tabular-nums text-xs text-muted-foreground">{Math.round(pct)}%</span>
+            </div>
+            <div role="progressbar" aria-label="Progresso" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)} className="h-2 overflow-hidden rounded-full bg-border">
+              <div className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#7B3FE4] transition-[width] duration-700" style={{ width: `${pct}%` }} />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {auto ? "Estamos preparando tudo por você. Pode esperar aqui, não precisa clicar em nada." : `${steps[Math.min(steps.length - 1, Math.floor(secs / 12))]} Pode esperar aqui.`}
+              {assembling ? " Montar o vídeo leva de 1 a 3 minutos." : ""}
+            </p>
+          </div>
+        )}
+
+        {!ready && !working && (
+          <section className="space-y-4 rounded-[18px] border border-border bg-card p-5">
+            <input ref={fileRef} type="file" accept="video/*" className="sr-only" aria-label="Escolher o vídeo para clonar"
+              onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void startSimple(file); }} />
+            {hasReference ? (
+              <>
+                <p className="text-sm text-muted-foreground">O vídeo já foi lido. Falta preparar as cenas, as variações e os prompts.</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" size="lg" className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white" onClick={() => void runAll(true)}>
+                    {canResume || p.scenes.length > 0 ? "Continuar de onde parou" : "Preparar meus vídeos"}
+                  </Button>
+                  <Button type="button" size="lg" variant="outline" className="rounded-full" onClick={() => fileRef.current?.click()}>Escolher outro vídeo</Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <Button type="button" size="lg" className="w-full rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] py-7 text-base text-white" onClick={() => fileRef.current?.click()}>
+                  <Upload className="size-5" /> Escolher o vídeo que quero clonar
+                </Button>
+                <ol className="space-y-1 text-sm text-muted-foreground">
+                  <li>1. Você escolhe o vídeo.</li>
+                  <li>2. O ClipGringa lê, separa em cenas e escreve tudo sozinho.</li>
+                  <li>3. Você clica em “Enviar para o Flow” e gera.</li>
+                </ol>
+              </>
+            )}
+            <details className="rounded-[14px] border border-border p-3 text-sm">
+              <summary className="cursor-pointer text-muted-foreground">Ajustes (opcional)</summary>
+              <div className="mt-3 space-y-4">
+                <Group label="Quantos vídeos">
+                  <Chips label="Quantos vídeos" value={p.count} onPick={(count) => patch({ count })} options={COUNT_OPTIONS.map((n) => ({ value: n, text: String(n) }))} />
+                </Group>
+                <Group label="Quantas cenas" hint="Cada cena tem cerca de 8 segundos.">
+                  <Chips label="Quantas cenas" value={p.sceneCount} onPick={chooseScenes} options={[1, 2, 3].map((n) => ({ value: n, text: n === 1 ? "1 cena" : `${n} cenas` }))} />
+                </Group>
+                <Group label="Palavra-chave da CTA">
+                  <KeywordPicker keyword={p.keyword} keepCase={p.keepCase} placeholder="Ou escreva outra palavra" onChange={(keyword) => patch({ keyword })} onKeepCase={(keepCase) => patch({ keepCase, keyword: keepCase ? p.keyword : p.keyword.toUpperCase() })} />
+                </Group>
+              </div>
+            </details>
+          </section>
+        )}
+
+        {ready && (
+          <>
+            <section className="space-y-4 rounded-[18px] border border-[#5BD69A]/40 bg-[#5BD69A]/10 p-5">
+              <p className="text-lg font-semibold">Tudo pronto: {p.variations.length} {p.variations.length === 1 ? "vídeo" : "vídeos"} × {p.sceneCount} {p.sceneCount === 1 ? "cena" : "cenas"}</p>
+              <ul className="space-y-1 text-sm text-muted-foreground">
+                {p.variations.map((variation, vi) => (
+                  <li key={vi}>Vídeo {pad(vi + 1)} · {variation.title}</li>
+                ))}
+              </ul>
+              <p className="text-sm">Agora vamos criar no Flow. Ao clicar, copiamos tudo e abrimos a ferramenta. Lá, clique em <b>Colar pacote do ClipGringa</b> e depois em <b>Gerar tudo</b>.</p>
+              <Button type="button" size="lg" className="w-full rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] py-7 text-base text-white sm:w-auto" onClick={sendToFlow}>
+                <ExternalLink className="size-5" /> Enviar para o Flow
+              </Button>
+              {copied === "flow-send" && <p className="text-xs text-[#5BD69A]">Copiado. Cole na ferramenta do Flow.</p>}
+            </section>
+
+            <section className="space-y-3 rounded-[18px] border border-border bg-card p-5">
+              <p className="font-medium">Já gerou no Flow? Envie os vídeos aqui</p>
+              <p className="text-xs text-muted-foreground">Escolha todos de uma vez. Os arquivos que o Flow baixa (Video01_Cena01.mp4…) já se encaixam sozinhos.</p>
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-dashed border-border px-5 py-3 text-sm hover:text-foreground">
+                <Upload className="size-4" /> Escolher os vídeos
+                <input type="file" multiple accept="video/*" aria-label="Enviar os vídeos gerados no Flow" className="sr-only"
+                  onChange={(event) => { const files = Array.from(event.target.files ?? []); event.target.value = ""; if (files.length) attachMany(files); }} />
+              </label>
+              <p className="text-sm tabular-nums">{received} de {sceneTotal} cenas recebidas</p>
+              {received > 0 && (
+                <ul className="grid gap-1 text-xs sm:grid-cols-2">
+                  {p.variations.flatMap((_, vi) => Array.from({ length: p.sceneCount }, (__, si) => ({ vi, si }))).map(({ vi, si }) => (
+                    <li key={`${vi}-${si}`} className="flex items-center gap-2">
+                      {clips[`${vi}-${si}`] ? <Check className="size-3.5 text-[#5BD69A]" /> : <span className="size-3.5 rounded-full border border-border" />}
+                      <span className="font-mono">{fileName(vi, si, "x.mp4")}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {received === sceneTotal && sceneTotal > 0 && (
+                <Button type="button" size="lg" className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white" onClick={() => void assembleAll()} disabled={assembling_}>
+                  Montar todos os vídeos
+                </Button>
+              )}
+            </section>
+
+            {p.variations.map((variation, vi) => {
+              const b = built[vi];
+              const jobId = b?.jobId ?? p.final[vi];
+              const isDone = Boolean(jobId) && b?.state !== "running" && b?.state !== "error";
+              if (!b && !jobId) return null;
+              return (
+                <section key={vi} className="space-y-2 rounded-[18px] border border-border bg-card p-5">
+                  <p className="font-medium">Vídeo {pad(vi + 1)} · {variation.title}</p>
+                  {b?.state === "running" && <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Loader2 className="size-3.5 animate-spin" /> Montando…</p>}
+                  {b?.state === "error" && <p role="alert" className="text-xs text-[#F0466B]">{b.note}</p>}
+                  {isDone && jobId && (
+                    <div className="space-y-2">
+                      <video controls src={`/api/multiplier/jobs/${jobId}/outputs/1`} className="max-h-80 rounded-[12px] border border-border" />
+                      <a href={`/api/multiplier/jobs/${jobId}/outputs/1?download=true`} className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-1.5 text-sm hover:text-foreground">
+                        <Download className="size-3.5" /> Baixar vídeo {pad(vi + 1)}
+                      </a>
+                    </div>
+                  )}
+                </section>
+              );
+            })}
+          </>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">

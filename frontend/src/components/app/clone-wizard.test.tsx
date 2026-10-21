@@ -28,7 +28,10 @@ function mockApi() {
   return calls;
 }
 
-beforeEach(() => window.localStorage.clear());
+beforeEach(() => {
+  window.localStorage.clear();
+  window.localStorage.setItem("gv-clonagem-view", "advanced");
+});
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
@@ -358,4 +361,37 @@ it("generates all missing images at once from the images step", async () => {
   await user.click(await screen.findByRole("button", { name: "Gerar todas as imagens" }));
   await waitFor(() => expect(log.filter((x) => x === "image")).toHaveLength(3), { timeout: 5000 });
   expect(await screen.findByText("3 de 3 aprovadas")).toBeInTheDocument();
+});
+
+it("simple mode: upload one video and everything is prepared automatically, ready for the Flow", async () => {
+  const calls = mockApi();
+  const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>;
+  vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: () => "blob:x", revokeObjectURL: () => {} }));
+  vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+    if (String(url).includes("/captions/draft")) return new Response(JSON.stringify({ lines: [{ text: "Você sabe por que o seu vídeo não viraliza? Eu explico agora." }] }), { status: 200 });
+    return base(url, init);
+  }));
+  const open = vi.fn();
+  vi.stubGlobal("open", open);
+  window.localStorage.removeItem("gv-clonagem-view");
+  const user = userEvent.setup();
+  render(<CloneWizard />);
+
+  expect(await screen.findByRole("heading", { name: "Clonar um vídeo" })).toBeInTheDocument();
+  await user.upload(screen.getByLabelText("Escolher o vídeo para clonar"), new File(["x"], "ref.mp4", { type: "video/mp4" }));
+
+  expect(await screen.findByText(/Tudo pronto: 2 vídeos × 3 cenas/)).toBeInTheDocument();
+  expect(calls.map((c) => c.stage)).toEqual(["scenes", "variations", "images", "videos"]);
+  expect(calls[3].body.keyword).toBe("QUERO");
+
+  await user.click(screen.getByRole("button", { name: /Enviar para o Flow/ }));
+  expect(open).toHaveBeenCalledWith(expect.stringContaining("flow.google.com"), "_blank", "noopener");
+  const pack = JSON.parse(await navigator.clipboard.readText());
+  expect(pack.videos).toHaveLength(2);
+
+  // the files saved by the Flow tool fit by name
+  const files = [0, 1].flatMap((v) => [0, 1, 2].map((s) => new File(["x"], `Video0${v + 1}_Cena0${s + 1}.mp4`, { type: "video/mp4" })));
+  await user.upload(screen.getByLabelText("Enviar os vídeos gerados no Flow"), files);
+  expect(await screen.findByText("6 de 6 cenas recebidas")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Montar todos os vídeos" })).toBeEnabled();
 });
