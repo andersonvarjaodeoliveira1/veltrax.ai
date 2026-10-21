@@ -254,7 +254,7 @@ async def _build_model() -> Any:
 
 def _is_quota_error(exc: Exception) -> bool:
     text = f"{type(exc).__name__} {exc}".lower()
-    return "429" in text or "resource_exhausted" in text or "quota" in text or "rate limit" in text
+    return any(key in text for key in ("429", "resource_exhausted", "quota", "rate limit", "404", "not_found", "no longer available", "overloaded", "503"))
 
 
 async def _fallback_models() -> list[Any]:
@@ -264,7 +264,7 @@ async def _fallback_models() -> list[Any]:
     cfg = get_config()
     if not str(cfg.llm).startswith("google-gla:"):
         return []
-    names = os.getenv("CLONE_LLM_FALLBACKS", "google-gla:gemini-2.5-flash,google-gla:gemini-2.5-flash-lite")
+    names = os.getenv("CLONE_LLM_FALLBACKS", "google-gla:gemini-3.8-flash,google-gla:gemini-3-flash,google-gla:gemini-2.5-flash-lite")
     out: list[Any] = []
     for name in [n.strip() for n in names.split(",") if n.strip() and n.strip() != cfg.llm]:
         try:
