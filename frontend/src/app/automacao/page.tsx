@@ -6,6 +6,7 @@ import { Check, ClipboardCopy, Download, Loader2, Sparkles, Trash2, Upload, X } 
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
+import { CloneWizard } from "@/components/app/clone-wizard";
 
 type Status = "copy" | "awaiting" | "ready";
 type Creative = {
@@ -18,7 +19,7 @@ type Creative = {
   status: Status;
   prompt: string;
 };
-type TabKey = "criar" | "copys" | "flow" | "prontos" | "ajustes";
+type TabKey = "criar" | "copys" | "flow" | "prontos" | "clonagem" | "ajustes";
 
 const STORAGE_KEY = "gv-automacao-v1";
 const TONES = ["Direto e amigável", "Emocional", "Urgente", "Divertido"];
@@ -27,6 +28,7 @@ const TABS: { key: TabKey; label: string; hint: string }[] = [
   { key: "copys", label: "Copys", hint: "revisar e aprovar" },
   { key: "flow", label: "Flow", hint: "gerar os vídeos" },
   { key: "prontos", label: "Prontos", hint: "para baixar" },
+  { key: "clonagem", label: "Clonagem", hint: "clonar um vídeo (BETA)" },
   { key: "ajustes", label: "Ajustes", hint: "nichos e padrões" },
 ];
 
@@ -230,7 +232,7 @@ export default function AutomationPage() {
 
       <nav aria-label="Etapas" className="flex flex-wrap gap-2">
         {TABS.map((item) => {
-          const count = item.key === "criar" || item.key === "ajustes" ? 0 : counts[item.key];
+          const count = item.key === "criar" || item.key === "ajustes" || item.key === "clonagem" ? 0 : counts[item.key];
           return (
             <button key={item.key} type="button" onClick={() => setTab(item.key)} aria-current={tab === item.key}
               className={cn("rounded-[14px] border px-4 py-2 text-left text-sm transition-colors",
@@ -414,6 +416,8 @@ export default function AutomationPage() {
           )}
         </section>
       )}
+
+      {tab === "clonagem" && <CloneWizard />}
 
       {tab === "ajustes" && (
         <section className="space-y-5 rounded-[18px] border border-border bg-card p-5">

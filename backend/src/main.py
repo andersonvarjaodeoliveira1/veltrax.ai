@@ -199,6 +199,12 @@ def create_app(
         app.include_router(multiplier_router)
     except Exception:  # pragma: no cover
         logging.getLogger(__name__).exception("Multiplier (beta) disabled")
+    try:  # BETA, isolated: Clonagem de Vídeo
+        from .api.routes.clone_plan import router as clone_router
+
+        app.include_router(clone_router)
+    except Exception:  # pragma: no cover
+        logging.getLogger(__name__).exception("Clone plan (beta) disabled")
 
     @app.get("/")
     def read_root():
