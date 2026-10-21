@@ -275,6 +275,17 @@ it("creates the videos automatically from the reference to the assembled video",
   expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
 }, 15000);
 
+it("lets the member choose the spoken language and sends it with the CTA in that language", async () => {
+  const calls = mockApi();
+  const user = userEvent.setup();
+  render(<CloneWizard />);
+  await user.click(screen.getByRole("radio", { name: "Inglês" }));
+  await user.type(screen.getByLabelText(/Transcrição do vídeo/), "Você sabe por que o seu vídeo não viraliza? Eu explico agora.");
+  await user.click(screen.getByRole("button", { name: "Separar em cenas" }));
+  await screen.findByLabelText("Fala da cena 3");
+  expect(calls[0].body).toMatchObject({ language: "en", cta: "Comment {KEYWORD} to watch the full video" });
+});
+
 it("stops with a clear message when the daily limit ends and can continue later", async () => {
   mockAuto({ failVideo: true });
   const user = userEvent.setup();

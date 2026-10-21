@@ -27,6 +27,7 @@ type Project = {
   keyword: string;
   keepCase: boolean;
   sceneCount: number;
+  language: string;
   cta: string;
   ctaLocked: boolean;
   copyMode: "same" | "mix";
@@ -77,6 +78,7 @@ const EMPTY: Project = {
   keyword: "",
   keepCase: false,
   sceneCount: 4,
+  language: "pt-BR",
   cta: "Comente {KEYWORD} para assistir o vídeo completo",
   ctaLocked: false,
   copyMode: "same",
@@ -101,6 +103,14 @@ const HINTS = [
   "Copie cada prompt no Flow e envie aqui o vídeo de cada cena.",
   "Baixe as cenas, se quiser guardar uma cópia.",
   "Clique em “Montar todos os vídeos” e espere. Seus vídeos finais aparecem aqui.",
+];
+const LANGUAGES = [
+  { value: "pt-BR", text: "Português", cta: "Comente {KEYWORD} para assistir o vídeo completo" },
+  { value: "en", text: "Inglês", cta: "Comment {KEYWORD} to watch the full video" },
+  { value: "es", text: "Espanhol", cta: "Comenta {KEYWORD} para ver el video completo" },
+  { value: "fr", text: "Francês", cta: "Commente {KEYWORD} pour voir la vidéo complète" },
+  { value: "de", text: "Alemão", cta: "Kommentiere {KEYWORD}, um das ganze Video zu sehen" },
+  { value: "it", text: "Italiano", cta: "Scrivi {KEYWORD} nei commenti per vedere il video completo" },
 ];
 const KEYWORDS = ["QUERO", "EU QUERO", "LINK", "INFO", "GUIA", "AULA"];
 const CTA_PRESETS = [
@@ -201,6 +211,7 @@ async function callStage(stage: Stage, proj: Project): Promise<{ items?: unknown
       keyword: proj.keyword,
       keep_case: proj.keepCase,
       scene_count: proj.sceneCount,
+      language: proj.language,
       cta: proj.cta,
       avatar_mode: proj.avatarMode,
       avatars: proj.avatars.filter((a) => a.name.trim()).map(({ name, look }) => ({ name, look })),
@@ -397,6 +408,14 @@ export function CloneWizard() {
     setImgs({});
     setBuilt({});
     setP((cur) => ({ ...cur, sceneCount: count, scenes: [], mix: NO_MIX, variations: [], images: [], videos: [], approved: {}, checks: {}, gen: {}, final: {} }));
+  };
+  const chooseLanguage = (language: string) => {
+    if (language === p.language) return;
+    setClips((current) => { Object.values(current).forEach((clip) => URL.revokeObjectURL(clip.url)); return {}; });
+    setImgs({});
+    setBuilt({});
+    const isDefault = (text: string) => LANGUAGES.some((item) => item.cta === text) || !text.trim();
+    setP((cur) => ({ ...cur, language, cta: isDefault(cur.cta) ? LANGUAGES.find((item) => item.value === language)?.cta ?? cur.cta : cur.cta, scenes: [], mix: NO_MIX, variations: [], images: [], videos: [], approved: {}, checks: {}, gen: {}, final: {} }));
   };
   const chooseMode = (next: "free" | "auto") => {
     setMode(next);
@@ -878,6 +897,7 @@ export function CloneWizard() {
     version: 1,
     keyword: p.keyword.trim(),
     cta: p.cta,
+    language: p.language,
     product: p.product || p.productInfo || p.productLook ? { name: p.product, info: p.productInfo, look: p.productLook } : undefined,
     sceneCount: p.sceneCount,
     model: "Veo 3.1 - Lite [Lower Priority]",
@@ -1074,6 +1094,9 @@ export function CloneWizard() {
                 <Group label="Quantos vídeos">
                   <Chips label="Quantos vídeos" value={p.count} onPick={(count) => patch({ count })} options={COUNT_OPTIONS.map((n) => ({ value: n, text: String(n) }))} />
                 </Group>
+                <Group label="Idioma da fala" hint="A voz e os textos do vídeo saem neste idioma.">
+                  <Chips label="Idioma da fala" value={p.language} onPick={chooseLanguage} options={LANGUAGES.map((l) => ({ value: l.value, text: l.text }))} />
+                </Group>
                 <Group label="Quantas cenas" hint="Cada cena tem cerca de 8 segundos.">
                   <Chips label="Quantas cenas" value={p.sceneCount} onPick={chooseScenes} options={[1, 2, 3, 4, 5, 6].map((n) => ({ value: n, text: n === 1 ? "1 cena" : `${n} cenas` }))} />
                 </Group>
@@ -1244,6 +1267,9 @@ export function CloneWizard() {
                   <Chips label="Como gerar" value={mode} onPick={chooseMode} options={[{ value: "free" as const, text: "Flow · Lower Priority (sem custo)" }, { value: "auto" as const, text: "Automático (pago)" }]} />
                 </Group>
               )}
+              <Group label="Idioma da fala" hint="A voz e os textos do vídeo saem neste idioma.">
+                <Chips label="Idioma da fala" value={p.language} onPick={chooseLanguage} disabled={working} options={LANGUAGES.map((l) => ({ value: l.value, text: l.text }))} />
+              </Group>
               <Group label="Quantas cenas" hint="Cada cena tem cerca de 8 segundos. Com 4 cenas o vídeo fica com cerca de 32 segundos, tempo de sobra para mostrar e falar do produto.">
                 <Chips label="Quantas cenas" value={p.sceneCount} onPick={chooseScenes} disabled={working} options={[1, 2, 3, 4, 5, 6].map((n) => ({ value: n, text: n === 1 ? "1 cena" : `${n} cenas` }))} />
               </Group>

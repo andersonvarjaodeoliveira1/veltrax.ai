@@ -29,6 +29,20 @@ router = APIRouter(prefix="/multiplier/clone", tags=["multiplier-clone"])
 
 MAX_SCENES = 6  # ~8 seconds each (one Veo clip); the member picks 1 to 6
 DEFAULT_SCENES = 4
+LANGUAGES = {
+    "pt-BR": "Brazilian Portuguese",
+    "en": "English",
+    "es": "Spanish",
+    "fr": "French",
+    "de": "German",
+    "it": "Italian",
+    "pt-PT": "European Portuguese",
+}
+
+
+def lang_note(ctx: dict[str, Any]) -> str:
+    name = ctx.get("language_name") or LANGUAGES["pt-BR"]
+    return f"\nLanguage: ALL spoken lines (and the call to action) are in {name}. If the source text is in another language, translate it naturally into {name}, keeping the meaning. Everything else you write for the member (what, title, setting, summary) stays in Brazilian Portuguese; image and video descriptions stay in English."
 SCENES = MAX_SCENES
 MAX_VARIATIONS = 10
 MAX_AVATARS = 4
@@ -92,7 +106,7 @@ def videos_system(n: int, product: bool = False) -> str:
     return f"""You write image-to-video prompts for Google Flow / Veo, 9:16 vertical, 8 seconds each, one set per variation in the same order.
 The approved image of the scene is used as the first frame, so do not redescribe the person's appearance: describe the movement, the camera and the mood, and keep the same person and setting.
 Each set has exactly {n} prompt{"s" if n != 1 else ""} in English, one per scene, 250-500 characters each.
-Put the scene's spoken line in double quotes, in Brazilian Portuguese, word for word as given, said to camera. Never change, shorten or translate it. Say that the person speaks at a brisk natural pace and finishes the sentence about half a second before the clip ends, with no cut mid-word.{PRODUCT_VIDEOS if product else ""}
+Put the scene's spoken line in double quotes, in the language it is written in, word for word as given, said to camera. Never change, shorten or translate it. Say that the person speaks at a brisk natural pace and finishes the sentence about half a second before the clip ends, with no cut mid-word.{PRODUCT_VIDEOS if product else ""}
 {SAFETY}"""
 
 
@@ -161,7 +175,12 @@ def _context(data: dict[str, Any], need_cta: bool = False) -> dict[str, Any]:
         scene_count = int(data.get("scene_count") or DEFAULT_SCENES)
     except (TypeError, ValueError):
         scene_count = DEFAULT_SCENES
+    language = str(data.get("language") or "pt-BR")
+    if language not in LANGUAGES:
+        language = "pt-BR"
     return {
+        "language": language,
+        "language_name": LANGUAGES[language],
         "scene_count": max(1, min(MAX_SCENES, scene_count)),
         "reference": reference,
         "notes": notes,
@@ -257,7 +276,7 @@ def _fail() -> HTTPException:
 async def stage_scenes(ctx: dict[str, Any], model: Any = None) -> list[dict[str, str]]:
     prompt = f"Reference transcript:\n{ctx['reference'] or '(not provided)'}\n\nNotes about the video:\n{ctx['notes'] or '(none)'}"
     n = ctx["scene_count"]
-    out = await _run(scenes_system(n, bool(ctx["product"] or ctx["product_info"] or ctx["product_look"])), _Scenes, prompt, model)
+    out = await _run(scenes_system(n, bool(ctx["product"] or ctx["product_info"] or ctx["product_look"])) + lang_note(ctx), _Scenes, prompt, model)
     scenes = [{"what": _text(s.what, 240), "line": _text(s.line, 300)} for s in out.items if s.line.strip()]
     if len(scenes) < n:
         raise _fail()
@@ -275,7 +294,7 @@ def _product_block(ctx: dict[str, Any]) -> str:
 
 async def stage_mix(ctx: dict[str, Any], scenes: list[dict[str, str]], model: Any = None) -> dict[str, list[str]]:
     prompt = f"N = {MIX_OPTIONS}\nProduct: {_product_block(ctx) or ctx['product'] or '(not given)'}\n\nScenes:\n{_scene_block(scenes, [scene['line'] for scene in scenes])}"
-    out = await _run(MIX_SYSTEM, _Mix, prompt, model)
+    out = await _run(MIX_SYSTEM + lang_note(ctx), _Mix, prompt, model)
     hooks = [_text(v, 160) for v in out.hooks if v.strip()][:MIX_OPTIONS]
     bodies = [_text(v, 220) for v in out.bodies if v.strip()][:MIX_OPTIONS]
     ctas = [_text(v, 200) for v in out.ctas if v.strip() and v.count("{KEYWORD}") == 1][:MIX_OPTIONS]
@@ -351,7 +370,7 @@ async def stage_images(ctx: dict[str, Any], scenes: list[dict[str, str]], variat
 
 async def stage_videos(ctx: dict[str, Any], scenes: list[dict[str, str]], variations: list[dict[str, str]], lines: list[list[str]], model: Any = None):
     product = _product_block(ctx)
-    return await _scene_prompts(videos_system(len(scenes), bool(product)), scenes, variations, lines, model, product)
+    return await _scene_prompts(videos_system(len(scenes), bool(product)) + lang_note(ctx), scenes, variations, lines, model, product)
 
 
 @router.post("/generate")
