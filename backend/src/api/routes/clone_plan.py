@@ -27,7 +27,8 @@ from .multiplier import _check_script_rate, _clip, _user_id
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/multiplier/clone", tags=["multiplier-clone"])
 
-MAX_SCENES = 3  # ~8 seconds each (one Veo clip); the member picks 1 to 3
+MAX_SCENES = 6  # ~8 seconds each (one Veo clip); the member picks 1 to 6
+DEFAULT_SCENES = 4
 SCENES = MAX_SCENES
 MAX_VARIATIONS = 10
 MAX_AVATARS = 4
@@ -38,13 +39,18 @@ SAFETY = """Safety rules for everything you write:
 - No celebrities or real people, no children, no violence, no logos or on-screen brand names.
 - No medical or before/after claims, and do not invent product facts that were not given."""
 
-def scenes_system(n: int) -> str:
+PRODUCT_SCENE = """
+A product is given. When there are 3 or more scenes, one scene before the last must present the product: show it to the camera and say its name and its main benefit. The last scene's line must be at most 9 words, because the call to action is added after it."""
+
+
+def scenes_system(n: int, product: bool = False) -> str:
     return f"""You analyse a validated ad (the "trunk" copy) and split it into exactly {n} scene{"s" if n != 1 else ""} of about 8 seconds each, in order.
 You receive the transcript of the reference video and/or notes about it.
 Preserve the message, the mechanism and the sequence. Do not add new ideas.
 For each scene return:
 - what: one sentence in Brazilian Portuguese about what happens and is shown in the scene.
-- line: the spoken text of the scene in Brazilian Portuguese, taken from the transcript, same words and order. Condense only if it is longer than about 22 words. If there is no transcript, write it from the notes.
+- line: the spoken text of the scene in Brazilian Portuguese, taken from the transcript, same words and order. Each line must be speakable in about 7 seconds at a natural pace: 14 to 18 words, never more than 18, so it is never cut off at the end of the 8-second clip. Condense longer text. If there is no transcript, write it from the notes.
+If the transcript is too short for {n} scenes, spread it out and complete the extra scenes by demonstrating, explaining the benefit or giving proof, using only what the transcript and notes say.{PRODUCT_SCENE if product else ""}
 The final call to action is added separately later, so the last scene's line must stop BEFORE any call to action (such as "comment X to get it"). Do not include it.
 {SAFETY}"""
 
@@ -53,7 +59,7 @@ You receive the scenes of the validated ad (what happens and the spoken line) an
 Keep the same offer, mechanism and promise; only change the way it is said. Write in Brazilian Portuguese, natural and spoken.
 Return:
 - hooks: N alternative openings (scene 1), each at most 18 words, each with a different angle (curiosity, problem, bold claim, question...).
-- bodies: N alternative middles (scene 2), each at most 22 words, same mechanism, different wording or example.
+- bodies: N alternative middles (scene 2), each at most 18 words, same mechanism, different wording or example.
 - ctas: N alternative closings (scene 3), each at most 20 words, each asking to comment the keyword. Each CTA MUST contain the literal text {{KEYWORD}}, exactly once.
 {SAFETY}"""
 
@@ -86,7 +92,7 @@ def videos_system(n: int, product: bool = False) -> str:
     return f"""You write image-to-video prompts for Google Flow / Veo, 9:16 vertical, 8 seconds each, one set per variation in the same order.
 The approved image of the scene is used as the first frame, so do not redescribe the person's appearance: describe the movement, the camera and the mood, and keep the same person and setting.
 Each set has exactly {n} prompt{"s" if n != 1 else ""} in English, one per scene, 250-500 characters each.
-Put the scene's spoken line in double quotes, in Brazilian Portuguese, word for word as given, said to camera. Never change, shorten or translate it.{PRODUCT_VIDEOS if product else ""}
+Put the scene's spoken line in double quotes, in Brazilian Portuguese, word for word as given, said to camera. Never change, shorten or translate it. Say that the person speaks at a brisk natural pace and finishes the sentence about half a second before the clip ends, with no cut mid-word.{PRODUCT_VIDEOS if product else ""}
 {SAFETY}"""
 
 
@@ -152,9 +158,9 @@ def _context(data: dict[str, Any], need_cta: bool = False) -> dict[str, Any]:
     except (TypeError, ValueError):
         count = 3
     try:
-        scene_count = int(data.get("scene_count") or MAX_SCENES)
+        scene_count = int(data.get("scene_count") or DEFAULT_SCENES)
     except (TypeError, ValueError):
-        scene_count = MAX_SCENES
+        scene_count = DEFAULT_SCENES
     return {
         "scene_count": max(1, min(MAX_SCENES, scene_count)),
         "reference": reference,
@@ -251,7 +257,7 @@ def _fail() -> HTTPException:
 async def stage_scenes(ctx: dict[str, Any], model: Any = None) -> list[dict[str, str]]:
     prompt = f"Reference transcript:\n{ctx['reference'] or '(not provided)'}\n\nNotes about the video:\n{ctx['notes'] or '(none)'}"
     n = ctx["scene_count"]
-    out = await _run(scenes_system(n), _Scenes, prompt, model)
+    out = await _run(scenes_system(n, bool(ctx["product"] or ctx["product_info"] or ctx["product_look"])), _Scenes, prompt, model)
     scenes = [{"what": _text(s.what, 240), "line": _text(s.line, 300)} for s in out.items if s.line.strip()]
     if len(scenes) < n:
         raise _fail()

@@ -394,7 +394,7 @@ async def assemble_scenes(request: Request, db: AsyncSession = Depends(get_db)):
     job_id = str(uuid.uuid4())
     job_dir = _job_dir(job_id)
     try:
-        files = await _read_group(form, "scenes", 3, job_dir)
+        files = await _read_group(form, "scenes", 6, job_dir)
         if not files:
             raise HTTPException(status_code=400, detail="Send at least 1 scene")
     except Exception:

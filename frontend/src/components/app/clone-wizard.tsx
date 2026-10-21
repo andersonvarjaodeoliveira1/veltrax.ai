@@ -76,7 +76,7 @@ const EMPTY: Project = {
   productLook: "",
   keyword: "",
   keepCase: false,
-  sceneCount: 3,
+  sceneCount: 4,
   cta: "Comente {KEYWORD} para assistir o vídeo completo",
   ctaLocked: false,
   copyMode: "same",
@@ -176,7 +176,8 @@ function linesOf(proj: Project, vi: number): string[] {
     const cta = pick.cta.text.replace("{KEYWORD}", kw);
     if (proj.sceneCount === 1) return [`${pick.hook.text} ${cta}`];
     if (proj.sceneCount === 2) return [pick.hook.text, cta];
-    return [pick.hook.text, pick.body.text, cta];
+    const middle = proj.scenes.slice(2, proj.sceneCount - 1).map((scene) => scene.line);
+    return [pick.hook.text, pick.body.text, ...middle, cta];
   }
   const lines = proj.scenes.map((scene) => scene.line);
   if (lines.length) lines[lines.length - 1] = `${lines[lines.length - 1]} ${proj.cta.replace("{KEYWORD}", kw)}`.trim();
@@ -325,6 +326,8 @@ export function CloneWizard() {
   // Padrão: Flow em Lower Priority (sem custo). O automático pago só roda se o membro escolher.
   const [mode, setMode] = useState<"free" | "auto">("free");
   const [simple, setSimple] = useState(true);
+  const [askProduct, setAskProduct] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [productPhotos, setProductPhotos] = useState<{ url: string; name: string }[]>([]);
   const [lookState, setLookState] = useState<"idle" | "reading" | "done" | "failed">("idle");
   useEffect(() => {
@@ -577,7 +580,7 @@ export function CloneWizard() {
     URL.revokeObjectURL(url);
   }
 
-  /** Junta as 3 cenas de um vídeo no servidor (mesmo motor do Multiplicador). Devolve o id da montagem. */
+  /** Junta as cenas de um vídeo no servidor (mesmo motor do Multiplicador). Devolve o id da montagem. */
   const assembleWith = useCallback(async (vi: number, files: File[], quiet = false): Promise<string | null> => {
     setError(null);
     setBuilt((current) => ({ ...current, [vi]: { state: "running" } }));
@@ -920,10 +923,56 @@ export function CloneWizard() {
     const sceneTotal = p.variations.length * p.sceneCount;
     const received = Object.keys(clips).length;
     const hasReference = p.reference.trim().length >= 20;
+    const productFields = (
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground">Se quiser que o produto apareça nos vídeos, conte um pouco ou envie fotos. A mensagem do vídeo de referência não muda.</p>
+                <Field label="Nome do produto">
+                  <input value={p.product} onChange={(event) => patch({ product: event.target.value })} maxLength={120} placeholder="Ex.: Creme Hidratante Sol" className={inputClass} />
+                </Field>
+                <Field label="Em uma frase: o que ele faz?">
+                  <textarea value={p.productInfo} onChange={(event) => patch({ productInfo: event.target.value })} rows={2} maxLength={400} placeholder="Ex.: hidrata a pele por 24 horas, sem deixar oleosa" className={inputClass} />
+                </Field>
+                <Group label="Fotos do produto (até 3)">
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-dashed border-border px-4 py-2 text-sm hover:text-foreground">
+                    <Upload className="size-4" /> {productPhotos.length ? "Trocar as fotos" : "Escolher fotos"}
+                    <input type="file" multiple accept="image/png,image/jpeg,image/webp" aria-label="Fotos do produto" className="sr-only"
+                      onChange={(event) => { const files = Array.from(event.target.files ?? []); event.target.value = ""; if (files.length) void addProductPhotos(files); }} />
+                  </label>
+                  {productPhotos.length > 0 && (
+                    <div className="flex flex-wrap gap-2 pt-2">
+                      {productPhotos.map((photo) => (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img key={photo.url} src={photo.url} alt={photo.name} className="size-16 rounded-lg border border-border object-cover" />
+                      ))}
+                    </div>
+                  )}
+                  {lookState === "reading" && <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Loader2 className="size-3.5 animate-spin" /> Olhando as fotos do seu produto…</p>}
+                  {lookState === "done" && <p className="text-xs text-[#5BD69A]">Produto reconhecido: o ClipGringa vai mostrá-lo igual nas cenas.</p>}
+                  {lookState === "failed" && <p className="text-xs text-[#F5B454]">Não consegui ler as fotos agora. Os vídeos saem normalmente, só sem a descrição do produto.</p>}
+                </Group>
+                {(p.product || p.productInfo || p.productLook) && (
+                  <button type="button" className="text-xs underline text-muted-foreground" onClick={() => { productPhotos.forEach((photo) => URL.revokeObjectURL(photo.url)); setProductPhotos([]); setLookState("idle"); patch({ product: "", productInfo: "", productLook: "", videos: [], ctaLocked: false }); }}>
+                    Não falar do produto
+                  </button>
+                )}
+              </div>
+    );
+    const hasProduct = Boolean(p.product.trim() || p.productInfo.trim() || p.productLook.trim());
     const startSimple = async (file: File) => {
       await readReference(file);
       await new Promise((resolve) => setTimeout(resolve, 150));
       if (projRef.current.reference.trim().length >= 20) await runAll(true);
+    };
+    const run = async (file: File | null) => {
+      setAskProduct(false);
+      setPendingFile(null);
+      if (file) await startSimple(file); else await runAll(true);
+    };
+    // Ao apertar para gerar, pergunta (uma vez) se a pessoa quer falar do produto.
+    const begin = (file: File | null) => {
+      if (hasProduct) { void run(file); return; }
+      setPendingFile(file);
+      setAskProduct(true);
     };
     const sendToFlow = () => {
       markSent();
@@ -971,15 +1020,33 @@ export function CloneWizard() {
           </div>
         )}
 
-        {!ready && !working && (
+        {!ready && !working && askProduct && (
+          <section aria-label="Produto" className="space-y-4 rounded-[18px] border border-[#A98BFF]/40 bg-card p-5">
+            <div>
+              <p className="text-lg font-semibold">Quer falar sobre o seu produto?</p>
+              <p className="text-sm text-muted-foreground">É opcional. Se quiser que ele apareça nos vídeos, conte um pouco ou envie fotos.</p>
+            </div>
+            {productFields}
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="lg" className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white" disabled={!hasProduct || lookState === "reading"} onClick={() => void run(pendingFile)}>
+                Adicionar e continuar
+              </Button>
+              <Button type="button" size="lg" variant="outline" className="rounded-full" disabled={lookState === "reading"} onClick={() => void run(pendingFile)}>
+                Pular, continuar sem produto
+              </Button>
+            </div>
+          </section>
+        )}
+
+        {!ready && !working && !askProduct && (
           <section className="space-y-4 rounded-[18px] border border-border bg-card p-5">
             <input ref={fileRef} type="file" accept="video/*" className="sr-only" aria-label="Escolher o vídeo para clonar"
-              onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void startSimple(file); }} />
+              onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) begin(file); }} />
             {hasReference ? (
               <>
                 <p className="text-sm text-muted-foreground">O vídeo já foi lido. Falta preparar as cenas, as variações e os prompts.</p>
                 <div className="flex flex-wrap gap-2">
-                  <Button type="button" size="lg" className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white" onClick={() => void runAll(true)}>
+                  <Button type="button" size="lg" className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white" onClick={() => (p.scenes.length > 0 || canResume ? void runAll(true) : begin(null))}>
                     {canResume || p.scenes.length > 0 ? "Continuar de onde parou" : "Preparar meus vídeos"}
                   </Button>
                   <Button type="button" size="lg" variant="outline" className="rounded-full" onClick={() => fileRef.current?.click()}>Escolher outro vídeo</Button>
@@ -999,38 +1066,7 @@ export function CloneWizard() {
             )}
             <details className="rounded-[14px] border border-border p-3 text-sm">
               <summary className="cursor-pointer font-medium">Falar sobre o meu produto (opcional)</summary>
-              <div className="mt-3 space-y-3">
-                <p className="text-xs text-muted-foreground">Se quiser que o produto apareça nos vídeos, conte um pouco ou envie fotos. A mensagem do vídeo de referência não muda.</p>
-                <Field label="Nome do produto">
-                  <input value={p.product} onChange={(event) => patch({ product: event.target.value })} maxLength={120} placeholder="Ex.: Creme Hidratante Sol" className={inputClass} />
-                </Field>
-                <Field label="Em uma frase: o que ele faz?">
-                  <textarea value={p.productInfo} onChange={(event) => patch({ productInfo: event.target.value })} rows={2} maxLength={400} placeholder="Ex.: hidrata a pele por 24 horas, sem deixar oleosa" className={inputClass} />
-                </Field>
-                <Group label="Fotos do produto (até 3)">
-                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-dashed border-border px-4 py-2 text-sm hover:text-foreground">
-                    <Upload className="size-4" /> {productPhotos.length ? "Trocar as fotos" : "Escolher fotos"}
-                    <input type="file" multiple accept="image/png,image/jpeg,image/webp" aria-label="Fotos do produto" className="sr-only"
-                      onChange={(event) => { const files = Array.from(event.target.files ?? []); event.target.value = ""; if (files.length) void addProductPhotos(files); }} />
-                  </label>
-                  {productPhotos.length > 0 && (
-                    <div className="flex flex-wrap gap-2 pt-2">
-                      {productPhotos.map((photo) => (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img key={photo.url} src={photo.url} alt={photo.name} className="size-16 rounded-lg border border-border object-cover" />
-                      ))}
-                    </div>
-                  )}
-                  {lookState === "reading" && <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Loader2 className="size-3.5 animate-spin" /> Olhando as fotos do seu produto…</p>}
-                  {lookState === "done" && <p className="text-xs text-[#5BD69A]">Produto reconhecido: o ClipGringa vai mostrá-lo igual nas cenas.</p>}
-                  {lookState === "failed" && <p className="text-xs text-[#F5B454]">Não consegui ler as fotos agora. Os vídeos saem normalmente, só sem a descrição do produto.</p>}
-                </Group>
-                {(p.product || p.productInfo || p.productLook) && (
-                  <button type="button" className="text-xs underline text-muted-foreground" onClick={() => { productPhotos.forEach((photo) => URL.revokeObjectURL(photo.url)); setProductPhotos([]); setLookState("idle"); patch({ product: "", productInfo: "", productLook: "", videos: [], ctaLocked: false }); }}>
-                    Não falar do produto
-                  </button>
-                )}
-              </div>
+              <div className="mt-3">{productFields}</div>
             </details>
             <details className="rounded-[14px] border border-border p-3 text-sm">
               <summary className="cursor-pointer text-muted-foreground">Ajustes (opcional)</summary>
@@ -1039,7 +1075,7 @@ export function CloneWizard() {
                   <Chips label="Quantos vídeos" value={p.count} onPick={(count) => patch({ count })} options={COUNT_OPTIONS.map((n) => ({ value: n, text: String(n) }))} />
                 </Group>
                 <Group label="Quantas cenas" hint="Cada cena tem cerca de 8 segundos.">
-                  <Chips label="Quantas cenas" value={p.sceneCount} onPick={chooseScenes} options={[1, 2, 3].map((n) => ({ value: n, text: n === 1 ? "1 cena" : `${n} cenas` }))} />
+                  <Chips label="Quantas cenas" value={p.sceneCount} onPick={chooseScenes} options={[1, 2, 3, 4, 5, 6].map((n) => ({ value: n, text: n === 1 ? "1 cena" : `${n} cenas` }))} />
                 </Group>
                 <Group label="Palavra-chave da CTA">
                   <KeywordPicker keyword={p.keyword} keepCase={p.keepCase} placeholder="Ou escreva outra palavra" onChange={(keyword) => patch({ keyword })} onKeepCase={(keepCase) => patch({ keepCase, keyword: keepCase ? p.keyword : p.keyword.toUpperCase() })} />
@@ -1208,8 +1244,8 @@ export function CloneWizard() {
                   <Chips label="Como gerar" value={mode} onPick={chooseMode} options={[{ value: "free" as const, text: "Flow · Lower Priority (sem custo)" }, { value: "auto" as const, text: "Automático (pago)" }]} />
                 </Group>
               )}
-              <Group label="Quantas cenas" hint="Cada cena tem cerca de 8 segundos. Com 3 cenas o vídeo fica com cerca de 24 segundos.">
-                <Chips label="Quantas cenas" value={p.sceneCount} onPick={chooseScenes} disabled={working} options={[1, 2, 3].map((n) => ({ value: n, text: n === 1 ? "1 cena" : `${n} cenas` }))} />
+              <Group label="Quantas cenas" hint="Cada cena tem cerca de 8 segundos. Com 4 cenas o vídeo fica com cerca de 32 segundos, tempo de sobra para mostrar e falar do produto.">
+                <Chips label="Quantas cenas" value={p.sceneCount} onPick={chooseScenes} disabled={working} options={[1, 2, 3, 4, 5, 6].map((n) => ({ value: n, text: n === 1 ? "1 cena" : `${n} cenas` }))} />
               </Group>
               {paid && (
                 <div className="space-y-4 rounded-[18px] border border-[#A98BFF]/40 bg-gradient-to-br from-[#7B3FE4]/25 via-[#7B3FE4]/10 to-transparent p-5 shadow-[0_18px_40px_-24px_#7B3FE4]">
@@ -1567,7 +1603,7 @@ export function CloneWizard() {
             <>
               {heading("7 · MONTAGEM FINAL DOS VÍDEOS")}
               <p className="text-sm text-muted-foreground">
-                O ClipGringa junta Cena 01 + Cena 02 + Cena 03 em um vídeo 9:16 pronto, sem precisar do CapCut. Os vídeos precisam ter sido enviados na etapa 5.
+                O ClipGringa junta todas as cenas (Cena 01 + Cena 02 + …) em um vídeo 9:16 pronto, sem precisar do CapCut. Os vídeos precisam ter sido enviados na etapa 5.
               </p>
               <Button type="button" onClick={() => void assembleAll()} disabled={Object.values(built).some((b) => b.state === "running") || p.variations.every((_, vi) => Array.from({ length: p.sceneCount }, (__, si) => clips[`${vi}-${si}`]).some((c) => !c))}>
                 Montar todos os vídeos
@@ -1589,7 +1625,7 @@ export function CloneWizard() {
                         </Button>
                       )}
                     </div>
-                    {!complete && <p className="text-xs text-[#F5B454]">Faltam cenas: envie as 3 na etapa 5.</p>}
+                    {!complete && <p className="text-xs text-[#F5B454]">Faltam cenas: envie todas as cenas na etapa 5.</p>}
                     {b?.state === "error" && <p role="alert" className="text-xs text-[#F0466B]">{b.note}</p>}
                     {isDone && jobId && (
                       <div className="space-y-2">

@@ -31,6 +31,7 @@ function mockApi() {
 beforeEach(() => {
   window.localStorage.clear();
   window.localStorage.setItem("gv-clonagem-view", "advanced");
+  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ sceneCount: 3 }));
 });
 afterEach(() => {
   cleanup();
@@ -105,7 +106,7 @@ it("follows the Árvore protocol and locks the CTA before the animations", async
 it("mixes different hooks, bodies and CTAs when the user asks for it", async () => {
   const calls = mockApi();
   const user = userEvent.setup();
-  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({
+  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ sceneCount: 3,
     step: 1, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora.", scenes, copyMode: "same",
   }));
   render(<CloneWizard />);
@@ -143,7 +144,7 @@ it("mixes different hooks, bodies and CTAs when the user asks for it", async () 
 it("shows a friendly message when a step fails and keeps the project", async () => {
   vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ detail: "AI is not configured right now" }), { status: 503 })));
   const user = userEvent.setup();
-  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ step: 1, reference: "x".repeat(30) }));
+  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ sceneCount: 3, step: 1, reference: "x".repeat(30) }));
   render(<CloneWizard />);
 
   await user.click(await screen.findByRole("button", { name: "Separar em cenas" }));
@@ -167,7 +168,7 @@ it("assembles the three scene videos of a project on the server", async () => {
     }
     return new Response("{}", { status: 500 });
   }));
-  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({
+  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ sceneCount: 3,
     step: 5, reference: "x".repeat(30), scenes, variations: [variations[0]], videos: [prompts[0]], ctaLocked: true,
   }));
   render(<CloneWizard />);
@@ -188,7 +189,7 @@ it("explains when another assembly is already running", async () => {
   const user = userEvent.setup();
   vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: () => "blob:x", revokeObjectURL: () => {} }));
   vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ detail: "You already have a multiplication running. Wait for it to finish." }), { status: 409 })));
-  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({
+  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ sceneCount: 3,
     step: 5, reference: "x".repeat(30), scenes, variations: [variations[0]], videos: [prompts[0]], ctaLocked: true,
   }));
   render(<CloneWizard />);
@@ -202,7 +203,7 @@ it("explains when another assembly is already running", async () => {
 it("shows one progress bar with what is happening and a simple hint per step", async () => {
   vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
   const user = userEvent.setup();
-  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ step: 1, reference: "x".repeat(30) }));
+  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ sceneCount: 3, step: 1, reference: "x".repeat(30) }));
   render(<CloneWizard />);
   expect(screen.getByText(/Passo 1 de 7/)).toBeInTheDocument();
   await user.click(await screen.findByRole("button", { name: "Separar em cenas" }));
@@ -213,14 +214,14 @@ it("shows one progress bar with what is happening and a simple hint per step", a
 it("lets the member pick count, keyword and CTA by clicking", async () => {
   const calls = mockApi();
   const user = userEvent.setup();
-  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ step: 2, reference: "x".repeat(30), scenes }));
+  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ sceneCount: 3, step: 2, reference: "x".repeat(30), scenes }));
   render(<CloneWizard />);
   await user.click(await screen.findByRole("radio", { name: "5" }));
   await user.click(screen.getByRole("button", { name: "Gerar variações" }));
   await screen.findByText(/Ideia 1/);
   expect(calls[0].body.count).toBe(5);
 
-  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ step: 4, reference: "x".repeat(30), scenes, variations: [variations[0]] }));
+  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ sceneCount: 3, step: 4, reference: "x".repeat(30), scenes, variations: [variations[0]] }));
   cleanup();
   render(<CloneWizard />);
   await user.click(await screen.findByRole("radio", { name: "EU QUERO" }));
@@ -260,7 +261,7 @@ function mockAuto(opts: { failVideo?: boolean } = {}) {
 it("creates the videos automatically from the reference to the assembled video", async () => {
   const log = mockAuto();
   const user = userEvent.setup();
-  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ step: 1, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora.", count: 1 }));
+  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ sceneCount: 3, step: 1, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora.", count: 1 }));
   render(<CloneWizard />);
   const start = await screen.findByRole("button", { name: "Criar meus vídeos automaticamente" });
   expect(screen.getByRole("radio", { name: "QUERO" })).toHaveAttribute("aria-checked", "true"); // already chosen: one click is enough
@@ -277,7 +278,7 @@ it("creates the videos automatically from the reference to the assembled video",
 it("stops with a clear message when the daily limit ends and can continue later", async () => {
   mockAuto({ failVideo: true });
   const user = userEvent.setup();
-  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ step: 1, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora.", count: 1, keyword: "QUERO" }));
+  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ sceneCount: 3, step: 1, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora.", count: 1, keyword: "QUERO" }));
   render(<CloneWizard />);
   await user.click(await screen.findByRole("button", { name: "Criar meus vídeos automaticamente" }));
   expect(await screen.findByText("Você chegou ao limite de hoje. Tente de novo amanhã.", undefined, { timeout: 8000 })).toBeInTheDocument();
@@ -287,7 +288,7 @@ it("stops with a clear message when the daily limit ends and can continue later"
 it("lets the member type any keyword in the automatic panel", async () => {
   mockAuto();
   const user = userEvent.setup();
-  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ step: 1, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora.", count: 1 }));
+  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ sceneCount: 3, step: 1, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora.", count: 1 }));
   render(<CloneWizard />);
   const input = await screen.findByLabelText("Escrever a minha palavra-chave");
   await user.clear(input);
@@ -299,7 +300,7 @@ it("lets the member type any keyword in the automatic panel", async () => {
 it("counts the generated images and videos and lists each generation with its time", async () => {
   mockAuto();
   const user = userEvent.setup();
-  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ step: 1, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora.", count: 1 }));
+  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ sceneCount: 3, step: 1, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora.", count: 1 }));
   render(<CloneWizard />);
   await user.click(await screen.findByRole("button", { name: "Criar meus vídeos automaticamente" }));
   await screen.findByRole("link", { name: /Baixar vídeo 01/ }, { timeout: 8000 });
@@ -314,7 +315,7 @@ it("defaults to the free Flow Lower Priority mode and remembers the choice", asy
   mockAuto();
   window.localStorage.removeItem("gv-clonagem-mode");
   const user = userEvent.setup();
-  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ step: 1, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora." }));
+  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ sceneCount: 3, step: 1, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora." }));
   render(<CloneWizard />);
   const free = await screen.findByRole("radio", { name: /Flow · Lower Priority/ });
   expect(free).toHaveAttribute("aria-checked", "true");
@@ -328,7 +329,7 @@ it("defaults to the free Flow Lower Priority mode and remembers the choice", asy
 it("keeps the typed case when the member authorizes writing it their own way", async () => {
   mockAuto();
   const user = userEvent.setup();
-  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ step: 1, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora.", count: 1 }));
+  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ sceneCount: 3, step: 1, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora.", count: 1 }));
   render(<CloneWizard />);
   const input = await screen.findByLabelText("Escrever a minha palavra-chave");
   expect(screen.getByText(/Exemplos de palavra-chave/, { selector: "p" })).toBeInTheDocument();
@@ -344,7 +345,7 @@ it("keeps the typed case when the member authorizes writing it their own way", a
 it("lets the member choose 1 to 3 scenes and generates only that many", async () => {
   const log = mockAuto();
   const user = userEvent.setup();
-  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ step: 1, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora.", count: 1 }));
+  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ sceneCount: 3, step: 1, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora.", count: 1 }));
   render(<CloneWizard />);
   await user.click(await screen.findByRole("radio", { name: "1 cena" }));
   await user.click(screen.getByRole("button", { name: "Criar meus vídeos automaticamente" }));
@@ -380,6 +381,7 @@ it("simple mode: upload one video and everything is prepared automatically, read
   expect(await screen.findByRole("heading", { name: "Clonar um vídeo" })).toBeInTheDocument();
   await user.upload(screen.getByLabelText("Escolher o vídeo para clonar"), new File(["x"], "ref.mp4", { type: "video/mp4" }));
 
+  await user.click(await screen.findByRole("button", { name: "Pular, continuar sem produto" }));
   expect(await screen.findByText(/Tudo pronto: 2 vídeos × 3 cenas/)).toBeInTheDocument();
   expect(calls.map((c) => c.stage)).toEqual(["scenes", "variations", "images", "videos"]);
   expect(calls[3].body.keyword).toBe("QUERO");
@@ -428,7 +430,7 @@ it("simple mode: product name, one sentence and photos reach the prompts", async
 });
 
 describe("idle project", () => {
-  const stored = { step: 1, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora.", scenes };
+  const stored = { sceneCount: 3, step: 1, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora.", scenes };
   const open = (minutesAgo: number, sent = false) => {
     window.localStorage.removeItem("gv-clonagem-view");
     window.localStorage.setItem("gv-clonagem-v2", JSON.stringify(stored));
