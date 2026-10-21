@@ -1746,9 +1746,10 @@ export function CloneWizard() {
         </section>
 
         <aside aria-label="Painel de execução" className="h-fit space-y-3 rounded-[18px] border border-border bg-card p-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-xs font-semibold tracking-wide text-muted-foreground">PAINEL DE EXECUÇÃO</h3>
             <button type="button" onClick={reset} disabled={working} className="text-[11px] text-muted-foreground underline disabled:opacity-50">Novo projeto</button>
+            <button type="button" onClick={() => chooseView("simple")} className="text-[11px] text-[#A98BFF] underline">Voltar ao modo simples</button>
           </div>
           {tasks.length === 0 ? (
             <p className="text-xs italic text-muted-foreground">Nenhuma tarefa em execução.</p>

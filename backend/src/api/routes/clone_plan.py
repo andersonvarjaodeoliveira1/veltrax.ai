@@ -13,6 +13,7 @@ its auth and small text helpers.
 from __future__ import annotations
 
 import asyncio
+import os
 import logging
 from typing import Any
 
@@ -251,22 +252,55 @@ async def _build_model() -> Any:
     return _build_transcript_model(runtime_config)
 
 
+def _is_quota_error(exc: Exception) -> bool:
+    text = f"{type(exc).__name__} {exc}".lower()
+    return "429" in text or "resource_exhausted" in text or "quota" in text or "rate limit" in text
+
+
+async def _fallback_models() -> list[Any]:
+    """Other Google models have their own free quota: used only when the main one hits its limit."""
+    from ...ai import _build_transcript_model
+
+    cfg = get_config()
+    if not str(cfg.llm).startswith("google-gla:"):
+        return []
+    names = os.getenv("CLONE_LLM_FALLBACKS", "google-gla:gemini-2.5-flash,google-gla:gemini-2.5-flash-lite")
+    out: list[Any] = []
+    for name in [n.strip() for n in names.split(",") if n.strip() and n.strip() != cfg.llm]:
+        try:
+            out.append(_build_transcript_model(cfg, name))
+        except Exception:
+            logger.warning("clone plan: fallback model %s unavailable", name)
+    return out
+
+
 async def _run(system: str, output_type: type[BaseModel], prompt: str, model: Any = None) -> Any:
     from pydantic_ai import Agent
 
+    explicit = model
     if model is None:
         model = await _build_model()
-    agent = Agent(model, output_type=output_type, system_prompt=system, output_retries=2)
-    try:
-        result = await asyncio.wait_for(agent.run(prompt), timeout=120)
-    except asyncio.TimeoutError:
-        raise HTTPException(status_code=504, detail="AI took too long. Try again.")
-    except HTTPException:
-        raise
-    except Exception:
-        logger.exception("clone plan stage failed")
-        raise HTTPException(status_code=502, detail="Could not generate this step. Try again.")
-    return result.output
+    candidates = [model] + (await _fallback_models() if explicit is None else [])
+    last_error: Exception | None = None
+    for index, candidate in enumerate(candidates):
+        agent = Agent(candidate, output_type=output_type, system_prompt=system, output_retries=2)
+        try:
+            result = await asyncio.wait_for(agent.run(prompt), timeout=120)
+            return result.output
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail="AI took too long. Try again.")
+        except HTTPException:
+            raise
+        except Exception as exc:
+            last_error = exc
+            if _is_quota_error(exc) and index + 1 < len(candidates):
+                logger.warning("clone plan: quota reached on %s, trying the next model", candidate)
+                continue
+            logger.exception("clone plan stage failed")
+            raise HTTPException(status_code=502, detail="Could not generate this step. Try again.")
+    logger.error("clone plan: every model failed: %s", last_error)
+    raise HTTPException(status_code=502, detail="Could not generate this step. Try again.")
+
 
 
 def _fail() -> HTTPException:
