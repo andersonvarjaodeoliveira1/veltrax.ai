@@ -1458,6 +1458,7 @@ export function CloneWizard() {
               <p className="text-sm text-muted-foreground">
                 Copie cada prompt para o Flow (Nano Banana) e gere a imagem. Confira rosto, cenário e ação e aprove só as boas. A imagem aprovada é a base da animação. Não avance com uma imagem que você não aprovou.
               </p>
+              {p.images.length > 0 && (
               <details open={!paid} className="rounded-[14px] border border-border p-3 text-sm">
                 <summary className="cursor-pointer text-muted-foreground">Prefere gerar no Flow, sem gastar créditos?</summary>
                 <div className="mt-3">
@@ -1470,6 +1471,7 @@ export function CloneWizard() {
               </div>
                 </div>
               </details>
+              )}
               <div className="flex flex-wrap items-center gap-3">
                 {generateButton("images", "Gerar prompts de imagem", p.images.length > 0, "Criando os prompts de imagem")}
                 {paid && p.images.length > 0 && (
@@ -1566,6 +1568,7 @@ export function CloneWizard() {
               <p className="text-sm text-muted-foreground">
                 As imagens aprovadas viram cenas animadas. No Flow, use a imagem aprovada como primeiro quadro, no modo de menor prioridade (lower priority), cole o prompt e gere. Assista e confira a fala, os movimentos e a continuidade antes de baixar.
               </p>
+              {p.videos.length > 0 && (
               <details open={!paid} className="rounded-[14px] border border-border p-3 text-sm">
                 <summary className="cursor-pointer text-muted-foreground">Prefere gerar no Flow, sem gastar créditos?</summary>
                 <div className="mt-3">
@@ -1578,6 +1581,7 @@ export function CloneWizard() {
               </div>
                 </div>
               </details>
+              )}
               <div className="flex flex-wrap gap-2">
                 {generateButton("videos", "Gerar prompts de animação", p.videos.length > 0, "Criando os prompts de animação", !p.ctaLocked)}
                 {paid && p.videos.length > 0 && (
