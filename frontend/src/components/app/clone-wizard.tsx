@@ -1157,6 +1157,15 @@ export function CloneWizard() {
                 <li>Depois anime a imagem: modelo <b>Veo 3.1 - Lite [Lower Priority]</b> (o Flow mostra “A geração vai usar 0 créditos”), 8s, x1, e cole o <b>prompt da animação</b>.</li>
                 <li>Baixe com o nome indicado (Video01_Cena01.mp4…) e envie todos aqui embaixo.</li>
               </ol>
+              <div className="mt-4 rounded-[12px] border border-border bg-card p-3" data-testid="flow-extension">
+                <p className="text-sm font-medium">Automático com a extensão (BETA)</p>
+                <p className="mt-1 text-xs text-muted-foreground">A extensão no seu Chrome faz tudo sozinha dentro do Flow, em Lower Priority: imagem, animação e download com o nome certo.</p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {copyButton("flow-package", flowPackage(), "Copiar pacote")}
+                  <a href="/extensao/clipgringa-flow.zip" download className="inline-flex items-center rounded-full border border-border px-3 py-1.5 text-xs hover:text-foreground">Baixar extensão</a>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">Instalar uma vez: descompacte o zip, abra chrome://extensions, ligue “Modo do desenvolvedor” e clique em “Carregar sem compactação”. Depois abra um projeto no Flow e cole o pacote no painel da extensão.</p>
+              </div>
               <div className="mt-4 space-y-3">
                 {p.variations.map((variation, vi) => (
                   <div key={vi} className="space-y-2">

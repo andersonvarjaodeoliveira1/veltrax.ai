@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "ClipGringa · Flow (Lower Priority)",
+  "version": "1.0.0",
+  "description": "Gera as imagens e os vídeos do pacote do ClipGringa no Google Flow usando o Veo 3.1 Lite em Lower Priority.",
+  "permissions": ["storage", "downloads", "debugger"],
+  "host_permissions": ["https://flow.google.com/*"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["https://flow.google.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
