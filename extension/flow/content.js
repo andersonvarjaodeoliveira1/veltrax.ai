@@ -439,6 +439,10 @@
   async function start() {
     if (running) return;
     setError("");
+    if (!/\/project\//.test(location.pathname)) {
+      setError("Abra um projeto do Flow (a tela com suas imagens e vídeos, não a ferramenta ClipGringa) e clique em Começar de novo.");
+      return;
+    }
     try {
       if (!state.jobs.length || el("pkg").value.trim() !== (state.raw || "")) {
         const parsed = parsePackage(el("pkg").value);
