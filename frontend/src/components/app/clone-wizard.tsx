@@ -37,10 +37,11 @@ type Project = {
   approved: Record<string, boolean>;
   checks: Record<string, boolean>;
 };
+type Built = { state: "running" | "done" | "error"; jobId?: string; note?: string };
 type Task = { id: string; label: string; state: "running" | "done" | "error"; start: number; ms?: number; note?: string };
 
 const KEY = "gv-clonagem-v2";
-const STEPS = ["Referência", "Avatares", "Imagens", "CTA", "Animações", "Download", "CapCut"];
+const STEPS = ["Referência", "Avatares", "Imagens", "CTA", "Animações", "Download", "Montagem"];
 const SCENES = 3;
 const NO_MIX: Mix = { hooks: [], bodies: [], ctas: [] };
 const EMPTY: Project = {
@@ -119,7 +120,8 @@ export function CloneWizard() {
   const [busy, setBusy] = useState<Stage | "upload" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
-  const [clips, setClips] = useState<Record<string, { url: string; name: string }>>({});
+  const [clips, setClips] = useState<Record<string, { url: string; name: string; file: File }>>({});
+  const [built, setBuilt] = useState<Record<number, Built>>({});
   const [imgs, setImgs] = useState<Record<string, string>>({});
   const [now, setNow] = useState(() => Date.now());
   const fileRef = useRef<HTMLInputElement>(null);
@@ -240,7 +242,7 @@ export function CloneWizard() {
     setError(null);
     const url = URL.createObjectURL(file);
     if (kind === "video") {
-      setClips((current) => { if (current[key]) URL.revokeObjectURL(current[key].url); return { ...current, [key]: { url, name: file.name } }; });
+      setClips((current) => { if (current[key]) URL.revokeObjectURL(current[key].url); return { ...current, [key]: { url, name: file.name, file } }; });
     } else {
       setImgs((current) => { if (current[key]) URL.revokeObjectURL(current[key]); return { ...current, [key]: url }; });
     }
@@ -287,10 +289,60 @@ export function CloneWizard() {
     URL.revokeObjectURL(url);
   }
 
+  /** Junta as 3 cenas de um vídeo no servidor (mesmo motor do Multiplicador). */
+  const assemble = useCallback(async (vi: number) => {
+    const files = Array.from({ length: SCENES }, (_, si) => clips[`${vi}-${si}`]?.file);
+    if (files.some((file) => !file)) return;
+    setError(null);
+    setBuilt((current) => ({ ...current, [vi]: { state: "running" } }));
+    const taskId = startTask(`Montando o vídeo ${pad(vi + 1)}`);
+    const fail = (note: string) => {
+      setBuilt((current) => ({ ...current, [vi]: { state: "error", note } }));
+      endTask(taskId, "error", "Falhou. Veja o aviso no vídeo.");
+    };
+    try {
+      const form = new FormData();
+      form.append("aspect", "9:16");
+      form.append("hooks", files[0] as File);
+      form.append("bodies", files[1] as File);
+      form.append("ctas", files[2] as File);
+      const created = await fetch("/api/multiplier/jobs", { method: "POST", body: form });
+      const job = await created.json().catch(() => null);
+      if (!created.ok || !job?.id) {
+        const detail = String(job?.detail ?? "");
+        if (created.status === 409 && /already/i.test(detail)) return fail("Já existe uma montagem em andamento. Aguarde terminar e tente de novo.");
+        if (created.status === 409) return fail("Limite de montagens salvas atingido. Apague as antigas na aba Multiplicador.");
+        if (created.status === 413) return fail("Um dos arquivos é grande demais (máximo 300 MB por cena).");
+        return fail("Não foi possível iniciar a montagem. Tente de novo.");
+      }
+      for (let attempt = 0; attempt < 300; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        const poll = await fetch(`/api/multiplier/jobs/${job.id}`).then((r) => r.json()).catch(() => null);
+        if (poll?.status === "completed") {
+          setBuilt((current) => ({ ...current, [vi]: { state: "done", jobId: job.id } }));
+          endTask(taskId, "done");
+          return;
+        }
+        if (poll?.status === "error") return fail("Não foi possível juntar as cenas. Confira se os vídeos abrem normalmente.");
+      }
+      fail("A montagem demorou demais. Veja em Multiplicador se ela terminou.");
+    } catch {
+      fail("Não foi possível montar agora. Verifique a conexão e tente de novo.");
+    }
+  }, [clips]);
+
+  async function assembleAll() {
+    for (let vi = 0; vi < p.variations.length; vi += 1) {
+      if (built[vi]?.state === "done") continue;
+      if (Array.from({ length: SCENES }, (_, si) => clips[`${vi}-${si}`]).every(Boolean)) await assemble(vi);
+    }
+  }
+
   function reset() {
     Object.values(clips).forEach((clip) => URL.revokeObjectURL(clip.url));
     Object.values(imgs).forEach((url) => URL.revokeObjectURL(url));
     setClips({});
+    setBuilt({});
     setImgs({});
     setTasks([]);
     setError(null);
@@ -658,22 +710,60 @@ export function CloneWizard() {
 
           {p.step === 7 && (
             <>
-              {heading("7 · LEVE PARA O CAPCUT E JUNTE AS CENAS")}
-              <p className="text-sm text-muted-foreground">O agente prepara as peças. Você finaliza a montagem: Cena 01 + Cena 02 + Cena 03 = vídeo montado.</p>
-              <a href="https://www.capcut.com/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-1.5 text-sm hover:text-foreground">
-                Abrir o CapCut <ExternalLink className="size-3.5" />
-              </a>
-              {p.variations.map((v, vi) => (
-                <div key={vi} className="space-y-2 rounded-[14px] border border-border p-4">
-                  <p className="font-medium">Vídeo {pad(vi + 1)} · {v.title}</p>
-                  {CAPCUT_STEPS.map((label, ci) => (
-                    <label key={ci} className="flex items-center gap-2 text-sm">
-                      <input type="checkbox" checked={Boolean(p.checks[`cap-${vi}-${ci}`])} onChange={(event) => toggle("checks", `cap-${vi}-${ci}`, event.target.checked)} className="size-4" />
-                      {label}
-                    </label>
+              {heading("7 · MONTAGEM FINAL DOS VÍDEOS")}
+              <p className="text-sm text-muted-foreground">
+                O ClipGringa junta Cena 01 + Cena 02 + Cena 03 em um vídeo 9:16 pronto, sem precisar do CapCut. Os vídeos precisam ter sido enviados na etapa 5.
+              </p>
+              <Button type="button" onClick={() => void assembleAll()} disabled={Object.values(built).some((b) => b.state === "running") || p.variations.every((_, vi) => Array.from({ length: SCENES }, (__, si) => clips[`${vi}-${si}`]).some((c) => !c))}>
+                Montar todos os vídeos
+              </Button>
+              {p.variations.map((v, vi) => {
+                const complete = Array.from({ length: SCENES }, (_, si) => clips[`${vi}-${si}`]).every(Boolean);
+                const b = built[vi];
+                return (
+                  <div key={vi} className="space-y-2 rounded-[14px] border border-border p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="font-medium">Vídeo {pad(vi + 1)} · {v.title}</p>
+                      {b?.state === "running" ? (
+                        <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Loader2 className="size-3.5 animate-spin" /> Montando…</span>
+                      ) : (
+                        <Button type="button" size="sm" variant="outline" onClick={() => void assemble(vi)} disabled={!complete}>
+                          {b?.state === "done" ? "Montar de novo" : "Montar este vídeo"}
+                        </Button>
+                      )}
+                    </div>
+                    {!complete && <p className="text-xs text-[#F5B454]">Faltam cenas: envie as 3 na etapa 5.</p>}
+                    {b?.state === "error" && <p role="alert" className="text-xs text-[#F0466B]">{b.note}</p>}
+                    {b?.state === "done" && b.jobId && (
+                      <div className="space-y-2">
+                        <video controls src={`/api/multiplier/jobs/${b.jobId}/outputs/1`} className="max-h-80 rounded-[12px] border border-border" />
+                        <a href={`/api/multiplier/jobs/${b.jobId}/outputs/1?download=true`} className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-1.5 text-sm hover:text-foreground">
+                          <Download className="size-3.5" /> Baixar vídeo {pad(vi + 1)}
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              <details className="rounded-[14px] border border-border p-4 text-sm">
+                <summary className="cursor-pointer text-muted-foreground">Prefere ajustar à mão no CapCut?</summary>
+                <div className="mt-3 space-y-3">
+                  <a href="https://www.capcut.com/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-1.5 text-sm hover:text-foreground">
+                    Abrir o CapCut <ExternalLink className="size-3.5" />
+                  </a>
+                  {p.variations.map((v, vi) => (
+                    <div key={vi} className="space-y-1">
+                      <p className="font-medium">Vídeo {pad(vi + 1)} · {v.title}</p>
+                      {CAPCUT_STEPS.map((label, ci) => (
+                        <label key={ci} className="flex items-center gap-2">
+                          <input type="checkbox" checked={Boolean(p.checks[`cap-${vi}-${ci}`])} onChange={(event) => toggle("checks", `cap-${vi}-${ci}`, event.target.checked)} className="size-4" />
+                          {label}
+                        </label>
+                      ))}
+                    </div>
                   ))}
                 </div>
-              ))}
+              </details>
             </>
           )}
 

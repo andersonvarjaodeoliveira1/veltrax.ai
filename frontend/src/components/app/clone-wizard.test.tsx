@@ -138,3 +138,54 @@ it("shows a friendly message when a step fails and keeps the project", async () 
   expect(await screen.findByText("A IA não está disponível agora.")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Separar em cenas" })).toBeEnabled();
 });
+
+it("assembles the three scene videos of a project on the server", async () => {
+  const user = userEvent.setup();
+  let polls = 0;
+  let sent: FormData | undefined;
+  vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: () => "blob:x", revokeObjectURL: () => {} }));
+  vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+    if (String(url).endsWith("/api/multiplier/jobs") && init?.method === "POST") {
+      sent = init.body as FormData;
+      return new Response(JSON.stringify({ id: "job1", status: "processing" }), { status: 200 });
+    }
+    if (String(url).includes("/api/multiplier/jobs/job1")) {
+      polls += 1;
+      return new Response(JSON.stringify({ status: polls < 2 ? "processing" : "completed" }), { status: 200 });
+    }
+    return new Response("{}", { status: 500 });
+  }));
+  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({
+    step: 5, reference: "x".repeat(30), scenes, variations: [variations[0]], videos: [prompts[0]], ctaLocked: true,
+  }));
+  render(<CloneWizard />);
+
+  const inputs = await screen.findAllByLabelText(/Enviar o vídeo desta cena/);
+  expect(inputs).toHaveLength(3);
+  for (const [i, input] of inputs.entries()) await user.upload(input, new File(["v"], `c${i}.mp4`, { type: "video/mp4" }));
+  await user.click(next());
+  await user.click(next());
+
+  await user.click(screen.getByRole("button", { name: "Montar este vídeo" }));
+  const link = await screen.findByRole("link", { name: /Baixar vídeo 01/, }, { timeout: 8000 });
+  expect(link).toHaveAttribute("href", "/api/multiplier/jobs/job1/outputs/1?download=true");
+  expect(sent?.getAll("hooks")).toHaveLength(1);
+  expect(sent?.getAll("bodies")).toHaveLength(1);
+  expect(sent?.getAll("ctas")).toHaveLength(1);
+  expect(sent?.get("aspect")).toBe("9:16");
+}, 15000);
+
+it("explains when another assembly is already running", async () => {
+  const user = userEvent.setup();
+  vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: () => "blob:x", revokeObjectURL: () => {} }));
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ detail: "You already have a multiplication running. Wait for it to finish." }), { status: 409 })));
+  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({
+    step: 5, reference: "x".repeat(30), scenes, variations: [variations[0]], videos: [prompts[0]], ctaLocked: true,
+  }));
+  render(<CloneWizard />);
+  for (const [i, input] of (await screen.findAllByLabelText(/Enviar o vídeo desta cena/)).entries()) await user.upload(input, new File(["v"], `c${i}.mp4`, { type: "video/mp4" }));
+  await user.click(next());
+  await user.click(next());
+  await user.click(screen.getByRole("button", { name: "Montar este vídeo" }));
+  expect(await screen.findByText(/Já existe uma montagem em andamento/)).toBeInTheDocument();
+});
