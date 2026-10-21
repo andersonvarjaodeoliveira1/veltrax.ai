@@ -205,6 +205,12 @@ def create_app(
         app.include_router(clone_router)
     except Exception:  # pragma: no cover
         logging.getLogger(__name__).exception("Clone plan (beta) disabled")
+    try:  # BETA, isolated: gerar imagens e cenas dentro da Clonagem
+        from .api.routes.clone_render import router as clone_render_router
+
+        app.include_router(clone_render_router)
+    except Exception:  # pragma: no cover
+        logging.getLogger(__name__).exception("Clone render (beta) disabled")
 
     @app.get("/")
     def read_root():

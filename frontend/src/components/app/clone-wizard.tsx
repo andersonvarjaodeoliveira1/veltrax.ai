@@ -36,6 +36,8 @@ type Project = {
   videos: Prompts[];
   approved: Record<string, boolean>;
   checks: Record<string, boolean>;
+  gen: Record<string, { image?: string; video?: string }>;
+  final: Record<string, string>;
 };
 type Built = { state: "running" | "done" | "error"; jobId?: string; note?: string };
 type Task = { id: string; label: string; state: "running" | "done" | "error"; start: number; ms?: number; note?: string };
@@ -63,9 +65,11 @@ const EMPTY: Project = {
   videos: [],
   approved: {},
   checks: {},
+  gen: {},
+  final: {},
 };
 const HINTS = [
-  "Escolha o vídeo que você quer copiar e clique em “Separar em cenas”.",
+  "Escolha o vídeo que você quer copiar. Depois é só clicar em um botão para criar tudo.",
   "Diga quantos vídeos quer e clique em “Gerar variações”.",
   "Copie cada prompt, gere a imagem no Flow e marque “Aprovada”.",
   "Escreva o produto e a palavra-chave, depois clique em “Travar a CTA”.",
@@ -107,6 +111,15 @@ function ptError(detail: unknown, fallback = "Não foi possível gerar esta etap
   if (/too long \(max/i.test(detail)) return "O vídeo é longo demais (máximo 10 minutos).";
   if (/No speech/i.test(detail)) return "Não encontrei fala nesse vídeo. Descreva o vídeo no campo de notas.";
   if (/Could not read/i.test(detail)) return "Não foi possível ler esse vídeo.";
+  if (/not enabled yet/i.test(detail)) return "A geração dentro da ferramenta ainda não está ligada.";
+  if (/not enabled on the Google/i.test(detail)) return "A geração não está liberada na conta do Google. Avise o administrador.";
+  if (/Daily (image|scene) limit/i.test(detail)) return "Você chegou ao limite de hoje. Tente de novo amanhã.";
+  if (/Wait for the scenes/i.test(detail)) return "Espere as cenas em andamento terminarem.";
+  if (/not available anymore/i.test(detail)) return "O modelo de geração não está mais disponível. Avise o administrador.";
+  if (/blocked|not accepted/i.test(detail)) return "O Google não aceitou este prompt. Edite o texto e tente de novo.";
+  if (/Google is busy/i.test(detail)) return "O Google está ocupado agora. Tente de novo em alguns minutos.";
+  if (/Interrupted/i.test(detail)) return "A geração foi interrompida. Tente de novo.";
+  if (/Could not (generate|reach|download)/i.test(detail)) return "Não foi possível gerar agora. Tente de novo.";
   return fallback;
 }
 
@@ -123,6 +136,95 @@ function mixPick(mix: Mix, vi: number) {
     body: { index: (vi * 2 + 1) % Math.max(1, mix.bodies.length), text: at(mix.bodies, vi * 2 + 1) },
     cta: { index: (vi * 2 + 2) % Math.max(1, mix.ctas.length), text: at(mix.ctas, vi * 2 + 2) },
   };
+}
+
+const RENDER = "/api/multiplier/clone/render";
+const POLL_MS = process.env.NODE_ENV === "test" ? 5 : 4000;
+const ASSEMBLE_POLL_MS = process.env.NODE_ENV === "test" ? 5 : 2000;
+const AUTO_WEIGHT = { text: 1, image: 2, video: 6, final: 3 };
+
+/** Cópia final falada de cada vídeo (a CTA travada fecha a última cena). */
+function linesOf(proj: Project, vi: number): string[] {
+  const kw = proj.keyword.trim() || "PALAVRA";
+  if (proj.copyMode === "mix") {
+    const pick = mixPick(proj.mix, vi);
+    return [pick.hook.text, pick.body.text, pick.cta.text.replace("{KEYWORD}", kw)];
+  }
+  const lines = proj.scenes.map((scene) => scene.line);
+  if (lines.length) lines[lines.length - 1] = `${lines[lines.length - 1]} ${proj.cta.replace("{KEYWORD}", kw)}`.trim();
+  return lines;
+}
+
+const isMixReady = (m: Mix) => m.hooks.length >= 2 && m.bodies.length >= 2 && m.ctas.length >= 2 && m.ctas.every((item) => item.includes("{KEYWORD}"));
+
+/** Chama uma etapa da IA e devolve os dados. Lança um erro já em português. */
+async function callStage(stage: Stage, proj: Project): Promise<{ items?: unknown[]; hooks?: string[]; bodies?: string[]; ctas?: string[] }> {
+  const response = await fetch("/api/multiplier/clone/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      stage,
+      reference: proj.reference,
+      notes: proj.notes,
+      product: proj.product,
+      keyword: proj.keyword,
+      cta: proj.cta,
+      avatar_mode: proj.avatarMode,
+      avatars: proj.avatars.filter((a) => a.name.trim()).map(({ name, look }) => ({ name, look })),
+      count: proj.count,
+      scenes: proj.scenes,
+      variations: proj.variations,
+      ...(proj.copyMode === "mix" && (stage === "images" || stage === "videos") ? { lines: proj.variations.map((_, i) => linesOf(proj, i)) } : {}),
+    }),
+  });
+  const data = await response.json().catch(() => null);
+  const valid = stage === "mix" ? Array.isArray(data?.hooks) && Array.isArray(data?.bodies) && Array.isArray(data?.ctas) : Array.isArray(data?.items);
+  if (!response.ok || !valid) throw new Error(ptError(data?.detail));
+  return data;
+}
+
+function applyStage(cur: Project, stage: Stage, data: { items?: unknown[]; hooks?: string[]; bodies?: string[]; ctas?: string[] }): Project {
+  if (stage === "scenes") return { ...cur, scenes: data.items as Scene[], mix: NO_MIX, variations: [], images: [], videos: [], approved: {}, gen: {}, final: {} };
+  if (stage === "mix") return { ...cur, mix: { hooks: data.hooks ?? [], bodies: data.bodies ?? [], ctas: data.ctas ?? [] }, videos: [] };
+  if (stage === "variations") return { ...cur, variations: data.items as Variation[], images: [], videos: [], approved: {}, gen: {}, final: {} };
+  if (stage === "images") return { ...cur, images: data.items as Prompts[], videos: [], approved: {}, gen: {}, final: {} };
+  const gen = Object.fromEntries(Object.entries(cur.gen).map(([key, value]) => [key, { image: value.image }]));
+  return { ...cur, videos: data.items as Prompts[], gen, final: {} };
+}
+
+async function renderImage(prompt: string): Promise<string> {
+  const response = await fetch(`${RENDER}/image`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt }) });
+  const data = await response.json().catch(() => null);
+  if (!response.ok || !data?.id) throw new Error(ptError(data?.detail, "Não foi possível gerar a imagem agora. Tente de novo."));
+  return data.id as string;
+}
+
+async function renderVideo(prompt: string, imageId?: string, stopped?: () => boolean): Promise<string> {
+  const response = await fetch(`${RENDER}/video`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt, image_id: imageId, seconds: 8 }) });
+  const started = await response.json().catch(() => null);
+  if (!response.ok || !started?.id) throw new Error(ptError(started?.detail, "Não foi possível gerar a cena agora. Tente de novo."));
+  for (let attempt = 0; attempt < 240; attempt += 1) {
+    if (stopped?.()) throw new Error("STOP");
+    await new Promise((resolve) => setTimeout(resolve, POLL_MS));
+    const item = await fetch(`${RENDER}/${started.id}`).then((r) => r.json()).catch(() => null);
+    if (item?.status === "ready") return started.id as string;
+    if (item?.status === "error") throw new Error(ptError(item.error, "Não foi possível gerar a cena agora. Tente de novo."));
+  }
+  throw new Error("A cena demorou demais. Tente de novo.");
+}
+
+async function pool<T>(items: T[], size: number, worker: (item: T) => Promise<void>): Promise<void> {
+  let index = 0;
+  let failure: unknown = null;
+  const runners = Array.from({ length: Math.min(size, items.length) }, async () => {
+    while (!failure && index < items.length) {
+      const item = items[index];
+      index += 1;
+      try { await worker(item); } catch (err) { failure = failure ?? err; }
+    }
+  });
+  await Promise.all(runners);
+  if (failure) throw failure;
 }
 
 function Chips<T extends string | number>({ label, options, value, onPick, disabled }: { label: string; options: { value: T; text: string }[]; value?: T; onPick: (value: T) => void; disabled?: boolean }) {
@@ -148,6 +250,16 @@ function Field({ label, children, hint }: { label: string; children: React.React
   );
 }
 
+function Group({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
+  return (
+    <div className="space-y-1 text-sm">
+      <span className="block text-muted-foreground">{label}</span>
+      {children}
+      {hint && <span className="block text-xs text-muted-foreground">{hint}</span>}
+    </div>
+  );
+}
+
 export function CloneWizard() {
   const [ready, setReady] = useState(false);
   const [p, setP] = useState<Project>(EMPTY);
@@ -158,6 +270,12 @@ export function CloneWizard() {
   const [clips, setClips] = useState<Record<string, { url: string; name: string; file: File }>>({});
   const [batch, setBatch] = useState<{ done: number; total: number } | null>(null);
   const [assembling, setAssembling] = useState(false);
+  const [render, setRender] = useState<{ enabled: boolean } | null>(null);
+  const [auto, setAuto] = useState<{ label: string; done: number; total: number } | null>(null);
+  const [genBusy, setGenBusy] = useState<Record<string, boolean>>({});
+  const [canResume, setCanResume] = useState(false);
+  const stopRef = useRef(false);
+  const projRef = useRef<Project>(EMPTY);
   const [built, setBuilt] = useState<Record<number, Built>>({});
   const [imgs, setImgs] = useState<Record<string, string>>({});
   const [now, setNow] = useState(() => Date.now());
@@ -177,20 +295,32 @@ export function CloneWizard() {
     return () => clearInterval(id);
   }, [busy, tasks]);
 
+  useEffect(() => { projRef.current = p; }, [p]);
+  useEffect(() => {
+    if (!ready) return;
+    fetch(`${RENDER}/status`).then((r) => (r.ok ? r.json() : null)).then((data) => { setRender(data?.enabled === true ? { enabled: true } : null); if (data?.enabled === true) setP((cur) => (cur.keyword.trim() ? cur : { ...cur, keyword: "QUERO" })); }).catch(() => setRender(null));
+  }, [ready]);
+  // Depois de atualizar a página, traz de volta o que já foi gerado e salvo.
+  useEffect(() => {
+    if (!ready) return;
+    const entries = Object.entries(p.gen);
+    setImgs((current) => ({ ...Object.fromEntries(entries.filter(([, v]) => v.image).map(([k, v]) => [k, `${RENDER}/${v.image}/file`])), ...current }));
+    entries.filter(([key, v]) => v.video && !clips[key]).forEach(([key, v]) => {
+      const [vi, si] = key.split("-").map(Number);
+      void fetch(`${RENDER}/${v.video}/file`).then((r) => (r.ok ? r.blob() : null)).then((blob) => {
+        if (!blob) return;
+        const file = new File([blob], fileName(vi, si, "x.mp4"), { type: "video/mp4" });
+        setClips((current) => (current[key] ? current : { ...current, [key]: { url: URL.createObjectURL(blob), name: file.name, file } }));
+      }).catch(() => undefined);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready]);
+
   const patch = (change: Partial<Project>) => setP((current) => ({ ...current, ...change }));
   const keywordOrDefault = p.keyword.trim() || "PALAVRA";
 
   /** The three spoken lines of video number `vi`, with the CTA that closes the last scene. */
-  const linesFor = useCallback((vi: number): string[] => {
-    const kw = p.keyword.trim() || "PALAVRA";
-    if (p.copyMode === "mix") {
-      const pick = mixPick(p.mix, vi);
-      return [pick.hook.text, pick.body.text, pick.cta.text.replace("{KEYWORD}", kw)];
-    }
-    const lines = p.scenes.map((scene) => scene.line);
-    if (lines.length) lines[lines.length - 1] = `${lines[lines.length - 1]} ${p.cta.replace("{KEYWORD}", kw)}`.trim();
-    return lines;
-  }, [p.copyMode, p.mix, p.scenes, p.keyword, p.cta]);
+  const linesFor = useCallback((vi: number): string[] => linesOf(p, vi), [p]);
 
   const startTask = (label: string) => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -205,34 +335,8 @@ export function CloneWizard() {
     setBusy(stage);
     const taskId = startTask(label);
     try {
-      const response = await fetch("/api/multiplier/clone/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          stage,
-          reference: p.reference,
-          notes: p.notes,
-          product: p.product,
-          keyword: p.keyword,
-          cta: p.cta,
-          avatar_mode: p.avatarMode,
-          avatars: p.avatars.filter((a) => a.name.trim()).map(({ name, look }) => ({ name, look })),
-          count: p.count,
-          scenes: p.scenes,
-          variations: p.variations,
-          ...(p.copyMode === "mix" && (stage === "images" || stage === "videos") ? { lines: p.variations.map((_, i) => linesFor(i)) } : {}),
-        }),
-      });
-      const data = await response.json().catch(() => null);
-      const valid = stage === "mix" ? Array.isArray(data?.hooks) && Array.isArray(data?.bodies) && Array.isArray(data?.ctas) : Array.isArray(data?.items);
-      if (!response.ok || !valid) throw new Error(ptError(data?.detail));
-      setP((current) => {
-        if (stage === "scenes") return { ...current, scenes: data.items, mix: NO_MIX, variations: [], images: [], videos: [], approved: {} };
-        if (stage === "mix") return { ...current, mix: { hooks: data.hooks, bodies: data.bodies, ctas: data.ctas }, videos: [] };
-        if (stage === "variations") return { ...current, variations: data.items, images: [], videos: [], approved: {} };
-        if (stage === "images") return { ...current, images: data.items, videos: [], approved: {} };
-        return { ...current, videos: data.items };
-      });
+      const data = await callStage(stage, p);
+      setP((current) => applyStage(current, stage, data));
       if (stage === "scenes" || stage === "variations" || stage === "images") setImgs({});
       endTask(taskId, "done");
     } catch (err) {
@@ -241,7 +345,7 @@ export function CloneWizard() {
     } finally {
       setBusy(null);
     }
-  }, [p, linesFor]);
+  }, [p]);
 
   async function readReference(file: File) {
     if (!file.type.startsWith("video/")) { setError("Envie um arquivo de vídeo (mp4, mov ou webm)."); return; }
@@ -326,24 +430,23 @@ export function CloneWizard() {
     URL.revokeObjectURL(url);
   }
 
-  /** Junta as 3 cenas de um vídeo no servidor (mesmo motor do Multiplicador). */
-  const assemble = useCallback(async (vi: number) => {
-    const files = Array.from({ length: SCENES }, (_, si) => clips[`${vi}-${si}`]?.file);
-    if (files.some((file) => !file)) return;
+  /** Junta as 3 cenas de um vídeo no servidor (mesmo motor do Multiplicador). Devolve o id da montagem. */
+  const assembleWith = useCallback(async (vi: number, files: File[], quiet = false): Promise<string | null> => {
     setError(null);
     setBuilt((current) => ({ ...current, [vi]: { state: "running" } }));
     setAssembling(true);
-    const taskId = startTask(`Montando o vídeo ${pad(vi + 1)}`);
+    const taskId = quiet ? null : startTask(`Montando o vídeo ${pad(vi + 1)}`);
     const fail = (note: string) => {
       setBuilt((current) => ({ ...current, [vi]: { state: "error", note } }));
-      endTask(taskId, "error", "Falhou. Veja o aviso no vídeo.");
+      if (taskId) endTask(taskId, "error", "Falhou. Veja o aviso no vídeo.");
+      return null;
     };
     try {
       const form = new FormData();
       form.append("aspect", "9:16");
-      form.append("hooks", files[0] as File);
-      form.append("bodies", files[1] as File);
-      form.append("ctas", files[2] as File);
+      form.append("hooks", files[0]);
+      form.append("bodies", files[1]);
+      form.append("ctas", files[2]);
       const created = await fetch("/api/multiplier/jobs", { method: "POST", body: form });
       const job = await created.json().catch(() => null);
       if (!created.ok || !job?.id) {
@@ -354,22 +457,29 @@ export function CloneWizard() {
         return fail("Não foi possível iniciar a montagem. Tente de novo.");
       }
       for (let attempt = 0; attempt < 300; attempt += 1) {
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        await new Promise((resolve) => setTimeout(resolve, ASSEMBLE_POLL_MS));
         const poll = await fetch(`/api/multiplier/jobs/${job.id}`).then((r) => r.json()).catch(() => null);
         if (poll?.status === "completed") {
           setBuilt((current) => ({ ...current, [vi]: { state: "done", jobId: job.id } }));
-          endTask(taskId, "done");
-          return;
+          setP((current) => ({ ...current, final: { ...current.final, [vi]: job.id } }));
+          if (taskId) endTask(taskId, "done");
+          return job.id as string;
         }
         if (poll?.status === "error") return fail("Não foi possível juntar as cenas. Confira se os vídeos abrem normalmente.");
       }
-      fail("A montagem demorou demais. Veja em Multiplicador se ela terminou.");
+      return fail("A montagem demorou demais. Veja em Multiplicador se ela terminou.");
     } catch {
-      fail("Não foi possível montar agora. Verifique a conexão e tente de novo.");
+      return fail("Não foi possível montar agora. Verifique a conexão e tente de novo.");
     } finally {
       setAssembling(false);
     }
-  }, [clips]);
+  }, []);
+
+  const assemble = useCallback(async (vi: number) => {
+    const files = Array.from({ length: SCENES }, (_, si) => clips[`${vi}-${si}`]?.file);
+    if (files.some((file) => !file)) return;
+    await assembleWith(vi, files as File[]);
+  }, [clips, assembleWith]);
 
   async function assembleAll() {
     const todo = p.variations.map((_, vi) => vi).filter((vi) => built[vi]?.state !== "done" && Array.from({ length: SCENES }, (_, si) => clips[`${vi}-${si}`]).every(Boolean));
@@ -380,10 +490,155 @@ export function CloneWizard() {
     setBatch(null);
   }
 
+  const fileOf = async (id: string, name: string, type: string) => {
+    const blob = await fetch(`${RENDER}/${id}/file`).then((r) => (r.ok ? r.blob() : Promise.reject(new Error("Não foi possível baixar a cena gerada."))));
+    return { blob, file: new File([blob], name, { type }) };
+  };
+
+  /** Gera (e guarda) a imagem de uma cena dentro da ferramenta. */
+  const genImage = useCallback(async (vi: number, si: number, proj: Project = projRef.current) => {
+    const key = `${vi}-${si}`;
+    const prompt = proj.images[vi]?.prompts[si];
+    if (!prompt) return;
+    const id = await renderImage(prompt);
+    setImgs((current) => ({ ...current, [key]: `${RENDER}/${id}/file` }));
+    setP((current) => ({ ...current, gen: { ...current.gen, [key]: { image: id } }, approved: { ...current.approved, [key]: true }, final: {} }));
+  }, []);
+
+  /** Anima uma cena (imagem aprovada + prompt) dentro da ferramenta e guarda o vídeo. */
+  const genVideo = useCallback(async (vi: number, si: number, proj: Project = projRef.current): Promise<File | null> => {
+    const key = `${vi}-${si}`;
+    const prompt = proj.videos[vi]?.prompts[si];
+    if (!prompt) return null;
+    const id = await renderVideo(prompt, proj.gen[key]?.image, () => stopRef.current);
+    const { blob, file } = await fileOf(id, fileName(vi, si, "x.mp4"), "video/mp4");
+    setClips((current) => { if (current[key]) URL.revokeObjectURL(current[key].url); return { ...current, [key]: { url: URL.createObjectURL(blob), name: file.name, file } }; });
+    setP((current) => ({ ...current, gen: { ...current.gen, [key]: { ...current.gen[key], video: id } }, final: {} }));
+    return file;
+  }, []);
+
+  async function genOne(kind: "image" | "video", vi: number, si: number) {
+    const key = `${kind}-${vi}-${si}`;
+    setError(null);
+    setGenBusy((current) => ({ ...current, [key]: true }));
+    stopRef.current = false;
+    const taskId = startTask(kind === "image" ? `Gerando a imagem da cena ${si + 1}` : `Animando a cena ${si + 1}`);
+    try {
+      if (kind === "image") await genImage(vi, si);
+      else await genVideo(vi, si);
+      endTask(taskId, "done");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível gerar agora. Tente de novo.");
+      endTask(taskId, "error", "Falhou. Veja o aviso acima.");
+    } finally {
+      setGenBusy((current) => ({ ...current, [key]: false }));
+    }
+  }
+
+  /** Do vídeo de referência até os vídeos finais montados, sem parar no meio. Pode ser retomado. */
+  async function runAll() {
+    stopRef.current = false;
+    setError(null);
+    setCanResume(false);
+    let proj = projRef.current;
+    if (proj.reference.trim().length < 20 && proj.notes.trim().length < 20) { setError(ptError("Send the reference")); return; }
+    if (!proj.keyword.trim()) { setError("Escolha a palavra-chave da CTA antes de começar."); return; }
+    const taskId = startTask("Criando seus vídeos automaticamente");
+    let doneW = 0;
+    const missing = (cur: Project) => {
+      const n = cur.variations.length || cur.count;
+      const keys = Array.from({ length: n * SCENES }, (_, i) => `${Math.floor(i / SCENES)}-${i % SCENES}`);
+      return (cur.scenes.length === SCENES ? 0 : AUTO_WEIGHT.text) + (cur.copyMode === "mix" && !isMixReady(cur.mix) ? AUTO_WEIGHT.text : 0)
+        + (cur.variations.length ? 0 : AUTO_WEIGHT.text) + (cur.images.length === cur.variations.length && cur.images.length ? 0 : AUTO_WEIGHT.text)
+        + keys.filter((k) => !cur.gen[k]?.image).length * AUTO_WEIGHT.image + (cur.videos.length === cur.variations.length && cur.videos.length ? 0 : AUTO_WEIGHT.text)
+        + keys.filter((k) => !cur.gen[k]?.video).length * AUTO_WEIGHT.video + Array.from({ length: n }, (_, vi) => vi).filter((vi) => !cur.final[vi]).length * AUTO_WEIGHT.final;
+    };
+    const mark = (label: string, cur: Project, weight = 0) => { doneW += weight; setAuto({ label, done: doneW, total: doneW + missing(cur) }); };
+    const sync = () => new Promise<void>((resolve) => setTimeout(resolve, 80));
+    const check = () => { if (stopRef.current) throw new Error("STOP"); };
+    const text = async (stage: Stage, label: string, step: number) => {
+      check();
+      mark(label, proj);
+      patch({ step });
+      const data = await callStage(stage, proj);
+      proj = { ...applyStage(proj, stage, data), step };
+      projRef.current = proj;
+      setP(proj);
+      if (stage !== "videos" && stage !== "mix") setImgs({});
+      mark(label, proj, AUTO_WEIGHT.text);
+    };
+    try {
+      if (proj.scenes.length !== SCENES) await text("scenes", "Entendendo o vídeo de referência", 1);
+      if (proj.copyMode === "mix" && !isMixReady(proj.mix)) await text("mix", "Escrevendo ganchos, corpos e CTAs diferentes", 1);
+      if (!proj.variations.length) await text("variations", "Planejando as variações", 2);
+      if (proj.images.length !== proj.variations.length || !proj.images.length) await text("images", "Escrevendo os prompts das imagens", 3);
+      const n = proj.variations.length;
+      const all = Array.from({ length: n * SCENES }, (_, i) => ({ vi: Math.floor(i / SCENES), si: i % SCENES }));
+
+      patch({ step: 3 });
+      let imageCount = 0;
+      await pool(all.filter(({ vi, si }) => !proj.gen[`${vi}-${si}`]?.image), 3, async ({ vi, si }) => {
+        check();
+        mark(`Criando as imagens (${imageCount + 1} de ${all.length})`, projRef.current);
+        await genImage(vi, si, proj);
+        imageCount += 1;
+        mark(`Criando as imagens (${imageCount} de ${all.length})`, projRef.current, AUTO_WEIGHT.image);
+      });
+      await sync();
+      patch({ ctaLocked: true, step: 4 });
+      proj = { ...projRef.current, ctaLocked: true, step: 4 };
+      projRef.current = proj;
+      if (proj.videos.length !== n || !proj.videos.length) await text("videos", "Escrevendo os prompts das animações", 5);
+      await sync();
+      proj = projRef.current;
+
+      patch({ step: 5 });
+      let videoCount = 0;
+      const files: Record<string, File> = {};
+      for (const [key, clip] of Object.entries(clips)) files[key] = clip.file;
+      await pool(all.filter(({ vi, si }) => !proj.gen[`${vi}-${si}`]?.video), 3, async ({ vi, si }) => {
+        check();
+        mark(`Animando as cenas (${videoCount + 1} de ${all.length}). Pode levar alguns minutos.`, projRef.current);
+        const file = await genVideo(vi, si, projRef.current);
+        if (file) files[`${vi}-${si}`] = file;
+        videoCount += 1;
+        mark(`Animando as cenas (${videoCount} de ${all.length})`, projRef.current, AUTO_WEIGHT.video);
+      });
+      await sync();
+      proj = projRef.current;
+
+      patch({ step: 7 });
+      for (let vi = 0; vi < n; vi += 1) {
+        if (proj.final[vi]) continue;
+        check();
+        mark(`Montando o vídeo ${vi + 1} de ${n}`, projRef.current);
+        const trio = await Promise.all(Array.from({ length: SCENES }, async (_, si) => {
+          const key = `${vi}-${si}`;
+          if (files[key]) return files[key];
+          const id = projRef.current.gen[key]?.video;
+          if (!id) throw new Error("Falta uma cena deste vídeo. Gere a cena e tente de novo.");
+          return (await fileOf(id, fileName(vi, si, "x.mp4"), "video/mp4")).file;
+        }));
+        const job = await assembleWith(vi, trio, true);
+        if (!job) throw new Error("Não foi possível montar o vídeo " + pad(vi + 1) + ". Veja o aviso abaixo e tente de novo.");
+        mark(`Montando o vídeo ${vi + 1} de ${n}`, projRef.current, AUTO_WEIGHT.final);
+      }
+      endTask(taskId, "done");
+    } catch (err) {
+      const stopped = err instanceof Error && err.message === "STOP";
+      setCanResume(true);
+      if (!stopped) setError(err instanceof Error ? err.message : "Não foi possível continuar. Tente de novo.");
+      endTask(taskId, "error", stopped ? "Parado. Clique em continuar para seguir de onde parou." : "Parou aqui. Clique em continuar para seguir de onde parou.");
+    } finally {
+      setAuto(null);
+    }
+  }
+
   function reset() {
     Object.values(clips).forEach((clip) => URL.revokeObjectURL(clip.url));
     Object.values(imgs).forEach((url) => URL.revokeObjectURL(url));
     setClips({});
+    setGenBusy({});
     setBuilt({});
     setImgs({});
     setTasks([]);
@@ -398,13 +653,14 @@ export function CloneWizard() {
   const copyReady = p.copyMode === "same" || mixReady;
   const ctaValid = p.copyMode === "mix" ? mixReady : p.cta.includes("{KEYWORD}");
   const canNext = [p.scenes.length === SCENES && copyReady, p.variations.length > 0, allApproved, p.ctaLocked, p.videos.length > 0, true, false][p.step - 1];
-  const working = busy !== null;
+  const working = busy !== null || auto !== null;
   const runningTask = tasks.find((task) => task.state === "running");
   const steps = ["Preparando tudo…", "Trabalhando nisso…", "Quase lá…"];
   const secs = runningTask ? Math.max(0, (now - runningTask.start) / 1000) : 0;
   // Uma só barra: sobe rápido no começo e desacelera, nunca chega a 100% antes de terminar.
   const eased = 95 * (1 - Math.exp(-secs / (assembling ? 60 : 18)));
-  const pct = batch ? Math.min(98, ((batch.done + eased / 100) / batch.total) * 100) : eased;
+  const autoPct = auto ? Math.min(99, (auto.done / Math.max(1, auto.total)) * 100) : 0;
+  const pct = auto ? autoPct : batch ? Math.min(98, ((batch.done + eased / 100) / batch.total) * 100) : eased;
 
   const copyButton = (id: string, value: string, label = "Copiar") => (
     <Button key={id} type="button" size="sm" variant="outline" onClick={() => copy(id, value)}>
@@ -466,23 +722,29 @@ export function CloneWizard() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
+      {canResume && !auto && render?.enabled && (
+        <Button type="button" variant="outline" onClick={() => void runAll()}>Continuar de onde parou</Button>
+      )}
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_260px]">
         <section className="space-y-4 rounded-[18px] border border-border bg-card p-5">
           <p className="text-sm font-medium text-primary">Passo {p.step} de {STEPS.length}: <span className="font-normal text-foreground">{HINTS[p.step - 1]}</span></p>
-          {runningTask && (
+          {(auto || runningTask) && (
             <div role="status" aria-live="polite" className="space-y-1.5 rounded-[14px] border border-primary/40 bg-primary/10 p-3">
               <div className="flex items-center justify-between gap-2 text-sm">
-                <span className="font-medium">{runningTask.label}{batch ? ` (${Math.min(batch.done + 1, batch.total)} de ${batch.total})` : ""}</span>
+                <span className="font-medium">{auto ? auto.label : runningTask?.label}{!auto && batch ? ` (${Math.min(batch.done + 1, batch.total)} de ${batch.total})` : ""}</span>
                 <span className="tabular-nums text-xs text-muted-foreground">{Math.round(pct)}%</span>
               </div>
               <div role="progressbar" aria-label="Progresso" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)} className="h-2 overflow-hidden rounded-full bg-border">
                 <div className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#7B3FE4] transition-[width] duration-700" style={{ width: `${pct}%` }} />
               </div>
-              <p className="text-xs text-muted-foreground">
-                {steps[Math.min(steps.length - 1, Math.floor(secs / 12))]} Pode esperar aqui, não precisa fazer nada.
-                {assembling ? " Montar o vídeo leva de 1 a 3 minutos." : ""}
-              </p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs text-muted-foreground">
+                  {auto ? "Estamos fazendo tudo por você. Pode esperar aqui, não precisa fazer nada." : `${steps[Math.min(steps.length - 1, Math.floor(secs / 12))]} Pode esperar aqui, não precisa fazer nada.`}
+                  {assembling ? " Montar o vídeo leva de 1 a 3 minutos." : ""}
+                </p>
+                {auto && <button type="button" onClick={() => { stopRef.current = true; }} className="shrink-0 text-xs underline text-muted-foreground">Parar</button>}
+              </div>
             </div>
           )}
           {p.step === 1 && (
@@ -503,6 +765,21 @@ export function CloneWizard() {
               <Field label="Notas sobre o vídeo (opcional)" hint="Ritmo, estilo, o que funcionou nele. A IA lê a transcrição e as notas, não as imagens do vídeo.">
                 <textarea value={p.notes} onChange={(event) => patch({ notes: event.target.value })} rows={2} maxLength={600} className={inputClass} />
               </Field>
+              {render?.enabled && (
+                <div className="space-y-3 rounded-[14px] border border-primary/40 bg-primary/10 p-4">
+                  <p className="font-medium">Criar tudo automaticamente</p>
+                  <p className="text-xs text-muted-foreground">Escolha as opções e clique. A ferramenta escreve, gera as imagens, anima as cenas e monta os vídeos prontos.</p>
+                  <Group label="Quantos vídeos">
+                    <Chips label="Quantos vídeos" value={p.count} onPick={(count) => patch({ count })} options={[1, 2, 3].map((n) => ({ value: n, text: String(n) }))} />
+                  </Group>
+                  <Group label="Palavra-chave da CTA">
+                    <Chips label="Palavra-chave" value={p.keyword} onPick={(keyword) => patch({ keyword })} options={KEYWORDS.map((k) => ({ value: k, text: k }))} />
+                  </Group>
+                  <Button type="button" onClick={() => void runAll()} disabled={working || (p.reference.trim().length < 20 && p.notes.trim().length < 20) || !p.keyword.trim()}>
+                    {Object.keys(p.gen).length > 0 || p.scenes.length > 0 ? "Continuar de onde parou" : "Criar meus vídeos automaticamente"}
+                  </Button>
+                </div>
+              )}
               <div>{generateButton("scenes", "Separar em cenas", p.scenes.length > 0, "Separando as cenas da referência", p.reference.trim().length < 20 && p.notes.trim().length < 20)}</div>
               {p.scenes.length > 0 && (
                 <div className="space-y-3">
@@ -583,9 +860,9 @@ export function CloneWizard() {
                 </div>
               )}
               <div className="flex flex-wrap items-end gap-3">
-                <Field label="Quantos vídeos">
+                <Group label="Quantos vídeos">
                   <Chips label="Quantos vídeos" value={p.count} onPick={(count) => patch({ count })} options={[1, 2, 3, 4, 5].map((n) => ({ value: n, text: String(n) }))} />
-                </Field>
+                </Group>
                 {generateButton("variations", "Gerar variações", p.variations.length > 0, "Planejando as variações", p.avatarMode === "own" && !p.avatars.some((a) => a.name.trim()))}
               </div>
               {p.variations.length > 0 && (
@@ -614,6 +891,9 @@ export function CloneWizard() {
               <p className="text-sm text-muted-foreground">
                 Copie cada prompt para o Flow (Nano Banana) e gere a imagem. Confira rosto, cenário e ação e aprove só as boas. A imagem aprovada é a base da animação. Não avance com uma imagem que você não aprovou.
               </p>
+              <details open={!render?.enabled} className="rounded-[14px] border border-border p-3 text-sm">
+                <summary className="cursor-pointer text-muted-foreground">Prefere gerar no Flow, sem gastar créditos?</summary>
+                <div className="mt-3">
               <div className="space-y-2 rounded-[14px] border border-[#5BD69A]/40 bg-[#5BD69A]/10 p-3 text-sm">
                 <p className="font-medium">Sem gastar créditos: use o modo de baixa prioridade do Flow</p>
                 <p className="text-xs text-muted-foreground">Entre no Flow com a sua conta, escolha a opção de baixa prioridade (lower priority) do modelo, cole o prompt e gere. Demora um pouco mais, mas não usa créditos.</p>
@@ -621,6 +901,8 @@ export function CloneWizard() {
                   Abrir o Flow <ExternalLink className="size-3.5" />
                 </a>
               </div>
+                </div>
+              </details>
               <div className="flex flex-wrap items-center gap-3">
                 {generateButton("images", "Gerar prompts de imagem", p.images.length > 0, "Criando os prompts de imagem")}
                 {p.images.length > 0 && <span className="text-sm text-muted-foreground tabular-nums">{approvedCount} de {total} aprovadas</span>}
@@ -647,6 +929,12 @@ export function CloneWizard() {
                               <input type="file" accept="image/*" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) attach(key, file, "image"); }} />
                             </label>
                           )}
+                          {render?.enabled && (
+                            <Button type="button" size="sm" variant="outline" disabled={working || genBusy[`image-${key}`]} onClick={() => void genOne("image", vi, si)}>
+                              {genBusy[`image-${key}`] ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+                              {genBusy[`image-${key}`] ? "Gerando…" : imgs[key] ? "Gerar outra imagem" : "Gerar a imagem aqui"}
+                            </Button>
+                          )}
                           <label className="flex items-center gap-2 text-sm">
                             <input type="checkbox" checked={Boolean(p.approved[key])} onChange={(event) => toggle("approved", key, event.target.checked)} className="size-4" />
                             Aprovada
@@ -672,20 +960,20 @@ export function CloneWizard() {
                 <Field label="Produto (opcional)">
                   <input value={p.product} onChange={(event) => patch({ product: event.target.value })} disabled={p.ctaLocked} maxLength={120} className={inputClass} />
                 </Field>
-                <Field label="Palavra-chave">
+                <Group label="Palavra-chave">
                   <div className="space-y-2">
                     <Chips label="Palavras sugeridas" disabled={p.ctaLocked} value={p.keyword} onPick={(keyword) => patch({ keyword })} options={KEYWORDS.map((k) => ({ value: k, text: k }))} />
                     <input value={p.keyword} onChange={(event) => patch({ keyword: event.target.value.toUpperCase() })} disabled={p.ctaLocked} maxLength={30} placeholder="LIMON" aria-label="Ou escreva a sua palavra" className={inputClass} />
                   </div>
-                </Field>
+                </Group>
               </div>
               {p.copyMode === "same" && (
-                <Field label="Frase da CTA" hint="Use {KEYWORD} onde a palavra-chave deve aparecer.">
+                <Group label="Frase da CTA" hint="Use {KEYWORD} onde a palavra-chave deve aparecer.">
                   <div className="space-y-2">
                     <Chips label="Frases prontas" disabled={p.ctaLocked} value={p.cta} onPick={(cta) => patch({ cta })} options={CTA_PRESETS.map((c) => ({ value: c, text: c.replace("{KEYWORD}", "…") }))} />
                     <input value={p.cta} onChange={(event) => patch({ cta: event.target.value })} disabled={p.ctaLocked} maxLength={200} aria-label="Ou escreva a sua frase" className={inputClass} />
                   </div>
-                </Field>
+                </Group>
               )}
               <div className="space-y-2 rounded-[14px] border border-border p-3 text-sm">
                 <p className="text-xs text-muted-foreground">{p.copyMode === "mix" ? "Fala final de cada vídeo" : "Fala final, igual em todos os vídeos"}</p>
@@ -709,6 +997,9 @@ export function CloneWizard() {
               <p className="text-sm text-muted-foreground">
                 As imagens aprovadas viram cenas animadas. No Flow, use a imagem aprovada como primeiro quadro, no modo de menor prioridade (lower priority), cole o prompt e gere. Assista e confira a fala, os movimentos e a continuidade antes de baixar.
               </p>
+              <details open={!render?.enabled} className="rounded-[14px] border border-border p-3 text-sm">
+                <summary className="cursor-pointer text-muted-foreground">Prefere gerar no Flow, sem gastar créditos?</summary>
+                <div className="mt-3">
               <div className="space-y-2 rounded-[14px] border border-[#5BD69A]/40 bg-[#5BD69A]/10 p-3 text-sm">
                 <p className="font-medium">Sem gastar créditos: use o modo de baixa prioridade do Flow</p>
                 <p className="text-xs text-muted-foreground">No Flow, escolha a opção de baixa prioridade (lower priority) do modelo, use a imagem aprovada como primeiro quadro e cole o prompt. Demora um pouco mais, mas não usa créditos. Depois envie o vídeo aqui.</p>
@@ -716,6 +1007,8 @@ export function CloneWizard() {
                   Abrir o Flow <ExternalLink className="size-3.5" />
                 </a>
               </div>
+                </div>
+              </details>
               <div className="flex flex-wrap gap-2">{generateButton("videos", "Gerar prompts de animação", p.videos.length > 0, "Criando os prompts de animação", !p.ctaLocked)}</div>
               {p.videos.map((set, vi) => (
                 <div key={vi} className="space-y-3 rounded-[14px] border border-border p-4">
@@ -734,6 +1027,12 @@ export function CloneWizard() {
                         </div>
                         <p className="rounded-lg bg-muted/40 p-3 text-sm">{prompt}</p>
                         {si === SCENES - 1 && <p className="text-xs text-[#F5B454]">Revise a CTA e a palavra-chave na cena final.</p>}
+                        {render?.enabled && (
+                          <Button type="button" size="sm" variant="outline" disabled={working || genBusy[`video-${key}`]} onClick={() => void genOne("video", vi, si)}>
+                            {genBusy[`video-${key}`] ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+                            {genBusy[`video-${key}`] ? "Animando… leva alguns minutos" : clip ? "Gerar outra vez" : "Gerar a cena aqui"}
+                          </Button>
+                        )}
                         {clip ? (
                           <div className="flex items-start gap-3">
                             <video src={clip.url} controls playsInline className="h-40 rounded-lg bg-black" />
@@ -808,6 +1107,8 @@ export function CloneWizard() {
               {p.variations.map((v, vi) => {
                 const complete = Array.from({ length: SCENES }, (_, si) => clips[`${vi}-${si}`]).every(Boolean);
                 const b = built[vi];
+                const jobId = b?.jobId ?? p.final[vi];
+                const isDone = Boolean(jobId) && b?.state !== "running" && b?.state !== "error";
                 return (
                   <div key={vi} className="space-y-2 rounded-[14px] border border-border p-4">
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -816,16 +1117,16 @@ export function CloneWizard() {
                         <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Loader2 className="size-3.5 animate-spin" /> Montando…</span>
                       ) : (
                         <Button type="button" size="sm" variant="outline" onClick={() => void assemble(vi)} disabled={!complete}>
-                          {b?.state === "done" ? "Montar de novo" : "Montar este vídeo"}
+                          {isDone ? "Montar de novo" : "Montar este vídeo"}
                         </Button>
                       )}
                     </div>
                     {!complete && <p className="text-xs text-[#F5B454]">Faltam cenas: envie as 3 na etapa 5.</p>}
                     {b?.state === "error" && <p role="alert" className="text-xs text-[#F0466B]">{b.note}</p>}
-                    {b?.state === "done" && b.jobId && (
+                    {isDone && jobId && (
                       <div className="space-y-2">
-                        <video controls src={`/api/multiplier/jobs/${b.jobId}/outputs/1`} className="max-h-80 rounded-[12px] border border-border" />
-                        <a href={`/api/multiplier/jobs/${b.jobId}/outputs/1?download=true`} className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-1.5 text-sm hover:text-foreground">
+                        <video controls src={`/api/multiplier/jobs/${jobId}/outputs/1`} className="max-h-80 rounded-[12px] border border-border" />
+                        <a href={`/api/multiplier/jobs/${jobId}/outputs/1?download=true`} className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-1.5 text-sm hover:text-foreground">
                           <Download className="size-3.5" /> Baixar vídeo {pad(vi + 1)}
                         </a>
                       </div>

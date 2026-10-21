@@ -218,3 +218,58 @@ it("lets the member pick count, keyword and CTA by clicking", async () => {
   await user.click(screen.getByRole("radio", { name: /Comente … que eu te mando o link/ }));
   expect(screen.getByText(/Comente EU QUERO que eu te mando o link/)).toBeInTheDocument();
 });
+
+function mockAuto(opts: { failVideo?: boolean } = {}) {
+  const log: string[] = [];
+  vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: () => "blob:x", revokeObjectURL: () => {} }));
+  let n = 0;
+  vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+    const u = String(url);
+    const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status });
+    if (u.endsWith("/clone/render/status")) return json({ enabled: true });
+    if (u.includes("/clone/generate")) {
+      const body = JSON.parse(String(init?.body));
+      log.push(`stage:${body.stage}`);
+      return json({ items: { scenes, variations, images: prompts, videos: prompts }[body.stage as "scenes"]?.slice(0, body.stage === "scenes" ? 3 : 1) });
+    }
+    if (u.endsWith("/clone/render/image")) { log.push("image"); return json({ id: `img${n++}`, status: "ready" }); }
+    if (u.endsWith("/clone/render/video")) {
+      log.push("video");
+      if (opts.failVideo) return json({ detail: "Daily scene limit reached. Try again tomorrow" }, 429);
+      return json({ id: `vid${n++}`, status: "processing" });
+    }
+    if (/\/clone\/render\/vid\d+$/.test(u)) return json({ status: "ready" });
+    if (/\/clone\/render\/(img|vid)\d+\/file$/.test(u)) return new Response(new Blob(["x"]), { status: 200 });
+    if (u.endsWith("/api/multiplier/jobs") && init?.method === "POST") { log.push("assemble"); return json({ id: "job9" }); }
+    if (u.includes("/api/multiplier/jobs/job9")) return json({ status: "completed" });
+    return json({ detail: "nope" }, 500);
+  }));
+  return log;
+}
+
+it("creates the videos automatically from the reference to the assembled video", async () => {
+  const log = mockAuto();
+  const user = userEvent.setup();
+  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ step: 1, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora.", count: 1 }));
+  render(<CloneWizard />);
+  const start = await screen.findByRole("button", { name: "Criar meus vídeos automaticamente" });
+  expect(screen.getByRole("radio", { name: "QUERO" })).toHaveAttribute("aria-checked", "true"); // already chosen: one click is enough
+  await user.click(start);
+  const link = await screen.findByRole("link", { name: /Baixar vídeo 01/ }, { timeout: 8000 });
+  expect(link).toHaveAttribute("href", "/api/multiplier/jobs/job9/outputs/1?download=true");
+  expect(log.filter((x) => x === "image")).toHaveLength(3);
+  expect(log.filter((x) => x === "video")).toHaveLength(3);
+  expect(log.filter((x) => x === "assemble")).toHaveLength(1);
+  expect(log.filter((x) => x.startsWith("stage:"))).toEqual(["stage:scenes", "stage:variations", "stage:images", "stage:videos"]);
+  expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+}, 15000);
+
+it("stops with a clear message when the daily limit ends and can continue later", async () => {
+  mockAuto({ failVideo: true });
+  const user = userEvent.setup();
+  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ step: 1, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora.", count: 1, keyword: "QUERO" }));
+  render(<CloneWizard />);
+  await user.click(await screen.findByRole("button", { name: "Criar meus vídeos automaticamente" }));
+  expect(await screen.findByText("Você chegou ao limite de hoje. Tente de novo amanhã.", undefined, { timeout: 8000 })).toBeInTheDocument();
+  expect(await screen.findByRole("button", { name: "Continuar de onde parou" })).toBeEnabled();
+}, 15000);
