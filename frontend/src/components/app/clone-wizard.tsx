@@ -909,7 +909,7 @@ export function CloneWizard() {
     language: p.language,
     product: p.product || p.productInfo || p.productLook ? { name: p.product, info: p.productInfo, look: p.productLook } : undefined,
     sceneCount: p.sceneCount,
-    model: "Veo 3.1 - Lite [Lower Priority]",
+    model: "Veo 3.1 - Lite",
     videos: p.variations.map((variation, vi) => ({
       title: variation.title,
       scenes: Array.from({ length: p.sceneCount }, (_, si) => ({
