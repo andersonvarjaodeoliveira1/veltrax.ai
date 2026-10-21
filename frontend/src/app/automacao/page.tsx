@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, ClipboardCopy, Download, ImageIcon, Loader2, Sparkles, Trash2, X } from "lucide-react";
+import Link from "next/link";
+import { Check, ClipboardCopy, Download, Loader2, Sparkles, Trash2, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 
-type Status = "copy" | "production" | "ready";
+type Status = "copy" | "awaiting" | "ready";
 type Creative = {
   id: string;
   niche: string;
@@ -15,19 +16,16 @@ type Creative = {
   cta: string;
   button: string;
   status: Status;
-  progress: number;
-  stage: string;
+  prompt: string;
 };
-type TabKey = "criar" | "copys" | "imagens" | "esteira" | "prontos" | "ajustes";
+type TabKey = "criar" | "copys" | "flow" | "prontos" | "ajustes";
 
 const STORAGE_KEY = "gv-automacao-v1";
 const TONES = ["Direto e amigável", "Emocional", "Urgente", "Divertido"];
-const STAGES = ["Imagem", "Roteiro em vídeo", "Legenda", "Finalizando"];
 const TABS: { key: TabKey; label: string; hint: string }[] = [
   { key: "criar", label: "Criar", hint: "pedir criativos novos" },
   { key: "copys", label: "Copys", hint: "revisar e aprovar" },
-  { key: "imagens", label: "Imagens", hint: "imagens dos criativos" },
-  { key: "esteira", label: "Esteira", hint: "em produção" },
+  { key: "flow", label: "Flow", hint: "gerar os vídeos" },
   { key: "prontos", label: "Prontos", hint: "para baixar" },
   { key: "ajustes", label: "Ajustes", hint: "nichos e padrões" },
 ];
@@ -74,6 +72,8 @@ export default function AutomationPage() {
   const [error, setError] = useState<string | null>(null);
   const [newNiche, setNewNiche] = useState("");
   const [copied, setCopied] = useState<string | null>(null);
+  const [videos, setVideos] = useState<Record<string, { url: string; name: string }>>({});
+  const [promptBusy, setPromptBusy] = useState(false);
 
   useEffect(() => {
     const saved = load();
@@ -91,26 +91,9 @@ export default function AutomationPage() {
     } catch { /* storage unavailable */ }
   }, [ready, creatives, niches, tone]);
 
-  // Prototype only: advances items in the conveyor. Replace with the real generators later.
-  useEffect(() => {
-    if (!creatives.some((item) => item.status === "production")) return;
-    const id = setInterval(() => {
-      setCreatives((current) =>
-        current.map((item) => {
-          if (item.status !== "production") return item;
-          const progress = Math.min(100, item.progress + 4 + Math.random() * 8);
-          if (progress >= 100) return { ...item, progress: 100, status: "ready", stage: "Pronto" };
-          return { ...item, progress, stage: STAGES[Math.min(STAGES.length - 1, Math.floor(progress / 25))] };
-        }),
-      );
-    }, 700);
-    return () => clearInterval(id);
-  }, [creatives]);
-
   const counts = useMemo(() => ({
     copys: creatives.filter((item) => item.status === "copy").length,
-    imagens: creatives.filter((item) => item.status !== "copy").length,
-    esteira: creatives.filter((item) => item.status === "production").length,
+    flow: creatives.filter((item) => item.status === "awaiting").length,
     prontos: creatives.filter((item) => item.status === "ready").length,
   }), [creatives]);
 
@@ -139,8 +122,7 @@ export default function AutomationPage() {
           cta: cta.text,
           button: cta.button,
           status: "copy" as Status,
-          progress: 0,
-          stage: "Aguardando aprovação",
+          prompt: "",
         };
       });
       setCreatives((current) => [...made, ...current]);
@@ -155,7 +137,7 @@ export default function AutomationPage() {
   const update = (id: string, patch: Partial<Creative>) =>
     setCreatives((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
   const remove = (id: string) => setCreatives((current) => current.filter((item) => item.id !== id));
-  const approve = (id: string) => update(id, { status: "production", progress: 2, stage: STAGES[0] });
+  const approve = (id: string) => update(id, { status: "awaiting" });
 
   async function copyCaption(item: Creative) {
     try {
@@ -177,6 +159,53 @@ export default function AutomationPage() {
     URL.revokeObjectURL(url);
   }
 
+  async function generatePrompts() {
+    const targets = creatives.filter((item) => item.status === "awaiting" && !item.prompt.trim()).slice(0, 6);
+    if (!targets.length) return;
+    setError(null);
+    setPromptBusy(true);
+    try {
+      const response = await fetch("/api/multiplier/video-prompts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: targets.map((item) => ({ niche: item.niche, hook: item.hook, body: item.body, cta: item.cta })) }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !Array.isArray(data?.prompts)) throw new Error(ptError(data?.detail));
+      const prompts: string[] = data.prompts;
+      setCreatives((current) =>
+        current.map((item) => {
+          const position = targets.findIndex((target) => target.id === item.id);
+          return position >= 0 && prompts[position] ? { ...item, prompt: prompts[position] } : item;
+        }),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível gerar os prompts. Tente de novo.");
+    } finally {
+      setPromptBusy(false);
+    }
+  }
+
+  async function copyText(key: string, value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(key);
+      setTimeout(() => setCopied((current) => (current === key ? null : current)), 1800);
+    } catch {
+      setError("Não foi possível copiar. Selecione o texto e copie manualmente.");
+    }
+  }
+
+  function attachVideo(id: string, file: File) {
+    if (!file.type.startsWith("video/")) { setError("Envie um arquivo de vídeo (mp4, mov ou webm)."); return; }
+    setError(null);
+    setVideos((current) => {
+      if (current[id]) URL.revokeObjectURL(current[id].url);
+      return { ...current, [id]: { url: URL.createObjectURL(file), name: file.name } };
+    });
+    update(id, { status: "ready" });
+  }
+
   const list = (status: (item: Creative) => boolean) => creatives.filter(status);
   const empty = (text: string) => <p className="rounded-[18px] border border-dashed border-border p-6 text-sm text-muted-foreground">{text}</p>;
 
@@ -189,13 +218,13 @@ export default function AutomationPage() {
           <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground">BETA</span>
         </div>
         <p className="mt-1 text-sm text-muted-foreground">
-          Peça criativos novos, aprove os textos e acompanhe cada um até ficar pronto. Este é o molde para testar o fluxo.
+          Peça criativos novos, aprove os textos, gere os vídeos no Flow e organize tudo até ficar pronto.
         </p>
       </div>
 
       <Alert>
         <AlertDescription>
-          Protótipo: os textos (gancho, corpo e CTA) são gerados de verdade pela IA. A produção de imagem e vídeo na esteira ainda é uma simulação, para você testar o caminho. Nada aqui altera o resto do app.
+          Os textos e os prompts de vídeo são gerados pela IA. O vídeo é gerado por você no Flow, em lower priority, e enviado aqui. Para criar variações, baixe o vídeo e envie na aba Variações do Multiplicador. Os vídeos ficam só nesta página: se você atualizar, envie de novo.
         </AlertDescription>
       </Alert>
 
@@ -283,39 +312,57 @@ export default function AutomationPage() {
         </section>
       )}
 
-      {tab === "imagens" && (
-        <section>
-          {list((item) => item.status !== "copy").length === 0 ? empty("As imagens aparecem aqui depois que você aprovar um texto.") : (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-              {list((item) => item.status !== "copy").map((item) => (
-                <div key={item.id} className="space-y-1.5">
-                  <div className="flex aspect-[9/16] flex-col items-center justify-center gap-2 rounded-[14px] border border-dashed border-border bg-muted/40 p-3 text-center text-xs text-muted-foreground">
-                    <ImageIcon className="size-6" />
-                    <span className="line-clamp-4 text-foreground">{item.hook}</span>
-                    <span>Espaço da imagem</span>
+      {tab === "flow" && (
+        <section className="space-y-4">
+          <div className="rounded-[18px] border border-border bg-card p-4 text-sm">
+            <p className="font-medium">Como usar</p>
+            <ol className="mt-2 list-decimal space-y-1 pl-5 text-muted-foreground">
+              <li>Clique em <strong className="text-foreground">Gerar prompts</strong>. Cada criativo aprovado ganha um prompt de vídeo.</li>
+              <li>No Flow, escolha o modo de <strong className="text-foreground">menor prioridade (lower priority)</strong> e cole o prompt.</li>
+              <li>Gere, baixe o vídeo e envie aqui no criativo correspondente.</li>
+            </ol>
+          </div>
+          {list((item) => item.status === "awaiting").length === 0 ? empty("Nada esperando vídeo. Aprove um texto na aba Copys.") : (
+            <>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" disabled={promptBusy || !list((item) => item.status === "awaiting" && !item.prompt.trim()).length} onClick={generatePrompts}>
+                  {promptBusy ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+                  {promptBusy ? "Escrevendo os prompts…" : "Gerar prompts"}
+                </Button>
+                <Button size="sm" variant="outline" disabled={!list((item) => item.status === "awaiting" && !!item.prompt.trim()).length}
+                  onClick={() => copyText("all", list((item) => item.status === "awaiting" && !!item.prompt.trim()).map((item, index) => `${index + 1}. ${item.prompt}`).join("\n\n"))}>
+                  {copied === "all" ? <Check className="size-4" /> : <ClipboardCopy className="size-4" />}
+                  {copied === "all" ? "Copiado" : "Copiar todos os prompts"}
+                </Button>
+              </div>
+              {list((item) => item.status === "awaiting").map((item) => (
+                <div key={item.id} className="space-y-3 rounded-[18px] border border-border bg-card p-4">
+                  <p className="text-sm font-medium">{item.hook}</p>
+                  <label className="block space-y-1 text-sm">
+                    <span className="text-muted-foreground">Prompt para o Flow</span>
+                    <textarea value={item.prompt} rows={5} maxLength={1200} placeholder="Clique em Gerar prompts, ou escreva o seu."
+                      onChange={(event) => update(item.id, { prompt: event.target.value })}
+                      className="w-full rounded-lg border border-border bg-background px-3 py-2" />
+                  </label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button size="sm" variant="outline" disabled={!item.prompt.trim()} onClick={() => copyText(item.id, item.prompt)}>
+                      {copied === item.id ? <Check className="size-4" /> : <ClipboardCopy className="size-4" />}
+                      {copied === item.id ? "Copiado" : "Copiar prompt"}
+                    </Button>
+                    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted">
+                      <Upload className="size-4" /> Enviar vídeo gerado
+                      <input type="file" accept="video/*" hidden onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        event.target.value = "";
+                        if (file) attachVideo(item.id, file);
+                      }} />
+                    </label>
+                    <Button size="sm" variant="ghost" aria-label="Excluir" onClick={() => remove(item.id)}><Trash2 className="size-4" /></Button>
                   </div>
                 </div>
               ))}
-            </div>
+            </>
           )}
-        </section>
-      )}
-
-      {tab === "esteira" && (
-        <section className="space-y-3">
-          {list((item) => item.status === "production").length === 0 && empty("Nada em produção agora. Aprove um texto na aba Copys.")}
-          {list((item) => item.status === "production").map((item) => (
-            <div key={item.id} className="rounded-[18px] border border-border bg-card p-4">
-              <div className="flex items-center justify-between gap-3">
-                <p className="truncate text-sm font-medium">{item.hook}</p>
-                <span className="text-xs tabular-nums text-muted-foreground">{Math.round(item.progress)}%</span>
-              </div>
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={Math.round(item.progress)} aria-valuemin={0} aria-valuemax={100}>
-                <div className="h-full rounded-full bg-gradient-to-r from-[#8b5cf6] to-[#7b3fe4] transition-[width] duration-500" style={{ width: `${Math.max(item.progress, 3)}%` }} />
-              </div>
-              <p className="mt-2 text-xs text-muted-foreground">Etapa: {item.stage} (simulação)</p>
-            </div>
-          ))}
         </section>
       )}
 
@@ -325,6 +372,18 @@ export default function AutomationPage() {
             <div className="grid gap-3 md:grid-cols-2">
               {list((item) => item.status === "ready").map((item) => (
                 <div key={item.id} className="space-y-3 rounded-[18px] border border-border bg-card p-4">
+                  {videos[item.id] ? (
+                    <video src={videos[item.id].url} controls preload="metadata" className="aspect-[9/16] max-h-96 w-full rounded-lg bg-black object-contain" />
+                  ) : (
+                    <label className="flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-4 text-xs text-muted-foreground hover:text-foreground">
+                      <Upload className="size-4" /> O vídeo não está mais nesta página. Enviar de novo
+                      <input type="file" accept="video/*" hidden onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        event.target.value = "";
+                        if (file) attachVideo(item.id, file);
+                      }} />
+                    </label>
+                  )}
                   <div>
                     <p className="font-medium">{item.hook}</p>
                     <p className="mt-1 text-sm text-muted-foreground">{item.body}</p>
@@ -337,6 +396,15 @@ export default function AutomationPage() {
                       {copied === item.id ? "Copiado" : "Copiar legenda"}
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => downloadText(item)}><Download className="size-4" /> Baixar texto</Button>
+                    {videos[item.id] && (
+                      <a href={videos[item.id].url} download={videos[item.id].name}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted">
+                        <Download className="size-4" /> Baixar vídeo
+                      </a>
+                    )}
+                    <Link href="/multiplicador" className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted">
+                      <Sparkles className="size-4" /> Criar variações
+                    </Link>
                     <Button size="sm" variant="outline" disabled title="Em breve">Agendar (em breve)</Button>
                     <Button size="sm" variant="ghost" aria-label="Excluir" onClick={() => remove(item.id)}><Trash2 className="size-4" /></Button>
                   </div>

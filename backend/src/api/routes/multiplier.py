@@ -1048,3 +1048,83 @@ async def generate_script(request: Request, db: AsyncSession = Depends(get_db)):
     tone = " ".join(str(data.get("tone") or "").split())[:60]
     _check_script_rate(user_id)
     return await _generate_copy(product, tone)
+
+
+# ---- Video prompts for Flow / Veo, one per approved creative (BETA) ---------------
+VIDEO_PROMPT_MAX_ITEMS = 6
+
+VIDEO_PROMPT_SYSTEM = """You write text-to-video prompts for Google Flow / Veo, to produce short vertical (9:16) ad clips of about 8 seconds.
+You receive numbered ads. Each has a hook, a body and a call to action, written in Brazilian Portuguese, and a niche.
+For EACH ad write ONE prompt in English, in the same order, 350-600 characters, in this style:
+- UGC style, filmed on a phone, natural light, a single scene. Describe the person or product, the setting, the action, the camera movement and the mood.
+- Put the hook as the spoken line, in Portuguese, in quotes, said to camera by the person. Keep it word for word.
+- No on-screen text, no logos, no brand names, no celebrities or real people, no children, no medical or before/after claims, no violence.
+- Do not invent product details that were not given.
+Return exactly one prompt per ad."""
+
+
+class _VideoPrompts(BaseModel):
+    prompts: list[str] = Field(description="One English text-to-video prompt per ad, in the same order")
+
+
+async def _generate_video_prompts(items: list[dict[str, str]], model: Any = None) -> list[str]:
+    from pydantic_ai import Agent
+
+    if model is None:
+        from ...ai import _build_transcript_model, _get_missing_llm_key_error
+        from ...runtime_settings import apply_settings_to_process_env
+
+        runtime_config = get_config()
+        apply_settings_to_process_env(runtime_config.as_runtime_settings())
+        config_error = _get_missing_llm_key_error(runtime_config.llm, runtime_config)
+        if config_error:
+            logger.error("multiplier video prompts: %s", config_error)
+            raise HTTPException(status_code=503, detail="AI is not configured right now")
+        model = _build_transcript_model(runtime_config)
+
+    agent = Agent(model, output_type=_VideoPrompts, system_prompt=VIDEO_PROMPT_SYSTEM, output_retries=2)
+    lines = [
+        f"{number}. Niche: {item['niche']}\n   Hook: {item['hook']}\n   Body: {item['body']}\n   CTA: {item['cta']}"
+        for number, item in enumerate(items, start=1)
+    ]
+    try:
+        result = await asyncio.wait_for(agent.run("\n\n".join(lines)), timeout=90)
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="AI took too long. Try again.")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("multiplier video prompts failed")
+        raise HTTPException(status_code=502, detail="Could not generate the texts. Try again.")
+    prompts = [_clip(value, 900) for value in result.output.prompts if value.strip()]
+    if len(prompts) < len(items):
+        raise HTTPException(status_code=502, detail="Could not generate the texts. Try again.")
+    return prompts[: len(items)]
+
+
+@router.post("/video-prompts")
+async def video_prompts(request: Request, db: AsyncSession = Depends(get_db)):
+    user_id = await _user_id(request, db)
+    try:
+        data = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    raw_items = data.get("items") if isinstance(data, dict) else None
+    if not isinstance(raw_items, list) or not raw_items:
+        raise HTTPException(status_code=400, detail="Describe the product in at least a sentence")
+    items: list[dict[str, str]] = []
+    for raw in raw_items[:VIDEO_PROMPT_MAX_ITEMS]:
+        if not isinstance(raw, dict):
+            continue
+        item = {
+            "niche": _clip(raw.get("niche") or "General", 60),
+            "hook": _clip(raw.get("hook") or "", 200),
+            "body": _clip(raw.get("body") or "", 400),
+            "cta": _clip(raw.get("cta") or "", 120),
+        }
+        if item["hook"]:
+            items.append(item)
+    if not items:
+        raise HTTPException(status_code=400, detail="Describe the product in at least a sentence")
+    _check_script_rate(user_id)
+    return {"prompts": await _generate_video_prompts(items)}
