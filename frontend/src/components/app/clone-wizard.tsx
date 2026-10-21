@@ -409,7 +409,8 @@ export function CloneWizard() {
 
   useEffect(() => { projRef.current = p; }, [p]);
   useEffect(() => {
-    try { if (window.localStorage.getItem(MODE_KEY) === "auto") setMode("auto"); } catch { /* storage unavailable */ }
+    // Só o Lower Priority fica disponível. O modo pago existe apenas para testes internos ("auto-dev").
+    try { if (window.localStorage.getItem(MODE_KEY) === "auto-dev") setMode("auto"); else window.localStorage.setItem(MODE_KEY, "free"); } catch { /* storage unavailable */ }
   }, []);
   const chooseScenes = (count: number) => {
     if (count === p.sceneCount) return;
@@ -1312,7 +1313,7 @@ export function CloneWizard() {
               </Field>
               {render?.enabled && (
                 <Group label="Como gerar as imagens e as cenas" hint={mode === "free" ? "Você gera no Flow com Veo 3.1 Lite [Lower Priority]. O Flow mostra “A geração vai usar 0 créditos”." : "A ferramenta gera sozinha pela API do Google. Esse modo é cobrado por uso."}>
-                  <Chips label="Como gerar" value={mode} onPick={chooseMode} options={[{ value: "free" as const, text: "Flow · Lower Priority (sem custo)" }, { value: "auto" as const, text: "Automático (pago)" }]} />
+                  <Chips label="Como gerar" value={mode} onPick={chooseMode} options={[{ value: "free" as const, text: "Flow · Lower Priority (sem custo)" }]} />
                 </Group>
               )}
               <Group label="Idioma da fala" hint="A voz e os textos do vídeo saem neste idioma.">

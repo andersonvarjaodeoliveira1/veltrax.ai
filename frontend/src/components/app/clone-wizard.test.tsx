@@ -231,7 +231,7 @@ it("lets the member pick count, keyword and CTA by clicking", async () => {
 
 function mockAuto(opts: { failVideo?: boolean } = {}) {
   const log: string[] = [];
-  window.localStorage.setItem("gv-clonagem-mode", "auto");
+  window.localStorage.setItem("gv-clonagem-mode", "auto-dev");
   vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: () => "blob:x", revokeObjectURL: () => {} }));
   let n = 0;
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
@@ -322,7 +322,7 @@ it("counts the generated images and videos and lists each generation with its ti
   expect(within(panel).getByText(/cerca de 15 segundos/)).toBeInTheDocument();
 }, 15000);
 
-it("defaults to the free Flow Lower Priority mode and remembers the choice", async () => {
+it("offers only the free Flow Lower Priority mode", async () => {
   mockAuto();
   window.localStorage.removeItem("gv-clonagem-mode");
   const user = userEvent.setup();
@@ -332,9 +332,8 @@ it("defaults to the free Flow Lower Priority mode and remembers the choice", asy
   expect(free).toHaveAttribute("aria-checked", "true");
   expect(screen.queryByRole("button", { name: "Criar meus vídeos automaticamente" })).not.toBeInTheDocument();
   expect(screen.getByText(/Veo 3\.1 Lite \[Lower Priority\]/)).toBeInTheDocument();
-  await user.click(screen.getByRole("radio", { name: /Automático \(pago\)/ }));
-  expect(await screen.findByRole("button", { name: "Criar meus vídeos automaticamente" })).toBeInTheDocument();
-  expect(window.localStorage.getItem("gv-clonagem-mode")).toBe("auto");
+  expect(screen.queryByRole("radio", { name: /Automático/ })).not.toBeInTheDocument();
+  expect(window.localStorage.getItem("gv-clonagem-mode")).toBe("free");
 });
 
 it("keeps the typed case when the member authorizes writing it their own way", async () => {
