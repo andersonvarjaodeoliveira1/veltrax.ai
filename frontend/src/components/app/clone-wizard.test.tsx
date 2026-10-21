@@ -280,7 +280,7 @@ it("lets the member type any keyword in the automatic panel", async () => {
   const user = userEvent.setup();
   window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ step: 1, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora.", count: 1 }));
   render(<CloneWizard />);
-  const input = await screen.findByLabelText("Escrever outra palavra-chave");
+  const input = await screen.findByLabelText("Escrever a minha palavra-chave");
   await user.clear(input);
   await user.type(input, "limon");
   expect(input).toHaveValue("LIMON");
@@ -314,4 +314,20 @@ it("defaults to the free Flow Lower Priority mode and remembers the choice", asy
   await user.click(screen.getByRole("radio", { name: /Automático \(pago\)/ }));
   expect(await screen.findByRole("button", { name: "Criar meus vídeos automaticamente" })).toBeInTheDocument();
   expect(window.localStorage.getItem("gv-clonagem-mode")).toBe("auto");
+});
+
+it("keeps the typed case when the member authorizes writing it their own way", async () => {
+  mockAuto();
+  const user = userEvent.setup();
+  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ step: 1, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora.", count: 1 }));
+  render(<CloneWizard />);
+  const input = await screen.findByLabelText("Escrever a minha palavra-chave");
+  expect(screen.getByText(/Exemplos de palavra-chave/, { selector: "p" })).toBeInTheDocument();
+  await user.clear(input);
+  await user.type(input, "Quero Agora");
+  expect(input).toHaveValue("QUERO AGORA"); // padrão: maiúsculas
+  await user.click(screen.getByRole("checkbox", { name: /Escrever do meu jeito/ }));
+  await user.clear(input);
+  await user.type(input, "Quero Agora");
+  expect(input).toHaveValue("Quero Agora");
 });

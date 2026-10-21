@@ -23,6 +23,7 @@ type Project = {
   notes: string;
   product: string;
   keyword: string;
+  keepCase: boolean;
   cta: string;
   ctaLocked: boolean;
   copyMode: "same" | "mix";
@@ -53,6 +54,7 @@ const EMPTY: Project = {
   notes: "",
   product: "",
   keyword: "",
+  keepCase: false,
   cta: "Comente {KEYWORD} para assistir o vídeo completo",
   ctaLocked: false,
   copyMode: "same",
@@ -169,6 +171,7 @@ async function callStage(stage: Stage, proj: Project): Promise<{ items?: unknown
       notes: proj.notes,
       product: proj.product,
       keyword: proj.keyword,
+      keep_case: proj.keepCase,
       cta: proj.cta,
       avatar_mode: proj.avatarMode,
       avatars: proj.avatars.filter((a) => a.name.trim()).map(({ name, look }) => ({ name, look })),
@@ -237,6 +240,21 @@ function Chips<T extends string | number>({ label, options, value, onPick, disab
           {option.text}
         </button>
       ))}
+    </div>
+  );
+}
+
+/** Escolha da palavra-chave: exemplos clicáveis ou escrita livre (maiúsculas e minúsculas, se o membro autorizar). */
+function KeywordPicker({ keyword, keepCase, disabled, onChange, onKeepCase, placeholder }: { keyword: string; keepCase: boolean; disabled?: boolean; onChange: (value: string) => void; onKeepCase: (value: boolean) => void; placeholder: string }) {
+  return (
+    <div className="space-y-2">
+      <p className="text-xs text-muted-foreground">Exemplos de palavra-chave. Clique em um ou escreva a sua abaixo.</p>
+      <Chips label="Exemplos de palavra-chave" disabled={disabled} value={keyword} onPick={onChange} options={KEYWORDS.map((k) => ({ value: k, text: k }))} />
+      <input value={keyword} onChange={(event) => onChange(keepCase ? event.target.value : event.target.value.toUpperCase())} disabled={disabled} maxLength={30} placeholder={placeholder} aria-label="Escrever a minha palavra-chave" className={inputClass} />
+      <label className="flex items-center gap-2 text-xs text-muted-foreground">
+        <input type="checkbox" checked={keepCase} disabled={disabled} onChange={(event) => onKeepCase(event.target.checked)} className="size-4" />
+        Escrever do meu jeito: manter minúsculas e maiúsculas como digitei
+      </label>
     </div>
   );
 }
@@ -808,9 +826,8 @@ export function CloneWizard() {
                   <Group label="Quantos vídeos">
                     <Chips label="Quantos vídeos" value={p.count} onPick={(count) => patch({ count })} options={[1, 2, 3].map((n) => ({ value: n, text: String(n) }))} />
                   </Group>
-                  <Group label="Palavra-chave da CTA" hint="Escolha uma ou escreva a sua.">
-                    <Chips label="Palavra-chave" value={p.keyword} onPick={(keyword) => patch({ keyword })} options={KEYWORDS.map((k) => ({ value: k, text: k }))} />
-                    <input value={p.keyword} onChange={(event) => patch({ keyword: event.target.value.toUpperCase() })} maxLength={30} placeholder="Ou escreva outra palavra" aria-label="Escrever outra palavra-chave" className={inputClass} />
+                  <Group label="Palavra-chave da CTA">
+                    <KeywordPicker keyword={p.keyword} keepCase={p.keepCase} placeholder="Ou escreva outra palavra" onChange={(keyword) => patch({ keyword })} onKeepCase={(keepCase) => patch({ keepCase, keyword: keepCase ? p.keyword : p.keyword.toUpperCase() })} />
                   </Group>
                   <Button type="button" onClick={() => void runAll()} disabled={working || (p.reference.trim().length < 20 && p.notes.trim().length < 20) || !p.keyword.trim()}>
                     {Object.keys(p.gen).length > 0 || p.scenes.length > 0 ? "Continuar de onde parou" : "Criar meus vídeos automaticamente"}
@@ -998,10 +1015,7 @@ export function CloneWizard() {
                   <input value={p.product} onChange={(event) => patch({ product: event.target.value })} disabled={p.ctaLocked} maxLength={120} className={inputClass} />
                 </Field>
                 <Group label="Palavra-chave">
-                  <div className="space-y-2">
-                    <Chips label="Palavras sugeridas" disabled={p.ctaLocked} value={p.keyword} onPick={(keyword) => patch({ keyword })} options={KEYWORDS.map((k) => ({ value: k, text: k }))} />
-                    <input value={p.keyword} onChange={(event) => patch({ keyword: event.target.value.toUpperCase() })} disabled={p.ctaLocked} maxLength={30} placeholder="LIMON" aria-label="Ou escreva a sua palavra" className={inputClass} />
-                  </div>
+                  <KeywordPicker keyword={p.keyword} keepCase={p.keepCase} disabled={p.ctaLocked} placeholder="LIMON" onChange={(keyword) => patch({ keyword })} onKeepCase={(keepCase) => patch({ keepCase, keyword: keepCase ? p.keyword : p.keyword.toUpperCase() })} />
                 </Group>
               </div>
               {p.copyMode === "same" && (

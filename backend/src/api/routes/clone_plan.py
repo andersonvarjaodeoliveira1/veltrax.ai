@@ -123,7 +123,9 @@ def _context(data: dict[str, Any], need_cta: bool = False) -> dict[str, Any]:
     notes = _text(data.get("notes"), 600)
     if len(reference) < 20 and len(notes) < 20:
         raise HTTPException(status_code=400, detail="Send the reference transcript or describe the video")
-    keyword = _text(data.get("keyword"), 30).upper()
+    keyword = _text(data.get("keyword"), 30)
+    if data.get("keep_case") is not True:
+        keyword = keyword.upper()
     if need_cta and not keyword:
         raise HTTPException(status_code=400, detail="Keyword is required")
     cta_template = _text(data.get("cta"), 200) or "Comente {KEYWORD} para assistir o vídeo completo"
