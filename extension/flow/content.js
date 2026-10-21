@@ -54,6 +54,9 @@
   };
 
   /* ---------- pacote ---------- */
+  let flowModel = "[Lower Priority]"; // modelo do Flow pedido pelo pacote (padrão: Lower Priority, 0 créditos)
+  const isLowerPriority = () => flowModel === "[Lower Priority]";
+
   function parsePackage(raw) {
     let data;
     try { data = JSON.parse(raw); } catch (_e) { throw new Error("O texto colado não é um pacote válido do ClipGringa."); }
@@ -75,6 +78,8 @@
       });
     });
     if (!jobs.length) throw new Error("O pacote não tem cenas com prompts.");
+    const wanted = String(data.flowModel || "").trim();
+    flowModel = wanted && !/lower priority/i.test(wanted) ? wanted : "[Lower Priority]";
     return { jobs, keyword: data.keyword || "" };
   }
 
@@ -138,14 +143,15 @@
   }
 
   async function ensureModel(needle) {
+    const matches = (t) => t.includes(needle) && (needle === "[Lower Priority]" || !/\[Lower Priority\]/i.test(t));
     const trigger = await waitFor(() => $$("button.mat-mdc-menu-trigger", overlay()).find(visible), 3000);
     if (!trigger) return text(null) || "";
-    if (text(trigger).includes(needle)) return text(trigger);
+    if (matches(text(trigger))) return text(trigger);
     trigger.click();
-    const item = await waitFor(() => $$("[role=menuitem], .mat-mdc-menu-item", overlay()).find((i) => visible(i) && text(i).includes(needle)), 4000);
+    const item = await waitFor(() => $$("[role=menuitem], .mat-mdc-menu-item", overlay()).find((i) => visible(i) && matches(text(i))), 4000);
     if (!item) {
       await closeSettings();
-      throw new Error(`O Flow não mostrou o modelo “${needle}” nesta conta. Confira se o Veo 3.1 Lite [Lower Priority] aparece nos ajustes do Flow.`);
+      throw new Error(`O Flow não mostrou o modelo “${needle}” nesta conta. ${needle === "[Lower Priority]" ? "Confira se o Veo 3.1 Lite [Lower Priority] aparece nos ajustes do Flow (ele é do plano Ultra)." : "Confira o nome do modelo nos ajustes do Flow."}`);
     }
     item.click();
     await sleep(500);
@@ -166,7 +172,7 @@
       await pickRadio("crop_9_16");
       await pickRadioByLabel("8s");
       await pickRadioByLabel("x1");
-      await ensureModel("[Lower Priority]");
+      await ensureModel(flowModel);
     }
     await closeSettings();
   }
@@ -416,14 +422,14 @@
     // 2) vídeo em Lower Priority
     state.phase = "vídeo"; render();
     const video = await withRetry(`${label} (vídeo)`, async () => {
-      setNow(`${label}: escolhendo Veo 3.1 Lite [Lower Priority] (0 créditos)…`);
+      setNow(isLowerPriority() ? `${label}: escolhendo Veo 3.1 Lite [Lower Priority] (0 créditos)…` : `${label}: escolhendo o modelo ${flowModel} (gasta créditos do Flow)…`);
       await configure("video");
       await chooseStartFrame(image.src);
       await setPrompt(job.videoPrompt);
       const before = tileKeys();
       await pressGenerate();
-      setNow(`${label}: o Flow está animando em Lower Priority. Pode levar de 1 a 6 minutos, não feche esta aba.`);
-      return waitNewTile(before, "video", VIDEO_WAIT_MS, (p) => { if (p != null) setNow(`${label}: animando em Lower Priority… ${p}%`); });
+      setNow(`${label}: o Flow está animando${isLowerPriority() ? " em Lower Priority" : ""}. Pode levar de 1 a 6 minutos, não feche esta aba.`);
+      return waitNewTile(before, "video", VIDEO_WAIT_MS, (p) => { if (p != null) setNow(`${label}: animando${isLowerPriority() ? " em Lower Priority" : ""}… ${p}%`); });
     });
 
     // 3) baixar
@@ -444,6 +450,7 @@
       return;
     }
     try {
+      parsePackage(el("pkg").value); // define o modelo pedido pelo pacote
       if (!state.jobs.length || el("pkg").value.trim() !== (state.raw || "")) {
         const parsed = parsePackage(el("pkg").value);
         state = { jobs: parsed.jobs, done: {}, errors: {}, raw: el("pkg").value.trim() };
