@@ -55,6 +55,7 @@ const SENT_KEY = "gv-clonagem-sent";
 const IDLE_MS = 10 * 60 * 1000; // projeto parado: some e começa um novo
 const WAIT_FLOW_MS = 2 * 60 * 60 * 1000; // depois de enviar ao Flow a pessoa precisa de tempo para gerar e voltar
 // Ferramenta "ClipGringa — Gerar Vídeos" no Flow (BETA). Trocar pelo link compartilhado quando for liberada aos membros.
+const FLOW_HOME_URL = "https://flow.google.com";
 const FLOW_TOOL_URL = "https://flow.google.com/project/50e752e7-9a93-4477-8e3a-9bd266ec636b/tool/fccd23dc-ee0d-437a-9f45-a5ad87ccefce";
 const NEXT_HINTS = [
   "separe a referência em cenas (botão “Separar em cenas”) e, se escolheu variar a copy, gere os ganchos, corpos e CTAs.",
@@ -948,6 +949,33 @@ export function CloneWizard() {
     </div>
   );
 
+  // Quando tudo fica pronto (modo simples), leva a pessoa ao Flow sozinho, com uma barra avisando.
+  const [redirectIn, setRedirectIn] = useState<number | null>(null);
+  const [redirectBlocked, setRedirectBlocked] = useState(false);
+  const readyToFlow = simple && p.videos.length > 0 && p.ctaLocked;
+  const redirectSig = readyToFlow ? p.variations.map((v) => v.title).join("|") : "";
+  useEffect(() => {
+    if (!redirectSig) { setRedirectIn(null); return; }
+    try { if (window.sessionStorage.getItem("gv-flow-redirected") === redirectSig) return; } catch { /* storage unavailable */ }
+    try { void navigator.clipboard.writeText(flowPackage()); } catch { /* o botão Copiar pacote continua disponível */ }
+    setRedirectIn(5);
+    const timer = window.setInterval(() => {
+      setRedirectIn((n) => {
+        if (n === null) return null;
+        if (n <= 1) {
+          window.clearInterval(timer);
+          try { window.sessionStorage.setItem("gv-flow-redirected", redirectSig); } catch { /* storage unavailable */ }
+          const opened = window.open(FLOW_HOME_URL, "_blank");
+          if (!opened) setRedirectBlocked(true);
+          return null;
+        }
+        return n - 1;
+      });
+    }, 1000);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [redirectSig]);
+
   if (simple) {
     const ready = p.videos.length > 0 && p.ctaLocked;
     const sceneTotal = p.variations.length * p.sceneCount;
@@ -1125,6 +1153,18 @@ export function CloneWizard() {
                 </Group>
               </div>
             </details>
+          </section>
+        )}
+
+        {ready && (redirectIn !== null || redirectBlocked) && (
+          <section role="status" className="space-y-2 rounded-[18px] border border-[#7B3FE4]/60 bg-[#7B3FE4]/15 p-4" data-testid="flow-redirect">
+            <p className="text-sm font-semibold">{redirectBlocked ? "Seu navegador bloqueou a abertura do Flow." : `Direcionando para o Flow em ${redirectIn}s…`}</p>
+            <div className="h-1.5 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A98BFF] transition-all duration-1000" style={{ width: `${redirectBlocked ? 100 : ((5 - (redirectIn ?? 5)) / 5) * 100}%` }} /></div>
+            <p className="text-xs text-muted-foreground">Tudo pronto. O pacote já foi copiado. No Flow, abra o seu projeto e cole o pacote na extensão.</p>
+            <div className="flex gap-2">
+              <a href={FLOW_HOME_URL} target="_blank" rel="noopener noreferrer" className="inline-flex items-center rounded-full border border-border px-3 py-1.5 text-xs hover:text-foreground" onClick={() => { setRedirectIn(null); setRedirectBlocked(false); }}>Abrir o Flow agora</a>
+              {redirectIn !== null && <button type="button" className="text-xs underline" onClick={() => setRedirectIn(null)}>Cancelar</button>}
+            </div>
           </section>
         )}
 
@@ -1458,20 +1498,6 @@ export function CloneWizard() {
               <p className="text-sm text-muted-foreground">
                 Copie cada prompt para o Flow (Nano Banana) e gere a imagem. Confira rosto, cenário e ação e aprove só as boas. A imagem aprovada é a base da animação. Não avance com uma imagem que você não aprovou.
               </p>
-              {p.images.length > 0 && (
-              <details open={!paid} className="rounded-[14px] border border-border p-3 text-sm">
-                <summary className="cursor-pointer text-muted-foreground">Prefere gerar no Flow, sem gastar créditos?</summary>
-                <div className="mt-3">
-              <div className="space-y-2 rounded-[14px] border border-[#5BD69A]/40 bg-[#5BD69A]/10 p-3 text-sm">
-                <p className="font-medium">Sem gastar créditos: use o modo de baixa prioridade do Flow</p>
-                <p className="text-xs text-muted-foreground">No Flow, escolha a imagem (Nano Banana, x1), cole o prompt e gere. Se aparecer a opção [Lower Priority], escolha ela.</p>
-                <a href="https://labs.google/fx/tools/flow" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-1.5 text-sm hover:text-foreground">
-                  Abrir o Flow <ExternalLink className="size-3.5" />
-                </a>
-              </div>
-                </div>
-              </details>
-              )}
               <div className="flex flex-wrap items-center gap-3">
                 {generateButton("images", "Gerar prompts de imagem", p.images.length > 0, "Criando os prompts de imagem")}
                 {paid && p.images.length > 0 && (
@@ -1568,20 +1594,6 @@ export function CloneWizard() {
               <p className="text-sm text-muted-foreground">
                 As imagens aprovadas viram cenas animadas. No Flow, use a imagem aprovada como primeiro quadro, no modo de menor prioridade (lower priority), cole o prompt e gere. Assista e confira a fala, os movimentos e a continuidade antes de baixar.
               </p>
-              {p.videos.length > 0 && (
-              <details open={!paid} className="rounded-[14px] border border-border p-3 text-sm">
-                <summary className="cursor-pointer text-muted-foreground">Prefere gerar no Flow, sem gastar créditos?</summary>
-                <div className="mt-3">
-              <div className="space-y-2 rounded-[14px] border border-[#5BD69A]/40 bg-[#5BD69A]/10 p-3 text-sm">
-                <p className="font-medium">Sem gastar créditos: use o modo de baixa prioridade do Flow</p>
-                <p className="text-xs text-muted-foreground">No Flow, escolha o modelo “Veo 3.1 - Lite [Lower Priority]”, 8s e x1. O Flow mostra “A geração vai usar 0 créditos”. Use a imagem aprovada como primeiro quadro, cole o prompt, gere e depois envie o vídeo aqui.</p>
-                <a href="https://labs.google/fx/tools/flow" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-1.5 text-sm hover:text-foreground">
-                  Abrir o Flow <ExternalLink className="size-3.5" />
-                </a>
-              </div>
-                </div>
-              </details>
-              )}
               <div className="flex flex-wrap gap-2">
                 {generateButton("videos", "Gerar prompts de animação", p.videos.length > 0, "Criando os prompts de animação", !p.ctaLocked)}
                 {paid && p.videos.length > 0 && (

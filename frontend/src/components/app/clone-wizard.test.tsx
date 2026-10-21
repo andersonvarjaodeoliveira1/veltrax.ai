@@ -29,6 +29,7 @@ function mockApi() {
 }
 
 beforeEach(() => {
+  window.sessionStorage.clear();
   window.localStorage.clear();
   window.localStorage.setItem("gv-clonagem-view", "advanced");
   window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ sceneCount: 3 }));
@@ -393,6 +394,7 @@ it("simple mode: upload one video and everything is prepared automatically, read
 
   await user.click(await screen.findByRole("button", { name: "Pular, continuar sem produto" }));
   expect(await screen.findByText(/Tudo pronto: 2 vídeos × 3 cenas/)).toBeInTheDocument();
+  expect(await screen.findByTestId("flow-redirect")).toHaveTextContent(/Direcionando para o Flow/);
   expect(screen.getAllByRole("button", { name: "Copiar prompt da imagem" })).toHaveLength(6);
   expect(screen.getAllByRole("button", { name: "Copiar prompt da animação" })).toHaveLength(6);
   expect(calls.map((c) => c.stage)).toEqual(["scenes", "variations", "images", "videos"]);
