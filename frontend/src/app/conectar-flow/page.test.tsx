@@ -17,3 +17,13 @@ it("guides the member through the two steps and remembers them", async () => {
   expect(await screen.findByText(/Tudo certo/)).toBeInTheDocument();
   expect(JSON.parse(window.localStorage.getItem("gv-conectar-flow-v1") ?? "{}")).toEqual({ flow: true, extension: true });
 });
+
+it("lets the member pick the Flow category and remembers it", async () => {
+  window.localStorage.clear();
+  const user = userEvent.setup();
+  render(<ConnectFlowPage />);
+  expect(screen.getByRole("button", { name: /Veo 3.1 - Lite/ })).toHaveAttribute("aria-pressed", "true");
+  await user.click(screen.getByRole("button", { name: /Veo 3.1 - Fast/ }));
+  expect(screen.getByRole("button", { name: /Veo 3.1 - Fast/ })).toHaveAttribute("aria-pressed", "true");
+  expect(window.localStorage.getItem("gv-flow-model")).toBe("fast");
+});

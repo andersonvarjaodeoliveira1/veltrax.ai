@@ -5,6 +5,7 @@ import { Check, ClipboardCopy, Download, ExternalLink, Loader2, Lock, Plus, Refr
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
+import { FLOW_MODELS, readFlowCategory, saveFlowCategory } from "@/lib/flow-models";
 import { useSession } from "@/lib/auth-client";
 import { ADMIN_WHATSAPP_URL } from "@/lib/token-balance";
 import { announceTokens, readTokenBalance } from "@/lib/token-alert";
@@ -62,12 +63,6 @@ const WAIT_FLOW_MS = 2 * 60 * 60 * 1000; // depois de enviar ao Flow a pessoa pr
 const FLOW_HOME_URL = "https://flow.google.com";
 const FLOW_TOOL_URL = "https://flow.google.com/project/50e752e7-9a93-4477-8e3a-9bd266ec636b/tool/fccd23dc-ee0d-437a-9f45-a5ad87ccefce";
 // Créditos do Flow por geração de 8s (conta sem Lower Priority). Fonte: support.google.com/flow/answer/16526234. Podem mudar.
-const FLOW_MODELS = [
-  { id: "lite", name: "Veo 3.1 - Lite", needle: "Lite", credits: 10, note: "o mais barato" },
-  { id: "fast", name: "Veo 3.1 - Fast", needle: "Fast", credits: 20, note: "mais rápido" },
-  { id: "omni", name: "Omni Flash (720p)", needle: "Omni", credits: 12, note: "gera em 720p" },
-  { id: "quality", name: "Veo 3.1 - Quality", needle: "Quality", credits: 100, note: "a melhor qualidade, bem mais caro" },
-];
 const NEXT_HINTS = [
   "separe a referência em cenas (botão “Separar em cenas”) e, se escolheu variar a copy, gere os ganchos, corpos e CTAs.",
   "clique em “Gerar variações”.",
@@ -925,18 +920,18 @@ export function CloneWizard() {
   const autoPct = auto ? Math.min(99, (auto.done / Math.max(1, auto.total)) * 100) : 0;
   const pct = auto ? autoPct : batch ? Math.min(98, ((batch.done + eased / 100) / batch.total) * 100) : eased;
 
-  // Membros comuns geram com créditos do Flow; só quem tem o Lower Priority (hoje o administrador) começa nele.
-  // A escolha fica guardada no navegador e não some quando o projeto é reiniciado.
+  // Só a conta administradora usa o Lower Priority. Os membros usam a categoria (modelo) que escolheram em
+  // "Conectar ao Flow"; ela vira o padrão aqui e pode ser trocada neste projeto.
   const { data: authSession } = useSession();
   const isAdminUser = Boolean((authSession?.user as { is_admin?: boolean } | undefined)?.is_admin);
-  const [lpChoice, setLpChoice] = useState<boolean | null>(null);
+  const lowPriority = isAdminUser;
   useEffect(() => {
-    try { const saved = window.localStorage.getItem("gv-flow-lp"); if (saved === "1" || saved === "0") setLpChoice(saved === "1"); } catch { /* storage unavailable */ }
+    const saved = readFlowCategory();
+    if (saved) setP((cur) => (cur.flowModel === saved ? cur : { ...cur, flowModel: saved }));
   }, []);
-  const lowPriority = lpChoice ?? isAdminUser;
-  const chooseLowPriority = (value: boolean) => {
-    setLpChoice(value);
-    try { window.localStorage.setItem("gv-flow-lp", value ? "1" : "0"); } catch { /* storage unavailable */ }
+  const chooseModel = (id: string) => {
+    saveFlowCategory(id);
+    patch({ flowModel: id });
   };
 
   // Pacote único para a ferramenta ClipGringa dentro do Flow (BETA): tudo o que foi coletado, em um clique.
@@ -968,17 +963,12 @@ export function CloneWizard() {
     const perVideo = model.credits * p.sceneCount;
     return (
       <div className="space-y-2" data-testid="flow-model-chooser">
-        <p className="text-xs font-medium">Sua conta do Flow tem o modelo Lower Priority (sem gastar créditos)?</p>
-        <div className="flex flex-wrap gap-2">
-          <button type="button" aria-pressed={low} onClick={() => chooseLowPriority(true)} className={cn("rounded-full border px-3 py-1.5 text-xs", low ? "border-[#7B3FE4] bg-[#7B3FE4]/20 text-foreground" : "border-border text-muted-foreground")}>Sim, tenho (0 créditos)</button>
-          <button type="button" aria-pressed={!low} onClick={() => chooseLowPriority(false)} className={cn("rounded-full border px-3 py-1.5 text-xs", !low ? "border-[#7B3FE4] bg-[#7B3FE4]/20 text-foreground" : "border-border text-muted-foreground")}>Não tenho</button>
-        </div>
         {!low && (
           <div className="space-y-2 rounded-[12px] border border-[#F5B454]/40 bg-[#F5B454]/10 p-3">
-            <p className="text-xs">Sem o Lower Priority, cada cena gasta créditos do seu Flow. Escolha o modelo:</p>
+            <p className="text-xs">Cada cena gasta créditos do seu Flow. Escolha o modelo (ele fica salvo como a sua categoria):</p>
             <div className="flex flex-wrap gap-2">
               {FLOW_MODELS.map((m) => (
-                <button key={m.id} type="button" aria-pressed={m.id === model.id} onClick={() => patch({ flowModel: m.id })} className={cn("rounded-[12px] border px-3 py-2 text-left text-xs", m.id === model.id ? "border-[#7B3FE4] bg-[#7B3FE4]/20" : "border-border text-muted-foreground")}>
+                <button key={m.id} type="button" aria-pressed={m.id === model.id} onClick={() => chooseModel(m.id)} className={cn("rounded-[12px] border px-3 py-2 text-left text-xs", m.id === model.id ? "border-[#7B3FE4] bg-[#7B3FE4]/20" : "border-border text-muted-foreground")}>
                   <span className="block font-medium text-foreground">{m.name}</span>
                   <span className="block">{m.credits} créditos por cena · {m.note}</span>
                 </button>
