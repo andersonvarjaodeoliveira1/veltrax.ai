@@ -255,7 +255,8 @@ async def users_usage(request: Request, db: AsyncSession = Depends(get_db)):
                 SELECT u.id, u.email, u.name, u."createdAt" AS created_at,
                        COALESCE(l.tin, 0) AS tokens_in, COALESCE(l.tout, 0) AS tokens_out,
                        COALESCE(l.tin30, 0) AS tokens_in_30d, COALESCE(l.tout30, 0) AS tokens_out_30d,
-                       COALESCE(l.own, 0) AS tokens_own_key, COALESCE(l.calls, 0) AS calls,
+                       COALESCE(l.own, 0) AS tokens_own_key, COALESCE(l.server_used, 0) AS server_used,
+                       u.is_admin AS is_admin, q.granted AS granted, COALESCE(l.calls, 0) AS calls,
                        COALESCE(j.jobs, 0) AS jobs, COALESCE(j.videos, 0) AS videos,
                        COALESCE(c.clips, 0) AS clips
                 FROM users u
@@ -265,9 +266,11 @@ async def users_usage(request: Request, db: AsyncSession = Depends(get_db)):
                            SUM(input_tokens) FILTER (WHERE created_at > now() - interval '30 days') AS tin30,
                            SUM(output_tokens) FILTER (WHERE created_at > now() - interval '30 days') AS tout30,
                            SUM(input_tokens + output_tokens) FILTER (WHERE own_key) AS own,
+                           SUM(input_tokens + output_tokens) FILTER (WHERE NOT own_key) AS server_used,
                            COUNT(*) AS calls
                     FROM llm_usage GROUP BY user_id
                 ) l ON l.user_id = u.id
+                LEFT JOIN user_token_quota q ON q.user_id = u.id
                 LEFT JOIN (
                     SELECT user_id, COUNT(*) AS jobs, COALESCE(SUM(done), 0) AS videos
                     FROM multiplier_jobs GROUP BY user_id
@@ -288,6 +291,9 @@ async def users_usage(request: Request, db: AsyncSession = Depends(get_db)):
         item = {"id": row["id"], "email": row["email"], "name": row["name"],
                 "created_at": row["created_at"].isoformat() if row["created_at"] else None}
         item.update({key: int(row[key] or 0) for key in numeric})
+        from ...usage import balance_from
+
+        item["balance"] = balance_from(bool(row["is_admin"]), row["granted"], int(row["server_used"] or 0))
         users.append(item)
     return {"users": users}
 
@@ -375,3 +381,34 @@ async def admin_job_output(job_id: str, index: int, request: Request, download: 
         content_disposition_type="attachment" if download else "inline",
         headers={"Cache-Control": "private, no-store"},
     )
+
+
+class TokenGrant(BaseModel):
+    add: int | None = Field(default=None, ge=-100_000_000, le=100_000_000)
+    set: int | None = Field(default=None, ge=0, le=1_000_000_000)
+
+
+@router.put("/users/{user_id}/tokens")
+async def grant_tokens(user_id: str, body: TokenGrant, request: Request, db: AsyncSession = Depends(get_db)):
+    """Libera tokens para um membro: soma (add) ou define o total (set). O saldo restante é total - gasto."""
+    await require_admin_user(request, db, get_config())
+    from ...usage import DEFAULT_QUOTA, balance_from
+
+    if (body.add is None) == (body.set is None):
+        raise HTTPException(status_code=400, detail="Send either add or set")
+    exists = (await db.execute(text("SELECT is_admin FROM users WHERE id = :u"), {"u": user_id})).mappings().first()
+    if not exists:
+        raise HTTPException(status_code=404, detail="User not found")
+    current = (await db.execute(text("SELECT granted FROM user_token_quota WHERE user_id = :u"), {"u": user_id})).scalar()
+    base = DEFAULT_QUOTA if current is None else int(current)
+    new_total = max(0, body.set if body.set is not None else base + int(body.add or 0))
+    await db.execute(
+        text(
+            "INSERT INTO user_token_quota (user_id, granted) VALUES (:u, :g) "
+            "ON CONFLICT (user_id) DO UPDATE SET granted = EXCLUDED.granted, updated_at = CURRENT_TIMESTAMP"
+        ),
+        {"u": user_id, "g": new_total},
+    )
+    await db.commit()
+    used = (await db.execute(text("SELECT COALESCE(SUM(input_tokens + output_tokens), 0) FROM llm_usage WHERE user_id = :u AND NOT own_key"), {"u": user_id})).scalar()
+    return balance_from(bool(exists["is_admin"]), new_total, int(used or 0))

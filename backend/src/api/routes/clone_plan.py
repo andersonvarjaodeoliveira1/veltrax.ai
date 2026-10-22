@@ -288,7 +288,14 @@ async def _run(system: str, output_type: type[BaseModel], prompt: str, model: An
     from ...integrations import user_models
 
     own = user_models() if explicit is None else []
-    candidates = own + [model] + (await _fallback_models() if explicit is None else [])
+    from ...usage import server_blocked
+
+    if explicit is None and server_blocked():
+        if not own:
+            raise HTTPException(status_code=402, detail="TOKENS_EXHAUSTED")
+        candidates = own
+    else:
+        candidates = own + [model] + (await _fallback_models() if explicit is None else [])
     last_error: Exception | None = None
     for index, candidate in enumerate(candidates):
         agent = Agent(candidate, output_type=output_type, system_prompt=system, output_retries=2)
@@ -426,6 +433,9 @@ async def generate(request: Request, db: AsyncSession = Depends(get_db)):
 
     await load_user_keys(db, user_id)
     set_usage_user(user_id)
+    from ...usage import get_balance, set_server_blocked
+
+    set_server_blocked((await get_balance(db, user_id))["exhausted"])
     try:
         data = await request.json()
     except Exception:
@@ -473,6 +483,9 @@ async def product_look(request: Request, db: AsyncSession = Depends(get_db)):
 
     await load_user_keys(db, user_id)
     set_usage_user(user_id)
+    from ...usage import get_balance, set_server_blocked
+
+    set_server_blocked((await get_balance(db, user_id))["exhausted"])
     form = await request.form()
     photos = [item for item in form.getlist("images") if hasattr(item, "read")][:3]
     if not photos:
@@ -501,6 +514,10 @@ async def _run_parts(system: str, output_type: type[BaseModel], parts: list[Any]
         from ...integrations import user_models
         own = user_models()
         is_own = bool(own)
+        from ...usage import server_blocked
+
+        if server_blocked() and not own:
+            raise HTTPException(status_code=402, detail="TOKENS_EXHAUSTED")
         model = own[0] if own else await _build_model()
     agent = Agent(model, output_type=output_type, system_prompt=system, output_retries=2)
     try:

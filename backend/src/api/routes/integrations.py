@@ -45,3 +45,13 @@ async def disconnect(provider: str, request: Request, db: AsyncSession = Depends
         raise HTTPException(status_code=404, detail="Provedor desconhecido")
     await delete_integration(db, user_id, provider)
     return {"integrations": await list_integrations(db, user_id)}
+
+
+usage_router = APIRouter(prefix="/usage", tags=["usage"])
+
+
+@usage_router.get("/me")
+async def my_balance(request: Request, db: AsyncSession = Depends(get_db)):
+    from ...usage import get_balance
+
+    return await get_balance(db, _uid(request))

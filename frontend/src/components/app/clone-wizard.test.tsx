@@ -487,3 +487,13 @@ it("members start with credits: asks for a model and shows the credits per video
   expect(screen.queryByTestId("flow-credits")).not.toBeInTheDocument();
   expect(window.localStorage.getItem("gv-flow-lp")).toBe("1");
 });
+
+it("when the tokens run out it says so and links the administrator's WhatsApp", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ detail: "TOKENS_EXHAUSTED" }), { status: 402 })));
+  const user = userEvent.setup();
+  render(<CloneWizard />);
+  await user.type(screen.getByLabelText(/Transcrição do vídeo/), "Você sabe por que o seu vídeo não viraliza? Eu explico agora.");
+  await user.click(screen.getByRole("button", { name: "Separar em cenas" }));
+  expect(await screen.findByText(/Seus tokens acabaram/)).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: /Chamar o administrador no WhatsApp/ })).toHaveAttribute("href", expect.stringContaining("wa.me/5511913142143"));
+});

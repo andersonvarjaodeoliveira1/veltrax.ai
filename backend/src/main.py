@@ -191,9 +191,10 @@ def create_app(
     app.include_router(feedback_router)
     app.include_router(billing_router)
     app.include_router(api_keys_router)
-    from .api.routes.integrations import router as integrations_router
+    from .api.routes.integrations import router as integrations_router, usage_router
 
     app.include_router(integrations_router)
+    app.include_router(usage_router)
     app.include_router(account_router)
     app.include_router(folders_router)
     try:  # BETA, isolated: a failure here must never take the API down

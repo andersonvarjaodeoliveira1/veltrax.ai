@@ -10,6 +10,8 @@ import {
 import { toast } from "sonner";
 import { signOut, useSession } from "@/lib/auth-client";
 import { useBillingSummary } from "@/hooks/use-billing-summary";
+import { useTokenBalance } from "@/hooks/use-token-balance";
+import { ADMIN_WHATSAPP_URL } from "@/lib/token-balance";
 import { formatBillingPlanName } from "@/lib/billing-plans";
 import { getUpgradeState } from "@/components/billing/upgrade-prompt";
 import { fetchGenerations, timeAgo, type GenerationSummary } from "@/lib/generations";
@@ -51,6 +53,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [billing] = useBillingSummary(Boolean(session?.user));
+  const tokens = useTokenBalance(Boolean(session?.user));
   // The editor needs every pixel — collapse the sidebar to an icon rail there.
   const compact = /^\/tasks\/[^/]+\/edit/.test(pathname);
 
@@ -122,6 +125,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="mt-auto w-full space-y-2 pb-3">
           <Announcements key={user.id} userId={user.id} compact={compact} />
           {!compact && <LanguageSwitcher className="w-full justify-between" />}
+          {!compact && tokens && !tokens.unlimited && <TokenCard balance={tokens} />}
           {!compact && billing?.monetization_enabled && <UsageCard billing={billing} />}
           <UserRow compact={compact} name={DISPLAY_NAME} email={user.email} />
         </div>
@@ -187,6 +191,29 @@ function SidebarLink({ href, label, active, compact, shortcut, className, extern
   );
   if (!compact) return link;
   return <Tooltip><TooltipTrigger asChild>{link}</TooltipTrigger><TooltipContent side="right">{label}</TooltipContent></Tooltip>;
+}
+
+function TokenCard({ balance }: { balance: NonNullable<ReturnType<typeof useTokenBalance>> }) {
+  const granted = balance.granted ?? 0;
+  const remaining = balance.remaining ?? 0;
+  const pct = granted > 0 ? Math.min(100, (remaining / granted) * 100) : 0;
+  const low = !balance.exhausted && pct <= 20;
+  const color = balance.exhausted ? "#F0466B" : low ? "#F5B454" : "#5BD69A";
+  return (
+    <div className="space-y-1.5 rounded-lg border border-sidebar-border px-3 py-2 text-xs" data-testid="token-card">
+      <div className="flex items-center justify-between">
+        <span className="font-semibold">Tokens restantes</span>
+        <span className="tabular-nums text-muted-foreground">{new Intl.NumberFormat("pt-BR").format(remaining)}</span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} /></div>
+      {(balance.exhausted || low) && (
+        <p style={{ color }}>
+          {balance.exhausted ? "Seus tokens acabaram. " : "Seus tokens estão acabando. "}
+          <a href={ADMIN_WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className="underline">Chamar o administrador para comprar mais</a>
+        </p>
+      )}
+    </div>
+  );
 }
 
 function UsageCard({ billing }: { billing: NonNullable<ReturnType<typeof useBillingSummary>[0]> }) {

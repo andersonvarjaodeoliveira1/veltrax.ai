@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import { useSession } from "@/lib/auth-client";
+import { ADMIN_WHATSAPP_URL } from "@/lib/token-balance";
 
 // BETA — Clonagem de Vídeo, seguindo o Protocolo Árvore.
 // A copy validada é o tronco; as variações são os galhos (mesma mensagem, outro avatar/formato).
@@ -157,6 +158,7 @@ function load(): Project {
 
 function ptError(detail: unknown, fallback = "Não foi possível gerar esta etapa. Tente de novo.") {
   if (typeof detail !== "string") return fallback;
+  if (/TOKENS_EXHAUSTED/.test(detail)) return "Seus tokens acabaram. Chame o administrador para comprar mais créditos.";
   if (/Send the reference/i.test(detail)) return "Envie um vídeo ou descreva a referência (mínimo 20 caracteres).";
   if (/Keyword is required/i.test(detail)) return "Digite a palavra-chave.";
   if (/Too many (AI|caption)/i.test(detail)) return "Muitos pedidos em pouco tempo. Tente de novo daqui a pouco.";
@@ -243,6 +245,7 @@ async function callStage(stage: Stage, proj: Project): Promise<{ items?: unknown
   });
   const data = await response.json().catch(() => null);
   const valid = stage === "mix" ? Array.isArray(data?.hooks) && Array.isArray(data?.bodies) && Array.isArray(data?.ctas) : Array.isArray(data?.items);
+  try { window.dispatchEvent(new Event("gv-tokens-changed")); } catch { /* sem janela */ }
   if (!response.ok || !valid) throw new Error(ptError(data?.detail));
   return data;
 }
@@ -1119,7 +1122,7 @@ export function CloneWizard() {
         )}
         {error && (
           <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
+            <AlertDescription>{error}{/tokens acabaram/i.test(error) && <> <a href={ADMIN_WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className="font-medium underline">Chamar o administrador no WhatsApp</a></>}</AlertDescription>
           </Alert>
         )}
 
@@ -1370,7 +1373,7 @@ export function CloneWizard() {
 
       {error && (
         <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>{error}{/tokens acabaram/i.test(error) && <> <a href={ADMIN_WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className="font-medium underline">Chamar o administrador no WhatsApp</a></>}</AlertDescription>
         </Alert>
       )}
       {canResume && !auto && paid && (

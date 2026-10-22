@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import contextvars
 import logging
+import os
 from typing import Any
 
 from sqlalchemy import text
@@ -38,3 +39,49 @@ async def record_usage(stage: str, model: Any, usage: Any, own_key: bool = False
             await session.commit()
     except Exception:
         logger.warning("não foi possível registrar o uso de tokens", exc_info=True)
+
+
+# ---------------------------------------------------------------------------
+# Saldo de tokens do membro (só conta os tokens pagos pelo servidor)
+# ---------------------------------------------------------------------------
+
+# Quem ainda não recebeu uma quantidade do administrador começa com este saldo.
+DEFAULT_QUOTA = int(os.getenv("DEFAULT_TOKEN_QUOTA", "300000"))
+
+_server_blocked: contextvars.ContextVar[bool] = contextvars.ContextVar("server_blocked", default=False)
+
+
+def set_server_blocked(value: bool) -> None:
+    _server_blocked.set(bool(value))
+
+
+def server_blocked() -> bool:
+    return _server_blocked.get()
+
+
+def balance_from(is_admin: bool, granted: int | None, used: int) -> dict[str, Any]:
+    if is_admin:
+        return {"unlimited": True, "granted": None, "used": int(used), "remaining": None, "exhausted": False}
+    total = DEFAULT_QUOTA if granted is None else int(granted)
+    remaining = max(0, total - int(used))
+    return {"unlimited": False, "granted": total, "used": int(used), "remaining": remaining, "exhausted": remaining <= 0}
+
+
+async def get_balance(db: Any, user_id: str) -> dict[str, Any]:
+    row = (
+        await db.execute(
+            text(
+                """
+                SELECT u.is_admin, q.granted,
+                       COALESCE((SELECT SUM(input_tokens + output_tokens) FROM llm_usage
+                                 WHERE user_id = u.id AND NOT own_key), 0) AS used
+                FROM users u LEFT JOIN user_token_quota q ON q.user_id = u.id
+                WHERE u.id = :u
+                """
+            ),
+            {"u": user_id},
+        )
+    ).mappings().first()
+    if not row:
+        return balance_from(False, 0, 0)
+    return balance_from(bool(row["is_admin"]), row["granted"], int(row["used"] or 0))

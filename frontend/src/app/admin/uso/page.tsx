@@ -8,6 +8,7 @@ type UserUsage = {
   id: string; email: string; name: string; created_at: string | null;
   tokens_in: number; tokens_out: number; tokens_in_30d: number; tokens_out_30d: number; tokens_own_key: number;
   calls: number; jobs: number; videos: number; clips: number;
+  balance: { unlimited: boolean; granted: number | null; used: number; remaining: number | null; exhausted: boolean };
 };
 type Detail = {
   jobs: { id: string; status: string; total: number; done: number; created_at: string | null; videos: { index: number; label: string }[] }[];
@@ -40,6 +41,17 @@ export default function AdminUsagePage() {
       }
     })();
   }, []);
+
+  async function addTokens(userId: string, amount: number) {
+    try {
+      const response = await fetch(`/api/admin/users/${userId}/tokens`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ add: amount }) });
+      if (!response.ok) throw new Error();
+      const balance = await response.json();
+      setUsers((current) => (current ?? []).map((u) => (u.id === userId ? { ...u, balance } : u)));
+    } catch {
+      setError("Não foi possível liberar os tokens agora. Tente de novo.");
+    }
+  }
 
   async function show(user: UserUsage) {
     setOpen(user); setDetail(null); setLoading(true);
@@ -75,7 +87,7 @@ export default function AdminUsagePage() {
           <p className="border-b px-4 py-3 text-xs text-muted-foreground">Total de tokens de todos os usuários: <b className="text-foreground tabular-nums">{fmt.format(totalTokens)}</b>. “Chave própria” = tokens que saíram da chave do próprio usuário (não custam ao servidor).</p>
           <table className="min-w-full divide-y">
             <thead><tr>
-              <th className={th}>Usuário</th><th className={th}>Tokens (total)</th><th className={th}>Últimos 30 dias</th><th className={th}>Chave própria</th>
+              <th className={th}>Usuário</th><th className={th}>Tokens (total)</th><th className={th}>Últimos 30 dias</th><th className={th}>Chave própria</th><th className={th}>Saldo restante</th>
               <th className={th}>Vídeos montados</th><th className={th}>Cortes</th><th className={th} />
             </tr></thead>
             <tbody className="divide-y">
@@ -85,6 +97,19 @@ export default function AdminUsagePage() {
                   <td className={td}>{fmt.format(user.tokens_in + user.tokens_out)}<span className="block text-xs text-muted-foreground">entrada {fmt.format(user.tokens_in)} · saída {fmt.format(user.tokens_out)}</span></td>
                   <td className={td}>{fmt.format(user.tokens_in_30d + user.tokens_out_30d)}</td>
                   <td className={td}>{fmt.format(user.tokens_own_key)}</td>
+                  <td className={td}>
+                    {user.balance.unlimited ? <span className="text-muted-foreground">ilimitado</span> : (
+                      <>
+                        <span className={user.balance.exhausted ? "font-medium text-[#F0466B]" : ""}>{fmt.format(user.balance.remaining ?? 0)}</span>
+                        <span className="block text-xs text-muted-foreground">de {fmt.format(user.balance.granted ?? 0)}</span>
+                        <span className="mt-1 flex gap-1">
+                          {[100_000, 500_000].map((amount) => (
+                            <button key={amount} type="button" className="rounded-full border px-2 py-0.5 text-[11px] hover:bg-muted" onClick={() => void addTokens(user.id, amount)}>+{fmt.format(amount)}</button>
+                          ))}
+                        </span>
+                      </>
+                    )}
+                  </td>
                   <td className={td}>{user.videos}</td>
                   <td className={td}>{user.clips}</td>
                   <td className={td}><button type="button" className="underline" onClick={() => void show(user)}>Ver vídeos</button></td>
