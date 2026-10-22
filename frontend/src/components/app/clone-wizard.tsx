@@ -889,6 +889,9 @@ export function CloneWizard() {
     setImgs({});
     setTasks([]);
     setError(null);
+    setRedirectIn(null);
+    setRedirectBlocked(false);
+    try { window.sessionStorage.removeItem("gv-flow-redirected"); } catch { /* storage unavailable */ }
     setP(EMPTY);
   }
   resetRef.current = reset;
@@ -1009,6 +1012,7 @@ export function CloneWizard() {
         if (n <= 1) {
           window.clearInterval(timer);
           try { window.sessionStorage.setItem("gv-flow-redirected", redirectSig); } catch { /* storage unavailable */ }
+          markSent(); // a pessoa vai gerar no Flow: o projeto espera até 2 horas
           const opened = window.open(FLOW_HOME_URL, "_blank");
           if (!opened) setRedirectBlocked(true);
           return null;
@@ -1206,7 +1210,7 @@ export function CloneWizard() {
             <div className="h-1.5 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A98BFF] transition-all duration-1000" style={{ width: `${redirectBlocked ? 100 : ((5 - (redirectIn ?? 5)) / 5) * 100}%` }} /></div>
             <p className="text-xs text-muted-foreground">Tudo pronto. O pacote já foi copiado. No Flow, abra o seu projeto e cole o pacote na extensão.</p>
             <div className="flex gap-2">
-              <a href={FLOW_HOME_URL} target="_blank" rel="noopener noreferrer" className="inline-flex items-center rounded-full border border-border px-3 py-1.5 text-xs hover:text-foreground" onClick={() => { setRedirectIn(null); setRedirectBlocked(false); }}>Abrir o Flow agora</a>
+              <a href={FLOW_HOME_URL} target="_blank" rel="noopener noreferrer" className="inline-flex items-center rounded-full border border-border px-3 py-1.5 text-xs hover:text-foreground" onClick={() => { markSent(); setRedirectIn(null); setRedirectBlocked(false); }}>Abrir o Flow agora</a>
               {redirectIn !== null && <button type="button" className="text-xs underline" onClick={() => setRedirectIn(null)}>Cancelar</button>}
             </div>
           </section>
