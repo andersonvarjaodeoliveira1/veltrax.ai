@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import { useSession } from "@/lib/auth-client";
 import { ADMIN_WHATSAPP_URL } from "@/lib/token-balance";
+import { announceTokens, readTokenBalance } from "@/lib/token-alert";
 
 // BETA — Clonagem de Vídeo, seguindo o Protocolo Árvore.
 // A copy validada é o tronco; as variações são os galhos (mesma mensagem, outro avatar/formato).
@@ -219,7 +220,10 @@ function linesOf(proj: Project, vi: number): string[] {
 const isMixReady = (m: Mix) => m.hooks.length >= 2 && m.bodies.length >= 2 && m.ctas.length >= 2 && m.ctas.every((item) => item.includes("{KEYWORD}"));
 
 /** Chama uma etapa da IA e devolve os dados. Lança um erro já em português. */
+const STAGE_LABEL: Record<string, string> = { scenes: "Separação das cenas", variations: "Variações", mix: "Copys", images: "Prompts de imagem", videos: "Prompts de animação" };
+
 async function callStage(stage: Stage, proj: Project): Promise<{ items?: unknown[]; hooks?: string[]; bodies?: string[]; ctas?: string[] }> {
+  const tokensBefore = await readTokenBalance();
   const response = await fetch("/api/multiplier/clone/generate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -245,8 +249,11 @@ async function callStage(stage: Stage, proj: Project): Promise<{ items?: unknown
   });
   const data = await response.json().catch(() => null);
   const valid = stage === "mix" ? Array.isArray(data?.hooks) && Array.isArray(data?.bodies) && Array.isArray(data?.ctas) : Array.isArray(data?.items);
-  try { window.dispatchEvent(new Event("gv-tokens-changed")); } catch { /* sem janela */ }
-  if (!response.ok || !valid) throw new Error(ptError(data?.detail));
+  if (!response.ok || !valid) {
+    try { window.dispatchEvent(new Event("gv-tokens-changed")); } catch { /* sem janela */ }
+    throw new Error(ptError(data?.detail));
+  }
+  void announceTokens(STAGE_LABEL[stage] ?? "Etapa", tokensBefore);
   return data;
 }
 

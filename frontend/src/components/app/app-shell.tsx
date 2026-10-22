@@ -208,8 +208,8 @@ function TokenCard({ balance }: { balance: NonNullable<ReturnType<typeof useToke
       <div className="h-1.5 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} /></div>
       {(balance.exhausted || low) && (
         <p style={{ color }}>
-          {balance.exhausted ? "Seus tokens acabaram. " : "Seus tokens estão acabando. "}
-          <a href={ADMIN_WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className="underline">Chamar o administrador para comprar mais</a>
+          {balance.exhausted ? (granted === 0 ? "Você ainda não tem tokens liberados. " : "Seus tokens acabaram. ") : "Seus tokens estão acabando. "}
+          <a href={ADMIN_WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className="underline">{granted === 0 ? "Chamar o administrador para liberar o seu plano" : "Chamar o administrador para comprar mais"}</a>
         </p>
       )}
     </div>

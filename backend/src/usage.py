@@ -45,8 +45,8 @@ async def record_usage(stage: str, model: Any, usage: Any, own_key: bool = False
 # Saldo de tokens do membro (só conta os tokens pagos pelo servidor)
 # ---------------------------------------------------------------------------
 
-# Quem ainda não recebeu uma quantidade do administrador começa com este saldo.
-DEFAULT_QUOTA = int(os.getenv("DEFAULT_TOKEN_QUOTA", "300000"))
+# O saldo depende do plano de cada pessoa: quem ainda não recebeu tokens do administrador começa com 0.
+DEFAULT_QUOTA = int(os.getenv("DEFAULT_TOKEN_QUOTA", "0"))
 
 _server_blocked: contextvars.ContextVar[bool] = contextvars.ContextVar("server_blocked", default=False)
 

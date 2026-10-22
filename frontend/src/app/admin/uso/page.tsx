@@ -42,6 +42,19 @@ export default function AdminUsagePage() {
     })();
   }, []);
 
+  const [custom, setCustom] = useState<Record<string, string>>({});
+
+  async function setTotal(userId: string, total: number) {
+    try {
+      const response = await fetch(`/api/admin/users/${userId}/tokens`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ set: total }) });
+      if (!response.ok) throw new Error();
+      const balance = await response.json();
+      setUsers((current) => (current ?? []).map((u) => (u.id === userId ? { ...u, balance } : u)));
+    } catch {
+      setError("Não foi possível definir os tokens agora. Tente de novo.");
+    }
+  }
+
   async function addTokens(userId: string, amount: number) {
     try {
       const response = await fetch(`/api/admin/users/${userId}/tokens`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ add: amount }) });
@@ -103,6 +116,13 @@ export default function AdminUsagePage() {
                         <span className={user.balance.exhausted ? "font-medium text-[#F0466B]" : ""}>{fmt.format(user.balance.remaining ?? 0)}</span>
                         <span className="block text-xs text-muted-foreground">de {fmt.format(user.balance.granted ?? 0)}</span>
                         <span className="mt-1 flex gap-1">
+                          <input
+                            type="number" min={0} step={10000} placeholder="tokens" aria-label={`Tokens para ${user.email}`}
+                            value={custom[user.id] ?? ""} onChange={(event) => setCustom((current) => ({ ...current, [user.id]: event.target.value }))}
+                            className="w-24 rounded-full border bg-background px-2 py-0.5 text-[11px]"
+                          />
+                          <button type="button" className="rounded-full border px-2 py-0.5 text-[11px] hover:bg-muted" disabled={!Number(custom[user.id])}
+                            onClick={() => { void setTotal(user.id, Number(custom[user.id])); setCustom((current) => ({ ...current, [user.id]: "" })); }}>definir total</button>
                           {[100_000, 500_000].map((amount) => (
                             <button key={amount} type="button" className="rounded-full border px-2 py-0.5 text-[11px] hover:bg-muted" onClick={() => void addTokens(user.id, amount)}>+{fmt.format(amount)}</button>
                           ))}
