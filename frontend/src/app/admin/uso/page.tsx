@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Download, Loader2 } from "lucide-react";
+import { BarChart3, Download, Loader2 } from "lucide-react";
+import { PageHeader } from "@/components/app/page-header";
 
 type UserUsage = {
   id: string; email: string; name: string; created_at: string | null;
@@ -83,13 +84,8 @@ export default function AdminUsagePage() {
 
   return (
     <main className="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-8">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Uso por usuário</h1>
-          <p className="text-sm text-muted-foreground">Tokens de IA gastos nos textos da Automação e os vídeos gerados por cada pessoa.</p>
-        </div>
-        <Link href="/admin" className="text-sm underline">Voltar ao Admin</Link>
-      </div>
+      <PageHeader icon={BarChart3} title="Uso por usuário" description="Tokens de IA gastos nos textos da Automação e os vídeos gerados por cada pessoa."
+        action={<Link href="/admin" className="inline-flex items-center rounded-full border border-border px-4 py-2 text-sm hover:text-foreground">Voltar ao Admin</Link>} />
 
       {error && <p role="alert" className="rounded-[14px] border border-[#F0466B]/40 bg-[#F0466B]/10 p-3 text-sm text-[#F0466B]">{error}</p>}
 

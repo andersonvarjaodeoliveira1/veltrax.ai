@@ -204,3 +204,35 @@
 
 .scrollbar-none { scrollbar-width: none; }
 .scrollbar-none::-webkit-scrollbar { display: none; }
+
+/* Polimento geral: seleção, foco, botões clicáveis e seções expansíveis (details) mais claras */
+::selection { background: rgba(123, 63, 228, 0.45); color: #fff; }
+html { scroll-behavior: smooth; }
+button:not(:disabled), [role="button"]:not([aria-disabled="true"]), summary { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+
+details > summary { list-style: none; display: flex; align-items: center; gap: 0.5rem; }
+details > summary::-webkit-details-marker { display: none; }
+details > summary::after {
+  content: "";
+  margin-left: auto;
+  width: 0.5rem;
+  height: 0.5rem;
+  flex-shrink: 0;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  opacity: 0.6;
+  transform: rotate(45deg) translateY(-2px);
+  transition: transform 0.2s ease;
+}
+details[open] > summary::after { transform: rotate(-135deg) translateY(-2px); }
+details > summary:hover { color: var(--foreground); }
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), textarea, select {
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus-visible, textarea:focus-visible, select:focus-visible {
+  border-color: #a98bff;
+  box-shadow: 0 0 0 3px rgba(123, 63, 228, 0.25);
+  outline: none;
+}

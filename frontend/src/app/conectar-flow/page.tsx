@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Download, ExternalLink, Film } from "lucide-react";
+import { Check, Download, ExternalLink, Film, Link2 } from "lucide-react";
 import { useSession } from "@/lib/auth-client";
 import { FLOW_MODELS, readFlowCategory, saveFlowCategory } from "@/lib/flow-models";
 import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/app/page-header";
 
 const FLOW_URL = "https://flow.google.com";
 // Link compartilhado do app "ClipGringa — Gerar Vídeos" dentro do Flow. Só aparece depois de criado e configurado.
@@ -40,10 +41,7 @@ export default function ConnectFlowPage() {
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-6 p-4 sm:p-8">
-      <div>
-        <h1 className="text-2xl font-semibold">Conectar ao Flow</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Os vídeos são gerados na <b>sua</b> conta do Flow. Faça os dois passos abaixo uma vez e deixe a conta conectada neste navegador.</p>
-      </div>
+      <PageHeader icon={Link2} title="Conectar ao Flow" description={<>Os vídeos são gerados na <b>sua</b> conta do Flow. Faça os passos abaixo uma vez e deixe a conta conectada neste navegador.</>} />
 
       <section className="space-y-3 rounded-[18px] border border-border bg-card p-5" data-testid="step-category">
         <p className="font-medium">Sua categoria no Flow</p>

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Check, KeyRound, Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/app/page-header";
 
 type Integration = { provider: string; label: string; help: string; connected: boolean; hint: string; updated_at: string | null };
 
@@ -59,10 +60,7 @@ export default function MyApisPage() {
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-6 p-4 sm:p-8">
-      <div>
-        <h1 className="text-2xl font-semibold">Minhas APIs</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Conecte as suas próprias chaves. Quando você conecta uma, o ClipGringa passa a usar a sua e não depende de ninguém. Elas ficam guardadas com criptografia e só você usa.</p>
-      </div>
+      <PageHeader icon={KeyRound} title="Minhas APIs" description="Conecte as suas próprias chaves. Quando você conecta uma, o ClipGringa passa a usar a sua e não depende de ninguém. Elas ficam guardadas com criptografia e só você usa." />
 
       {error && !error.provider && <p role="alert" className="rounded-[14px] border border-[#F0466B]/40 bg-[#F0466B]/10 p-3 text-sm text-[#F0466B]">{error.text}</p>}
 

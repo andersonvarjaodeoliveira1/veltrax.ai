@@ -24,19 +24,19 @@ import { cn } from "@/lib/utils";
 import { DISPLAY_NAME } from "@/lib/site";
 import { LanguageSwitcher } from "@/lib/i18n";
 
-type NavItem = { href: string; label: string; icon: typeof Film; match: (path: string) => boolean; external?: boolean; badge?: string };
+type NavItem = { href: string; label: string; icon: typeof Film; match: (path: string) => boolean; external?: boolean; badge?: string; group?: string };
 
 const DOWNLOADER_URL = "https://turboscribe.ai/pt/downloader/youtube/video";
 
 const WHATSAPP_URL = "https://wa.me/5511913142143?text=" + encodeURIComponent("Olá! Quero comprar API ou conta do Flow para usar no ClipGringa.");
 
 const NAV: NavItem[] = [
-  { href: "/list", label: "Library", icon: Film, match: (p) => p.startsWith("/list") || p.startsWith("/tasks") },
+  { href: "/list", label: "Library", group: "Criar", icon: Film, match: (p) => p.startsWith("/list") || p.startsWith("/tasks") },
   { href: "/folders", label: "Folders", icon: FolderOpen, match: (p) => p.startsWith("/folders") },
   { href: "/multiplicador", label: "Multiplicador", icon: Layers, match: (p) => p.startsWith("/multiplicador"), badge: "BETA" },
   { href: "/automacao", label: "Automação", icon: Workflow, match: (p) => p.startsWith("/automacao"), badge: "BETA" },
   { href: DOWNLOADER_URL, label: "Baixar vídeo", icon: Download, match: () => false, external: true },
-  { href: "/conectar-flow", label: "Conectar ao Flow", icon: Link2, match: (p) => p.startsWith("/conectar-flow") },
+  { href: "/conectar-flow", label: "Conectar ao Flow", group: "Minha conta", icon: Link2, match: (p) => p.startsWith("/conectar-flow") },
   { href: "/minhas-apis", label: "Minhas APIs", icon: KeyRound, match: (p) => p.startsWith("/minhas-apis") },
   { href: WHATSAPP_URL, label: "API e Flow", icon: MessageCircle, match: () => false, external: true },
 ];
@@ -79,7 +79,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // loaded — otherwise the page remounts and re-runs its initial fetches.
   const user = session?.user;
   const admin = Boolean((user as { is_admin?: boolean } | undefined)?.is_admin);
-  const items = admin ? [...NAV, { href: "/admin", label: "Admin", icon: Shield, match: (p: string) => p.startsWith("/admin") }] : NAV;
+  const items = admin ? [...NAV, { href: "/admin", label: "Admin", group: "Administração", icon: Shield, match: (p: string) => p.startsWith("/admin") }] : NAV;
 
   return (
     <div data-app-shell={user ? "" : undefined} className={cn(user && "flex min-h-dvh bg-canvas")}>
@@ -94,17 +94,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {!compact && "ClipGringa"}
         </Link>
 
-        <SidebarLink compact={compact} href="/" label="New generation" shortcut="N" className="mb-4 mt-1 bg-foreground text-background hover:bg-foreground/90 hover:text-background">
+        <SidebarLink compact={compact} href="/" label="New generation" shortcut="N" className="mb-4 mt-1 justify-center rounded-full bg-gradient-to-br from-[#8b5cf6] to-[#7b3fe4] text-white shadow-[0_8px_22px_-8px_#7b3fe4] hover:text-white hover:brightness-110">
           <Plus className="size-4" />
         </SidebarLink>
 
         <nav aria-label="Main navigation" className="flex w-full flex-col gap-0.5">
-          {items.map((item) => {
+          {items.map((item, index) => {
             const active = item.match(pathname);
+            const header = !compact && item.group && item.group !== items[index - 1]?.group ? (
+              <p key={`g-${item.group}`} data-no-translate className="mb-1 mt-4 px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70 first:mt-0">{item.group}</p>
+            ) : null;
             return (
+              <div key={item.href} className="contents">
+              {header}
               <SidebarLink key={item.href} compact={compact} href={item.href} label={item.label} active={active} external={item.external} badge={item.badge}>
                 <item.icon className="size-4" />
               </SidebarLink>
+              </div>
             );
           })}
         </nav>
@@ -147,10 +153,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {children}
       </div>
 
-      {user ? <nav aria-label="Mobile navigation" className="fixed inset-x-0 bottom-0 z-40 grid grid-flow-col auto-cols-fr border-t bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+      {user ? <nav aria-label="Mobile navigation" className="scrollbar-none fixed inset-x-0 bottom-0 z-40 flex overflow-x-auto border-t bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
         {NAV.map((item) => {
           const active = item.match(pathname);
-          const cls = cn("flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium", active ? "text-foreground" : "text-muted-foreground");
+          const cls = cn("flex h-16 min-w-[4.75rem] flex-1 flex-col items-center justify-center gap-1 px-2 text-[11px] font-medium", active ? "text-foreground" : "text-muted-foreground");
           const inner = <><item.icon className={cn("size-5", active && "text-brand")} />{item.label}{item.badge && <span data-no-translate className="-mt-0.5 text-[8px] font-semibold text-brand">{item.badge}</span>}</>;
           return item.external ? (
             <a key={item.href} href={item.href} target="_blank" rel="noopener noreferrer" className={cls}>{inner}</a>
@@ -177,9 +183,9 @@ function SidebarLink({ href, label, active, compact, shortcut, className, extern
       aria-current={active ? "page" : undefined}
       aria-label={compact ? label : undefined}
       className={cn(
-        "flex h-9 w-full items-center gap-2.5 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "flex h-10 w-full items-center gap-2.5 rounded-full text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         compact ? "justify-center" : "px-2.5",
-        active ? "bg-background text-foreground shadow-xs ring-1 ring-sidebar-border" : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
+        active ? "bg-[#7b3fe4]/20 text-foreground ring-1 ring-[#a98bff]/40 [&_svg]:text-[#a98bff]" : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
         className,
       )}
     >
