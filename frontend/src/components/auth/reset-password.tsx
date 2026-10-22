@@ -67,11 +67,11 @@ export function ResetPassword() {
             <Input
               className="h-11"
               type="password"
-              placeholder="New password"
+              placeholder="New password (at least 10 characters)"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              minLength={8}
+              minLength={10}
               disabled={loading}
             />
             <Input
@@ -81,7 +81,7 @@ export function ResetPassword() {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
-              minLength={8}
+              minLength={10}
               disabled={loading}
             />
             <Button type="submit" className="h-11 w-full" disabled={loading}>

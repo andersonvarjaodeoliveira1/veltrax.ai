@@ -60,7 +60,7 @@ describe("ResetPassword", () => {
     const user = userEvent.setup();
 
     render(<ResetPassword />);
-    await user.type(screen.getByPlaceholderText("New password"), "Password123!");
+    await user.type(screen.getByPlaceholderText(/New password/), "Password123!");
     await user.type(screen.getByPlaceholderText("Confirm new password"), "Password456!");
     await user.click(screen.getByRole("button", { name: "Reset password" }));
 
@@ -74,7 +74,7 @@ describe("ResetPassword", () => {
     const user = userEvent.setup();
 
     render(<ResetPassword />);
-    await user.type(screen.getByPlaceholderText("New password"), "Password123!");
+    await user.type(screen.getByPlaceholderText(/New password/), "Password123!");
     await user.type(screen.getByPlaceholderText("Confirm new password"), "Password123!");
     await user.click(screen.getByRole("button", { name: "Reset password" }));
 

@@ -1,6 +1,14 @@
-import { redirect } from "next/navigation";
+import { Suspense } from "react";
+import { AuthFrame } from "@/components/auth/auth-frame";
+import { ResetPassword } from "@/components/auth/reset-password";
 
-/** Recuperação por e-mail desativada (conta única, sem envio de e-mail). */
+// Também é a tela em que o membro convidado escolhe a senha pelo link do e-mail.
 export default function ResetPasswordPage() {
-  redirect("/sign-in");
+  return (
+    <AuthFrame>
+      <Suspense fallback={null}>
+        <ResetPassword />
+      </Suspense>
+    </AuthFrame>
+  );
 }

@@ -7,6 +7,19 @@ export type Lang = "pt" | "en" | "es";
 type Entry = { pt: string; es: string };
 
 const E: Record<string, Entry> = {
+  // Criar / recuperar senha
+  "Choose a new password": { pt: "Escolha a sua senha", es: "Elige tu contraseña" },
+  "You'll be signed out on other devices.": { pt: "Você será desconectado dos outros aparelhos.", es: "Se cerrará tu sesión en los otros dispositivos." },
+  "New password (at least 10 characters)": { pt: "Nova senha (mínimo 10 caracteres)", es: "Nueva contraseña (mínimo 10 caracteres)" },
+  "Saving...": { pt: "Salvando...", es: "Guardando..." },
+  "Passwords do not match": { pt: "As senhas não são iguais", es: "Las contraseñas no coinciden" },
+  "Password updated. Redirecting to sign in...": { pt: "Senha salva. Levando você para entrar...", es: "Contraseña guardada. Te llevamos a iniciar sesión..." },
+  "Link expired": { pt: "Link vencido", es: "Enlace vencido" },
+  "This password reset link is invalid or has expired.": { pt: "Esse link é inválido ou já venceu.", es: "Este enlace no es válido o ya venció." },
+  "Request a new link": { pt: "Pedir um novo link", es: "Pedir un nuevo enlace" },
+  "Enter your email and we'll send you a link to reset it.": { pt: "Digite seu e-mail e enviaremos um link para criar uma nova senha.", es: "Escribe tu correo y te enviaremos un enlace para crear una nueva contraseña." },
+  "Sending...": { pt: "Enviando...", es: "Enviando..." },
+  "Back to sign in": { pt: "Voltar para entrar", es: "Volver a iniciar sesión" },
   // Menu / navegação
   "Create": { pt: "Criar", es: "Crear" },
   "Library": { pt: "Biblioteca", es: "Biblioteca" },

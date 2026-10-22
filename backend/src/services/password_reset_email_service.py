@@ -19,9 +19,31 @@ class PasswordResetEmailService:
     def is_configured(self) -> bool:
         return self.email_service.is_configured
 
-    async def send_reset_email(self, user: User, reset_url: str) -> dict:
-        content = self._build_reset_email(user, reset_url)
+    async def send_reset_email(self, user: User, reset_url: str, invite: bool = False) -> dict:
+        content = self._build_invite_email(user, reset_url) if invite else self._build_reset_email(user, reset_url)
         return await self.email_service.send_email(user.email, content)
+
+    def _build_invite_email(self, user: User, url: str) -> EmailContent:
+        first_name = first_name_for(first_name=user.first_name, full_name=user.name)
+        safe_url = escape(url, quote=True)
+        return EmailContent(
+            subject="Seu acesso ao ClipGringa está liberado",
+            html=(
+                f"<p>Olá, {escape(first_name)}!</p>"
+                "<p>Seu acesso ao ClipGringa foi liberado. Clique no botão abaixo para escolher a sua senha e entrar.</p>"
+                f'<p><a href="{safe_url}" style="display:inline-block;padding:12px 22px;border-radius:999px;'
+                'background:#7B3FE4;color:#ffffff;text-decoration:none;font-weight:600">Criar minha senha e entrar</a></p>'
+                "<p>Esse link vale por 3 dias. Depois disso, é só pedir um novo em “Esqueceu a senha?” na tela de entrada.</p>"
+                "<p>Equipe ClipGringa</p>"
+            ),
+            text=(
+                f"Olá, {first_name}!\n\n"
+                "Seu acesso ao ClipGringa foi liberado. Abra o link abaixo para escolher a sua senha e entrar:\n\n"
+                f"{url}\n\n"
+                "Esse link vale por 3 dias. Depois disso, peça um novo em “Esqueceu a senha?” na tela de entrada.\n\n"
+                "Equipe ClipGringa"
+            ),
+        )
 
     def _build_reset_email(self, user: User, reset_url: str) -> EmailContent:
         first_name = first_name_for(first_name=user.first_name, full_name=user.name)

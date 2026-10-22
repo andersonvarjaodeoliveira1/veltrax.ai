@@ -20,6 +20,8 @@ router = APIRouter(prefix="/account", tags=["account"])
 
 class PasswordResetEmailRequest(BaseModel):
     url: str
+    # True quando o administrador convida um membro novo: o e-mail dá boas-vindas e pede para criar a senha.
+    invite: bool = False
 
     @field_validator("url")
     @classmethod
@@ -52,7 +54,7 @@ async def send_password_reset_email(
     service = PasswordResetEmailService(config)
 
     try:
-        email_result = await service.send_reset_email(user, body.url)
+        email_result = await service.send_reset_email(user, body.url, invite=body.invite)
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
