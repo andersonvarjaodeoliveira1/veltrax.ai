@@ -238,3 +238,140 @@ async def update_runtime_settings(
             _setting_status(setting_key, rows) for setting_key in RUNTIME_SETTING_KEYS
         ]
     }
+
+
+# ---------------------------------------------------------------------------
+# Uso por usuário: tokens gastos e vídeos gerados (somente administrador)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/usage")
+async def users_usage(request: Request, db: AsyncSession = Depends(get_db)):
+    await require_admin_user(request, db, get_config())
+    rows = (
+        await db.execute(
+            text(
+                """
+                SELECT u.id, u.email, u.name, u."createdAt" AS created_at,
+                       COALESCE(l.tin, 0) AS tokens_in, COALESCE(l.tout, 0) AS tokens_out,
+                       COALESCE(l.tin30, 0) AS tokens_in_30d, COALESCE(l.tout30, 0) AS tokens_out_30d,
+                       COALESCE(l.own, 0) AS tokens_own_key, COALESCE(l.calls, 0) AS calls,
+                       COALESCE(j.jobs, 0) AS jobs, COALESCE(j.videos, 0) AS videos,
+                       COALESCE(c.clips, 0) AS clips
+                FROM users u
+                LEFT JOIN (
+                    SELECT user_id,
+                           SUM(input_tokens) AS tin, SUM(output_tokens) AS tout,
+                           SUM(input_tokens) FILTER (WHERE created_at > now() - interval '30 days') AS tin30,
+                           SUM(output_tokens) FILTER (WHERE created_at > now() - interval '30 days') AS tout30,
+                           SUM(input_tokens + output_tokens) FILTER (WHERE own_key) AS own,
+                           COUNT(*) AS calls
+                    FROM llm_usage GROUP BY user_id
+                ) l ON l.user_id = u.id
+                LEFT JOIN (
+                    SELECT user_id, COUNT(*) AS jobs, COALESCE(SUM(done), 0) AS videos
+                    FROM multiplier_jobs GROUP BY user_id
+                ) j ON j.user_id = u.id
+                LEFT JOIN (
+                    SELECT t.user_id, COUNT(*) AS clips
+                    FROM generated_clips g JOIN tasks t ON t.id = g.task_id GROUP BY t.user_id
+                ) c ON c.user_id = u.id
+                ORDER BY COALESCE(l.tin, 0) + COALESCE(l.tout, 0) DESC, u."createdAt" DESC
+                LIMIT 500
+                """
+            )
+        )
+    ).mappings().all()
+    numeric = ("tokens_in", "tokens_out", "tokens_in_30d", "tokens_out_30d", "tokens_own_key", "calls", "jobs", "videos", "clips")
+    users = []
+    for row in rows:
+        item = {"id": row["id"], "email": row["email"], "name": row["name"],
+                "created_at": row["created_at"].isoformat() if row["created_at"] else None}
+        item.update({key: int(row[key] or 0) for key in numeric})
+        users.append(item)
+    return {"users": users}
+
+
+@router.get("/users/{user_id}/videos")
+async def user_videos(user_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    await require_admin_user(request, db, get_config())
+    import json
+
+    jobs = (
+        await db.execute(
+            text(
+                "SELECT id, status, total, done, outputs, created_at FROM multiplier_jobs "
+                "WHERE user_id = :u ORDER BY created_at DESC LIMIT 50"
+            ),
+            {"u": user_id},
+        )
+    ).mappings().all()
+    out_jobs = []
+    for job in jobs:
+        try:
+            outputs = json.loads(job["outputs"] or "[]")
+        except Exception:
+            outputs = []
+        out_jobs.append({
+            "id": job["id"], "status": job["status"], "total": job["total"], "done": job["done"],
+            "created_at": job["created_at"].isoformat() if job["created_at"] else None,
+            "videos": [
+                {"index": o.get("index"), "label": o.get("label") or f"Vídeo {o.get('index')}"}
+                for o in outputs if o.get("status") == "ready"
+            ],
+        })
+    clips = (
+        await db.execute(
+            text(
+                "SELECT g.id, g.filename, g.duration, g.created_at, t.id AS task_id "
+                "FROM generated_clips g JOIN tasks t ON t.id = g.task_id "
+                "WHERE t.user_id = :u ORDER BY g.created_at DESC LIMIT 50"
+            ),
+            {"u": user_id},
+        )
+    ).mappings().all()
+    usage = (
+        await db.execute(
+            text(
+                "SELECT stage, model, input_tokens, output_tokens, own_key, created_at FROM llm_usage "
+                "WHERE user_id = :u ORDER BY created_at DESC LIMIT 100"
+            ),
+            {"u": user_id},
+        )
+    ).mappings().all()
+    return {
+        "jobs": out_jobs,
+        "clips": [
+            {"id": c["id"], "filename": c["filename"], "duration": float(c["duration"] or 0),
+             "created_at": c["created_at"].isoformat() if c["created_at"] else None, "task_id": c["task_id"]}
+            for c in clips
+        ],
+        "usage": [
+            {"stage": r["stage"], "model": r["model"], "input_tokens": r["input_tokens"],
+             "output_tokens": r["output_tokens"], "own_key": r["own_key"],
+             "created_at": r["created_at"].isoformat() if r["created_at"] else None}
+            for r in usage
+        ],
+    }
+
+
+@router.get("/jobs/{job_id}/outputs/{index}")
+async def admin_job_output(job_id: str, index: int, request: Request, download: bool = False, db: AsyncSession = Depends(get_db)):
+    await require_admin_user(request, db, get_config())
+    import json
+
+    from fastapi.responses import FileResponse
+
+    from .multiplier import _job_dir, _parse_uuid, _ready_file
+
+    row = (await db.execute(text("SELECT id, outputs FROM multiplier_jobs WHERE id = :i"), {"i": _parse_uuid(job_id)})).mappings().first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Job not found")
+    outputs = json.loads(row["outputs"] or "[]")
+    path = _ready_file(row["id"], outputs, index)
+    label = next((o.get("label") for o in outputs if o.get("index") == index), f"video-{index}")
+    return FileResponse(
+        path=str(path), media_type="video/mp4", filename=f"{label}.mp4",
+        content_disposition_type="attachment" if download else "inline",
+        headers={"Cache-Control": "private, no-store"},
+    )

@@ -1,0 +1,11 @@
+CREATE TABLE IF NOT EXISTS llm_usage (
+    id BIGSERIAL PRIMARY KEY,
+    user_id VARCHAR(36) NOT NULL,
+    stage VARCHAR(60) NOT NULL DEFAULT '',
+    model VARCHAR(120) NOT NULL DEFAULT '',
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    own_key BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_llm_usage_user ON llm_usage (user_id, created_at DESC)

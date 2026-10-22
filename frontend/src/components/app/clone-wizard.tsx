@@ -5,6 +5,7 @@ import { Check, ClipboardCopy, Download, ExternalLink, Loader2, Lock, Plus, Refr
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
+import { useSession } from "@/lib/auth-client";
 
 // BETA — Clonagem de Vídeo, seguindo o Protocolo Árvore.
 // A copy validada é o tronco; as variações são os galhos (mesma mensagem, outro avatar/formato).
@@ -27,7 +28,6 @@ type Project = {
   keyword: string;
   keepCase: boolean;
   sceneCount: number;
-  lowPriority: boolean;
   flowModel: string;
   language: string;
   cta: string;
@@ -88,7 +88,6 @@ const EMPTY: Project = {
   keyword: "",
   keepCase: false,
   sceneCount: 4,
-  lowPriority: true,
   flowModel: "lite",
   language: "pt-BR",
   cta: "Comente {KEYWORD} para assistir o vídeo completo",
@@ -916,6 +915,20 @@ export function CloneWizard() {
   const autoPct = auto ? Math.min(99, (auto.done / Math.max(1, auto.total)) * 100) : 0;
   const pct = auto ? autoPct : batch ? Math.min(98, ((batch.done + eased / 100) / batch.total) * 100) : eased;
 
+  // Membros comuns geram com créditos do Flow; só quem tem o Lower Priority (hoje o administrador) começa nele.
+  // A escolha fica guardada no navegador e não some quando o projeto é reiniciado.
+  const { data: authSession } = useSession();
+  const isAdminUser = Boolean((authSession?.user as { is_admin?: boolean } | undefined)?.is_admin);
+  const [lpChoice, setLpChoice] = useState<boolean | null>(null);
+  useEffect(() => {
+    try { const saved = window.localStorage.getItem("gv-flow-lp"); if (saved === "1" || saved === "0") setLpChoice(saved === "1"); } catch { /* storage unavailable */ }
+  }, []);
+  const lowPriority = lpChoice ?? isAdminUser;
+  const chooseLowPriority = (value: boolean) => {
+    setLpChoice(value);
+    try { window.localStorage.setItem("gv-flow-lp", value ? "1" : "0"); } catch { /* storage unavailable */ }
+  };
+
   // Pacote único para a ferramenta ClipGringa dentro do Flow (BETA): tudo o que foi coletado, em um clique.
   const flowPackage = () => JSON.stringify({
     app: "clipgringa-flow",
@@ -925,9 +938,9 @@ export function CloneWizard() {
     language: p.language,
     product: p.product || p.productInfo || p.productLook ? { name: p.product, info: p.productInfo, look: p.productLook } : undefined,
     sceneCount: p.sceneCount,
-    model: p.lowPriority !== false ? "Veo 3.1 - Lite [Lower Priority]" : (FLOW_MODELS.find((m) => m.id === p.flowModel) ?? FLOW_MODELS[0]).name,
-    flowModel: p.lowPriority !== false ? "[Lower Priority]" : (FLOW_MODELS.find((m) => m.id === p.flowModel) ?? FLOW_MODELS[0]).needle,
-    lowerPriority: p.lowPriority !== false,
+    model: lowPriority ? "Veo 3.1 - Lite [Lower Priority]" : (FLOW_MODELS.find((m) => m.id === p.flowModel) ?? FLOW_MODELS[0]).name,
+    flowModel: lowPriority ? "[Lower Priority]" : (FLOW_MODELS.find((m) => m.id === p.flowModel) ?? FLOW_MODELS[0]).needle,
+    lowerPriority: lowPriority,
     videos: p.variations.map((variation, vi) => ({
       title: variation.title,
       scenes: Array.from({ length: p.sceneCount }, (_, si) => ({
@@ -940,15 +953,15 @@ export function CloneWizard() {
 
   // Só quem NÃO tem Lower Priority escolhe o modelo, vendo quantos créditos cada vídeo gasta.
   const modelChooser = () => {
-    const low = p.lowPriority !== false;
+    const low = lowPriority;
     const model = FLOW_MODELS.find((m) => m.id === p.flowModel) ?? FLOW_MODELS[0];
     const perVideo = model.credits * p.sceneCount;
     return (
       <div className="space-y-2" data-testid="flow-model-chooser">
         <p className="text-xs font-medium">Sua conta do Flow tem o modelo Lower Priority (sem gastar créditos)?</p>
         <div className="flex flex-wrap gap-2">
-          <button type="button" aria-pressed={low} onClick={() => patch({ lowPriority: true })} className={cn("rounded-full border px-3 py-1.5 text-xs", low ? "border-[#7B3FE4] bg-[#7B3FE4]/20 text-foreground" : "border-border text-muted-foreground")}>Sim, tenho (0 créditos)</button>
-          <button type="button" aria-pressed={!low} onClick={() => patch({ lowPriority: false })} className={cn("rounded-full border px-3 py-1.5 text-xs", !low ? "border-[#7B3FE4] bg-[#7B3FE4]/20 text-foreground" : "border-border text-muted-foreground")}>Não tenho</button>
+          <button type="button" aria-pressed={low} onClick={() => chooseLowPriority(true)} className={cn("rounded-full border px-3 py-1.5 text-xs", low ? "border-[#7B3FE4] bg-[#7B3FE4]/20 text-foreground" : "border-border text-muted-foreground")}>Sim, tenho (0 créditos)</button>
+          <button type="button" aria-pressed={!low} onClick={() => chooseLowPriority(false)} className={cn("rounded-full border px-3 py-1.5 text-xs", !low ? "border-[#7B3FE4] bg-[#7B3FE4]/20 text-foreground" : "border-border text-muted-foreground")}>Não tenho</button>
         </div>
         {!low && (
           <div className="space-y-2 rounded-[12px] border border-[#F5B454]/40 bg-[#F5B454]/10 p-3">
@@ -1239,11 +1252,11 @@ export function CloneWizard() {
             </section>
 
             <details open className="rounded-[18px] border border-[#7B3FE4]/50 bg-[#7B3FE4]/10 p-5 text-sm" data-testid="guided-flow">
-              <summary className="cursor-pointer text-base font-semibold">{p.lowPriority !== false ? "Gerar no Flow · Lower Priority (sem custo)" : "Gerar no Flow"}</summary>
+              <summary className="cursor-pointer text-base font-semibold">{lowPriority ? "Gerar no Flow · Lower Priority (sem custo)" : "Gerar no Flow"}</summary>
               <div className="mt-3 rounded-[12px] border border-border bg-card p-3">{modelChooser()}</div>
               <ol className="mt-3 list-decimal space-y-1 pl-5 text-muted-foreground">
                 <li>Abra o <a href="https://flow.google.com" target="_blank" rel="noopener noreferrer" className="text-[#A98BFF] underline">Flow</a> e, para cada cena, cole o <b>prompt da imagem</b> (Nano Banana, 9:16, x1).</li>
-                <li>Depois anime a imagem: modelo {p.lowPriority !== false ? <><b>Veo 3.1 - Lite [Lower Priority]</b> (o Flow mostra “A geração vai usar 0 créditos”)</> : <b>{(FLOW_MODELS.find((m) => m.id === p.flowModel) ?? FLOW_MODELS[0]).name}</b>}, 8s, x1, e cole o <b>prompt da animação</b>.</li>
+                <li>Depois anime a imagem: modelo {lowPriority ? <><b>Veo 3.1 - Lite [Lower Priority]</b> (o Flow mostra “A geração vai usar 0 créditos”)</> : <b>{(FLOW_MODELS.find((m) => m.id === p.flowModel) ?? FLOW_MODELS[0]).name}</b>}, 8s, x1, e cole o <b>prompt da animação</b>.</li>
                 <li>Baixe com o nome indicado (Video01_Cena01.mp4…) e envie todos aqui embaixo.</li>
               </ol>
               <div className="mt-4 rounded-[12px] border border-border bg-card p-3" data-testid="flow-extension">
@@ -1653,9 +1666,9 @@ export function CloneWizard() {
               </div>
               {p.videos.length > 0 && (
                 <div className="space-y-2 rounded-[14px] border border-[#5BD69A]/40 bg-[#5BD69A]/10 p-3 text-sm" data-testid="flow-lower-priority">
-                  <p className="font-medium">{p.lowPriority !== false ? "Gerar no Flow, sem gastar créditos (Lower Priority)" : "Gerar no Flow"}</p>
+                  <p className="font-medium">{lowPriority ? "Gerar no Flow, sem gastar créditos (Lower Priority)" : "Gerar no Flow"}</p>
                   {modelChooser()}
-                  <p className="text-xs text-muted-foreground">{p.lowPriority !== false ? "No Flow, use o modelo “Veo 3.1 - Lite [Lower Priority]”, 8s e x1. O Flow mostra “A geração vai usar 0 créditos”. " : "No Flow, use o modelo escolhido acima, 8s e x1. "}Com a extensão, isso é feito sozinho: copie o pacote, abra o seu projeto no Flow e cole na extensão.</p>
+                  <p className="text-xs text-muted-foreground">{lowPriority ? "No Flow, use o modelo “Veo 3.1 - Lite [Lower Priority]”, 8s e x1. O Flow mostra “A geração vai usar 0 créditos”. " : "No Flow, use o modelo escolhido acima, 8s e x1. "}Com a extensão, isso é feito sozinho: copie o pacote, abra o seu projeto no Flow e cole na extensão.</p>
                   <div className="flex flex-wrap gap-2">
                     <Button type="button" size="sm" className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white" onClick={() => { markSent(); void copy("flow-send", flowPackage()); window.open(FLOW_HOME_URL, "_blank", "noopener"); }}>
                       <ExternalLink className="size-3.5" /> Enviar para o Flow

@@ -305,6 +305,10 @@ export default async function AdminPage({
         </Panel>
       </div>
 
+      <Panel title="Uso por usuário" description="Tokens gastos e vídeos gerados por cada pessoa.">
+        <div className="px-5 py-4 text-sm"><Link href="/admin/uso" className="underline underline-offset-4">Abrir o painel de uso</Link></div>
+      </Panel>
+
       <Panel title="Currently Processing Tasks" description="Live queue across all users.">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y">

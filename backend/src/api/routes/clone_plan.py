@@ -294,6 +294,9 @@ async def _run(system: str, output_type: type[BaseModel], prompt: str, model: An
         agent = Agent(candidate, output_type=output_type, system_prompt=system, output_retries=2)
         try:
             result = await asyncio.wait_for(agent.run(prompt), timeout=120)
+            from ...usage import record_usage
+
+            await record_usage(output_type.__name__, candidate, result.usage(), candidate in own)
             return result.output
         except asyncio.TimeoutError:
             raise HTTPException(status_code=504, detail="AI took too long. Try again.")
@@ -419,8 +422,10 @@ async def stage_videos(ctx: dict[str, Any], scenes: list[dict[str, str]], variat
 async def generate(request: Request, db: AsyncSession = Depends(get_db)):
     user_id = await _user_id(request, db)
     from ...integrations import load_user_keys
+    from ...usage import set_usage_user
 
     await load_user_keys(db, user_id)
+    set_usage_user(user_id)
     try:
         data = await request.json()
     except Exception:
@@ -464,8 +469,10 @@ async def product_look(request: Request, db: AsyncSession = Depends(get_db)):
     """Reads up to 3 product photos and returns a short description of the product's look. Photos are not stored."""
     user_id = await _user_id(request, db)
     from ...integrations import load_user_keys
+    from ...usage import set_usage_user
 
     await load_user_keys(db, user_id)
+    set_usage_user(user_id)
     form = await request.form()
     photos = [item for item in form.getlist("images") if hasattr(item, "read")][:3]
     if not photos:
@@ -489,13 +496,18 @@ async def product_look(request: Request, db: AsyncSession = Depends(get_db)):
 async def _run_parts(system: str, output_type: type[BaseModel], parts: list[Any], model: Any = None) -> Any:
     from pydantic_ai import Agent
 
+    is_own = False
     if model is None:
         from ...integrations import user_models
         own = user_models()
+        is_own = bool(own)
         model = own[0] if own else await _build_model()
     agent = Agent(model, output_type=output_type, system_prompt=system, output_retries=2)
     try:
         result = await asyncio.wait_for(agent.run(parts), timeout=120)
+        from ...usage import record_usage
+
+        await record_usage(output_type.__name__, model, result.usage(), is_own)
     except asyncio.TimeoutError:
         raise HTTPException(status_code=504, detail="AI took too long. Try again.")
     except HTTPException:

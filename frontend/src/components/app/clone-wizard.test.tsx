@@ -475,14 +475,15 @@ describe("idle project", () => {
   });
 });
 
-it("asks for a model and shows the credits per video only when the account has no Lower Priority", async () => {
+it("members start with credits: asks for a model and shows the credits per video; Lower Priority is opt-in", async () => {
   const user = userEvent.setup();
   window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ sceneCount: 3, step: 5, ctaLocked: true, keyword: "LIMON", variations: [{ title: "A", avatar: "x", look: "x", setting: "x", summary: "x" }], videos: [{ prompts: ["a", "b", "c"] }], images: [{ prompts: ["a", "b", "c"] }] }));
   render(<CloneWizard />);
   expect(await screen.findByTestId("flow-model-chooser")).toBeInTheDocument();
-  expect(screen.queryByTestId("flow-credits")).not.toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "Não tenho" }));
   expect(screen.getByTestId("flow-credits")).toHaveTextContent("30 créditos");
   await user.click(screen.getByRole("button", { name: /Veo 3.1 - Fast/ }));
   expect(screen.getByTestId("flow-credits")).toHaveTextContent("60 créditos");
+  await user.click(screen.getByRole("button", { name: /Sim, tenho/ }));
+  expect(screen.queryByTestId("flow-credits")).not.toBeInTheDocument();
+  expect(window.localStorage.getItem("gv-flow-lp")).toBe("1");
 });
