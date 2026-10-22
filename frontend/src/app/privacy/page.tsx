@@ -5,7 +5,7 @@ import { ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HOSTED_APP_URL, getSiteUrl } from "@/lib/site";
 
-const LAST_UPDATED = "October 5, 2026";
+const LAST_UPDATED = "October 22, 2026";
 const CONTACT_EMAIL = "privacy@clipgringa.gringatools.com";
 
 export const metadata: Metadata = {
@@ -165,6 +165,27 @@ export default function PrivacyPolicyPage() {
               We do not sell your personal information, and we do not use it for cross-context
               behavioral advertising. We may disclose information if required by law or to protect
               the rights, safety, and security of our users and the Service.
+            </p>
+          </Section>
+
+          <Section title="ClipGringa Flow Browser Extension">
+            <p>
+              The optional &ldquo;ClipGringa &middot; Flow&rdquo; Chrome extension helps you run the
+              prompts of a ClipGringa package inside your own Google Flow project. It only runs on{" "}
+              <code>flow.google.com</code>.
+            </p>
+            <p>
+              The extension does not collect, sell, or transmit personal data, and it makes no
+              network requests of its own. The package you paste into it (prompts and file names)
+              and its progress are kept only in your browser&apos;s local extension storage so a
+              run can continue after a reload; you can remove them by deleting the extension. We
+              do not receive your Google account details, your Flow content, or your Flow credits.
+            </p>
+            <p>
+              The &ldquo;debugger&rdquo; permission is used only to send a real mouse click to the
+              Flow tab you are using (Flow ignores simulated clicks), and the &ldquo;downloads&rdquo;
+              permission is used only to name the videos you download (for example
+              Video01_Cena01.mp4). Neither is used to read other sites or tabs.
             </p>
           </Section>
 
