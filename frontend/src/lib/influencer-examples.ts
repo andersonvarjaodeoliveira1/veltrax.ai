@@ -3,11 +3,12 @@ export type Lang3 = "pt" | "en" | "es";
 type T3 = Record<Lang3, string>;
 const L = (pt: string, en: string, es: string): T3 => ({ pt, en, es });
 
-export type SkillId = "nutra" | "dropshipping" | "mercado-livre" | "shopee";
+export type SkillId = "nutra" | "dropshipping" | "mercado-livre" | "shopee" | "infoproduto";
 export const SKILLS: { id: SkillId; name: T3; hint: T3; emoji: string }[] = [
   { id: "nutra", name: L("Nutra", "Nutra", "Nutra"), hint: L("Suplementos e bem-estar, sem promessa de cura", "Supplements and wellness, no cure claims", "Suplementos y bienestar, sin promesas de cura"), emoji: "🌿" },
   { id: "dropshipping", name: L("Dropshipping", "Dropshipping", "Dropshipping"), hint: L("Produto que resolve um problema, mostrado em uso", "A product that solves a problem, shown in use", "Un producto que resuelve un problema, mostrado en uso"), emoji: "📦" },
   { id: "mercado-livre", name: L("Mercado Livre", "Mercado Livre", "Mercado Libre"), hint: L("Review honesto com o produto na mão", "Honest review with the product in hand", "Reseña honesta con el producto en la mano"), emoji: "🛒" },
+  { id: "infoproduto", name: L("Infoproduto", "Info product", "Infoproducto"), hint: L("Curso, ebook ou mentoria, sem promessa de ganho", "Course, ebook or mentorship, no income promises", "Curso, ebook o mentoría, sin promesas de ganancia"), emoji: "🎓" },
   { id: "shopee", name: L("Shopee", "Shopee", "Shopee"), hint: L("Achadinhos, cupom e frete grátis", "Finds, coupons and free shipping", "Hallazgos, cupones y envío gratis"), emoji: "🧡" },
 ];
 
@@ -45,4 +46,12 @@ export const EXAMPLES: Example[] = [
     title: L("Mulher de 25 anos, unboxing de beleza", "25-year-old woman, beauty unboxing", "Mujer de 25 años, unboxing de belleza"),
     format: L("Abre o pacote e testa na hora · energia alta · 8 a 16 s", "Opens the parcel and tries it right away · high energy · 8 to 16 s", "Abre el paquete y lo prueba al momento · mucha energía · 8 a 16 s"),
     prompt: L("Influencer de 25 anos abrindo um pacote de maquiagem na penteadeira, animada", "25-year-old influencer opening a makeup parcel at her vanity, excited", "Influencer de 25 años abriendo un paquete de maquillaje en su tocador, animada") },
+  { id: "info-1", skill: "infoproduto", emoji: "🎓", from: "#3a5fa8", to: "#7B3FE4",
+    title: L("Mulher de 32 anos, mentora de um curso", "32-year-old woman, course mentor", "Mujer de 32 años, mentora de un curso"),
+    format: L("Fala para a câmera no escritório · gancho de curiosidade · 8 a 16 s", "Talks to camera in her office · curiosity hook · 8 to 16 s", "Habla a cámara en su oficina · gancho de curiosidad · 8 a 16 s"),
+    prompt: L("Influencer de 32 anos, morena, em um escritório em casa, falando sobre o curso online que criou", "32-year-old brunette influencer in a home office talking about the online course she created", "Influencer de 32 años, morena, en una oficina en casa, hablando del curso online que creó") },
+  { id: "info-2", skill: "infoproduto", emoji: "💻", from: "#2a4f7a", to: "#7B3FE4",
+    title: L("Homem de 29 anos, ebook para iniciantes", "29-year-old man, beginner ebook", "Hombre de 29 años, ebook para principiantes"),
+    format: L("Mostra a tela e o passo a passo · comente a palavra-chave · 8 a 16 s", "Shows the screen and the steps · comment the keyword · 8 to 16 s", "Muestra la pantalla y los pasos · comenta la palabra clave · 8 a 16 s"),
+    prompt: L("Influencer homem de 29 anos em casa, em frente ao notebook, apresentando um ebook para iniciantes", "29-year-old male influencer at home in front of his laptop presenting a beginner ebook", "Influencer hombre de 29 años en casa, frente a su portátil, presentando un ebook para principiantes") },
 ];

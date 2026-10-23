@@ -635,6 +635,11 @@ SKILL_NOTES = {
         "NICHE SKILL: Shopee. The persona is young, energetic and fast, doing a haul or unboxing: coupons, free shipping, small price, 'achadinho' "
         "style, quick cuts. Keep claims modest and never invent discounts."
     ),
+    "infoproduto": (
+        "NICHE SKILL: infoproduto (digital product: course, ebook, mentorship, community). The persona is a credible creator or student, direct "
+        "and confident, talking to camera about the problem the product solves and the first step it gives. Use curiosity hooks and a clear call to "
+        "action (comment a keyword). Never promise income or guaranteed results, never invent testimonials, numbers or credentials."
+    ),
 }
 
 

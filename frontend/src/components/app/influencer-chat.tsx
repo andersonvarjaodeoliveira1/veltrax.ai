@@ -133,6 +133,8 @@ export function InfluencerChat() {
   const [linkOpen, setLinkOpen] = useState(false);
   const productRef = useRef<HTMLInputElement>(null);
   const lookRef = useRef("");
+  const attachRef = useRef<HTMLInputElement>(null);
+  const [attached, setAttached] = useState<File[]>([]);
   const linkRef = useRef("");
   const [active, setActive] = useState(0);
   const [sent, setSent] = useState("");
@@ -175,7 +177,7 @@ export function InfluencerChat() {
   function reset() {
     setPhase("home"); setPrompt(""); setSkill(""); setBusy(""); setError(""); setQuestions([]); setQi(0); setPicked(null); setAnswers([]);
     setPersona({ name: "", age: "", look: "", setting: "" }); setSearches([]); setCopyText(""); setPins([]); setPin(null); setPhoto(null);
-    setPrompts([]); setSummaries([]); setVideoCount(1); setBoards([]); setActive(0); setProductLook(""); setProductLink(""); setLinkOpen(false);
+    setPrompts([]); setSummaries([]); setVideoCount(1); setBoards([]); setActive(0); setProductLook(""); setProductLink(""); setLinkOpen(false); setAttached([]);
   }
 
   const fullPrompt = () => [prompt, lookRef.current && `Produto: ${lookRef.current}`, linkRef.current && `Link do produto: ${linkRef.current}`].filter(Boolean).join("\n");
@@ -202,10 +204,11 @@ export function InfluencerChat() {
     const next = [{ id: Date.now(), title: prompt.slice(0, 60) }, ...chats.filter((c) => c.title !== prompt.slice(0, 60))].slice(0, 12);
     setChats(next);
     try { window.localStorage.setItem("gv-influencer-chats", JSON.stringify(next)); } catch { /* sem armazenamento */ }
+    if (attached.length && skill) { setPhase("intake"); void readProduct(attached); return; }
     setPhase("intake");
   }
 
-  async function readProduct(files: FileList) {
+  async function readProduct(files: FileList | File[]) {
     setBusy("think"); setError("");
     try {
       const form = new FormData();
@@ -301,6 +304,35 @@ export function InfluencerChat() {
   const totalCredits = chosen.credits * SCENES * videoCount;
   const started = phase !== "home";
 
+  const composer = (
+    <div className="space-y-2 rounded-[26px] border border-border bg-card/95 p-3 shadow-lg backdrop-blur focus-within:border-[#A98BFF]/60" data-testid="chat-composer">
+      <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={2} maxLength={600} disabled={started} aria-label={lang === "en" ? "Describe the influencer" : lang === "es" ? "Describe a la influencer" : "Descreva a influencer"}
+        placeholder={phase === "home" ? (demo ? `${demo}▍` : t("ph")) : ""}
+        className="w-full resize-none bg-transparent px-2 py-1 text-sm outline-none disabled:opacity-60" />
+      <div role="group" aria-label={t("niche")} className="flex flex-wrap gap-1.5">
+        {SKILLS.map((item) => (
+          <button key={item.id} type="button" disabled={started} aria-pressed={skill === item.id} onClick={() => setSkill(skill === item.id ? "" : item.id)}
+            className={cn("rounded-full border px-2.5 py-1 text-xs disabled:opacity-60", skill === item.id ? "border-transparent bg-primary text-primary-foreground" : "border-border text-muted-foreground")}>
+            {item.emoji} {item.name[lang]}
+          </button>
+        ))}
+      </div>
+      <div className="flex items-center gap-2">
+        <input ref={attachRef} type="file" multiple accept="image/png,image/jpeg,image/webp" className="sr-only" aria-label={t("attachPhoto")}
+          onChange={(event) => { const files = Array.from(event.target.files ?? []).slice(0, 3); if (files.length) setAttached(files); event.target.value = ""; }} />
+        <button type="button" disabled={started} onClick={() => attachRef.current?.click()} className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground disabled:opacity-60">
+          <ImagePlus className="size-4" /> {attached.length ? `${attached.length} ✓` : t("attachPhoto")}
+        </button>
+        {attached.length > 0 && !started && <button type="button" aria-label={t("stop")} onClick={() => setAttached([])} className="text-muted-foreground hover:text-foreground"><X className="size-3.5" /></button>}
+        <span className="ml-auto hidden whitespace-nowrap text-xs text-muted-foreground md:inline">{t("askFirst")}</span>
+        <button type="button" aria-label={t("send")} title={t("send")} onClick={start} disabled={started || prompt.trim().length < 8}
+          className={cn("flex size-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white disabled:opacity-40", "ml-auto md:ml-0")}>
+          {busy ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-5" />}
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <div className="grid gap-6 lg:grid-cols-[200px_minmax(0,1fr)] xl:grid-cols-[200px_minmax(0,1fr)_260px]">
     <aside className="hidden space-y-2 lg:block" aria-label={t("chats")} data-testid="chat-sidebar">
@@ -322,6 +354,7 @@ export function InfluencerChat() {
       {phase === "home" && (
         <>
           <h1 className="pt-4 text-center text-3xl font-semibold tracking-tight">{t("home")}</h1>
+          {composer}
           <div className="space-y-4" data-testid="influencer-examples">
             <div role="group" aria-label={t("all")} className="flex flex-wrap justify-center gap-2">
               {([["all", t("all")], ...SKILLS.map((s) => [s.id, `${s.emoji} ${s.name[lang]}`])] as [SkillId | "all", string][]).map(([id, label]) => (
@@ -352,8 +385,8 @@ export function InfluencerChat() {
         <Msg testid="chat-niche">
           <p>{t("whichNiche")}</p>
           <div className="flex flex-wrap gap-2">
-            {SKILLS.map((item) => <Chip key={item.id} onClick={() => setSkill(item.id)}>{item.emoji} {item.name[lang]}</Chip>)}
-            <Chip onClick={() => setSkill("other" as SkillId)}>{t("otherNiche")}</Chip>
+            {SKILLS.map((item) => <Chip key={item.id} onClick={() => { setSkill(item.id); if (attached.length) void readProduct(attached); }}>{item.emoji} {item.name[lang]}</Chip>)}
+            <Chip onClick={() => { setSkill("other" as SkillId); if (attached.length) void readProduct(attached); }}>{t("otherNiche")}</Chip>
           </div>
         </Msg>
       )}
@@ -538,28 +571,7 @@ export function InfluencerChat() {
 
       <div ref={endRef} />
 
-      <div className="sticky bottom-3 z-10">
-        <div className="space-y-2 rounded-[26px] border border-border bg-card/95 p-3 shadow-lg backdrop-blur focus-within:border-[#A98BFF]/60" data-testid="chat-composer">
-          <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={2} maxLength={600} disabled={started} aria-label={lang === "en" ? "Describe the influencer" : lang === "es" ? "Describe a la influencer" : "Descreva a influencer"}
-            placeholder={phase === "home" ? (demo ? `${demo}▍` : t("ph")) : ""}
-            className="w-full resize-none bg-transparent px-2 py-1 text-sm outline-none disabled:opacity-60" />
-          <div className="flex items-center justify-between gap-2">
-            <div role="group" aria-label={t("niche")} className="flex flex-wrap gap-1.5">
-              {SKILLS.map((item) => (
-                <button key={item.id} type="button" disabled={started} aria-pressed={skill === item.id} title={item.hint[lang]} onClick={() => setSkill(skill === item.id ? "" : item.id)}
-                  className={cn("rounded-full border px-2.5 py-1 text-xs disabled:opacity-60", skill === item.id ? "border-transparent bg-primary text-primary-foreground" : "border-border text-muted-foreground")}>
-                  {item.emoji} {item.name[lang]}
-                </button>
-              ))}
-            </div>
-            <span className="hidden text-xs text-muted-foreground sm:inline">{t("askFirst")}</span>
-            <button type="button" aria-label={t("send")} title={t("send")} onClick={start} disabled={started || prompt.trim().length < 8}
-              className="flex size-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white disabled:opacity-40">
-              {busy ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-5" />}
-            </button>
-          </div>
-        </div>
-      </div>
+      {phase !== "home" && <div className="sticky bottom-3 z-10">{composer}</div>}
     </section>
     <aside className="hidden xl:block" aria-label={t("preview")} data-testid="chat-preview">
       {(pin || persona.name) && started && (
