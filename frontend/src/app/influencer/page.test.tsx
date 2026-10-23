@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import InfluencerPage from "./page";
 
 beforeEach(() => { window.localStorage.clear(); window.localStorage.setItem("gv-influencer-intro", "1"); });
@@ -135,7 +135,7 @@ describe("Chat de criação", () => {
     }));
     render(<InfluencerPage />);
     fireEvent.change(screen.getByLabelText("Descreva a influencer"), { target: { value: "Gere uma influencer de 22 anos loira vendendo roupas" } });
-    fireEvent.click(screen.getAllByRole("button", { name: /Shopee/ })[0]);
+    fireEvent.click(within(screen.getByRole("group", { name: "Nicho (opcional)" })).getByRole("button", { name: /Shopee/ }));
     fireEvent.click(screen.getByRole("button", { name: /Criar a influencer/ }));
     fireEvent.click(await screen.findByRole("radio", { name: /Casual/ }));
     fireEvent.click(screen.getByRole("button", { name: /Continuar/ }));

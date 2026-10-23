@@ -36,6 +36,7 @@ const TXT = {
   error: { pt: "Não consegui entender o pedido. Tente de novo com um pouco mais de detalhe.", en: "I couldn't understand the request. Try again with a bit more detail.", es: "No pude entender el pedido. Inténtalo de nuevo con un poco más de detalle." },
   examples: { pt: "Exemplos de influencers", en: "Example influencers", es: "Ejemplos de influencers" },
   examplesHint: { pt: "Toque em um exemplo para usar como ponto de partida. São modelos de descrição e de formato, não fotos reais.", en: "Tap an example to use it as a starting point. These are description and format models, not real photos.", es: "Toca un ejemplo para usarlo como punto de partida. Son modelos de descripción y formato, no fotos reales." },
+  recreate: { pt: "Recriar", en: "Recreate", es: "Recrear" },
   format: { pt: "Formato", en: "Format", es: "Formato" },
   all: { pt: "Todos", en: "All", es: "Todos" },
 } as const;
@@ -112,6 +113,7 @@ export function InfluencerChat({ onReady, busy }: { onReady: (brief: Brief) => v
   }
 
   const q = questions[index];
+  const started = working !== "" || Boolean(q) || Boolean(brief);
   const shown = EXAMPLES.filter((item) => filter === "all" || item.skill === filter);
 
   if (intro >= 0 && intro < INTRO.length) {
@@ -135,26 +137,6 @@ export function InfluencerChat({ onReady, busy }: { onReady: (brief: Brief) => v
 
   return (
     <section className="space-y-5" data-testid="influencer-chat">
-      <div className="space-y-3 rounded-[18px] border border-[#A98BFF]/30 bg-card p-4">
-        <p className="text-base font-semibold">{tx("title", lang)}</p>
-        <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={3} maxLength={600} aria-label={tx("label", lang)} placeholder={tx("placeholder", lang)}
-          className="w-full rounded-[14px] border border-border bg-background px-3 py-2 text-sm" />
-        <div className="space-y-1.5">
-          <p className="text-xs text-muted-foreground">{tx("skills", lang)}</p>
-          <div role="group" aria-label={tx("skills", lang)} className="flex flex-wrap gap-2">
-            {SKILLS.map((item) => (
-              <button key={item.id} type="button" aria-pressed={skill === item.id} title={item.hint[lang]} onClick={() => setSkill(skill === item.id ? "" : item.id)}
-                className={cn("rounded-full border px-3 py-1.5 text-sm", skill === item.id ? "border-transparent bg-primary text-primary-foreground" : "border-border text-muted-foreground")}>
-                {item.emoji} {item.name[lang]}
-              </button>
-            ))}
-          </div>
-        </div>
-        <Button type="button" className="rounded-full" onClick={() => void start()} disabled={busy || working !== "" || prompt.trim().length < 8 || Boolean(q) || Boolean(brief)}>
-          {working ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />} {tx("start", lang)}
-        </Button>
-      </div>
-
       {(working || q || brief) && (
         <div className="flex justify-end" data-testid="chat-user-bubble">
           <p className="max-w-[85%] rounded-[18px] rounded-br-sm bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-4 py-2.5 text-sm text-white">{prompt}</p>
@@ -206,7 +188,7 @@ export function InfluencerChat({ onReady, busy }: { onReady: (brief: Brief) => v
         </div>
       )}
 
-      <div className="space-y-3" data-testid="influencer-examples">
+      {!started && <div className="space-y-3" data-testid="influencer-examples">
         <div>
           <p className="font-semibold">{tx("examples", lang)}</p>
           <p className="text-xs text-muted-foreground">{tx("examplesHint", lang)}</p>
@@ -225,9 +207,27 @@ export function InfluencerChat({ onReady, busy }: { onReady: (brief: Brief) => v
               <div className="space-y-1 p-3">
                 <p className="text-sm font-medium">{item.title[lang]}</p>
                 <p className="text-xs text-muted-foreground"><b>{tx("format", lang)}:</b> {item.format[lang]}</p>
+                <span className="inline-block rounded-full bg-[#7B3FE4] px-3 py-1 text-xs font-medium text-white">{tx("recreate", lang)}</span>
               </div>
             </button>
           ))}
+        </div>
+      </div>}
+      <div className="sticky bottom-3 z-10 space-y-2 rounded-[22px] border border-[#A98BFF]/30 bg-card/95 p-3 shadow-lg backdrop-blur" data-testid="chat-composer">
+        <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={2} maxLength={600} aria-label={tx("label", lang)} placeholder={tx("placeholder", lang)}
+          className="w-full resize-none rounded-[14px] border border-border bg-background px-3 py-2 text-sm" />
+        <div className="flex items-center justify-between gap-2">
+          <div role="group" aria-label={tx("skills", lang)} className="flex flex-wrap gap-1.5">
+            {SKILLS.map((item) => (
+              <button key={item.id} type="button" aria-pressed={skill === item.id} title={item.hint[lang]} onClick={() => setSkill(skill === item.id ? "" : item.id)}
+                className={cn("rounded-full border px-2.5 py-1 text-xs", skill === item.id ? "border-transparent bg-primary text-primary-foreground" : "border-border text-muted-foreground")}>
+                {item.emoji} {item.name[lang]}
+              </button>
+            ))}
+          </div>
+          <Button type="button" className="shrink-0 rounded-full" onClick={() => void start()} disabled={busy || working !== "" || prompt.trim().length < 8 || Boolean(q) || Boolean(brief)}>
+            {working ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />} {tx("start", lang)}
+          </Button>
         </div>
       </div>
     </section>
