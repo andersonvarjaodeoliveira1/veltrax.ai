@@ -507,8 +507,8 @@ export function InfluencerChat() {
       <Link href="/list" className="mb-2 flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground hover:text-foreground">← {t("navApp")}</Link>
       <button type="button" onClick={reset} className="flex w-full items-center gap-3 rounded-[14px] bg-white/5 px-2 py-2 text-sm font-medium hover:bg-white/10"><span aria-hidden className="grid size-7 place-items-center rounded-[9px] bg-white/10"><Plus className="size-4" /></span> {t("newChat")}</button>
       <Link href="/influencer/skills" className="flex w-full items-center gap-3 rounded-[14px] px-2 py-2 text-sm font-medium hover:bg-white/5"><span aria-hidden className="grid size-7 place-items-center rounded-[9px] bg-white/10 text-xs">⚡</span> {t("skillsLink")}</Link>
-      <div className="space-y-1.5 px-1 pt-2" data-testid="chat-projects">
-        <p className="px-2 text-xs text-muted-foreground">{t("projects")}</p>
+      <details className="space-y-1.5 px-1" data-testid="chat-projects">
+        <summary className="flex cursor-pointer list-none items-center gap-3 rounded-[14px] px-1 py-2 text-sm font-medium hover:bg-white/5"><span aria-hidden className="grid size-7 place-items-center rounded-[9px] bg-white/10 text-xs">▤</span> {t("projects")}</summary>
         <div className="flex flex-wrap gap-1.5 px-1">
           <Chip on={filter2 === ""} onClick={() => setFilter2("")}>{t("allProjects")}</Chip>
           {projects.map((item) => <Chip key={item.id} on={filter2 === item.id} onClick={() => setFilter2(item.id)}>{item.name}</Chip>)}
@@ -517,9 +517,9 @@ export function InfluencerChat() {
           <input value={newProject} onChange={(event) => setNewProject(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") addProject(); }} maxLength={40} aria-label={t("newProject")} placeholder={t("newProject")} className="min-w-0 flex-1 rounded-full border border-border bg-background px-3 py-1 text-xs" />
           <button type="button" aria-label={t("createProject")} onClick={addProject} className="rounded-full border border-border px-2 text-xs hover:text-foreground"><Plus className="size-3.5" /></button>
         </div>
-      </div>
+      </details>
       <details className="px-1 pt-2 text-sm">
-        <summary className="cursor-pointer px-1 py-1 text-xs text-muted-foreground">{t("seeMore")}</summary>
+        <summary className="flex cursor-pointer list-none items-center gap-3 rounded-[14px] px-0 py-2 text-sm font-medium hover:bg-white/5"><span aria-hidden className="grid size-7 place-items-center rounded-[9px] bg-white/10 text-xs">···</span> {t("seeMore")}</summary>
         <nav className="space-y-0.5 pt-1">
           {([["/list", "navLib"], ["/folders", "navFolders"], ["/automacao", "navAuto"], ["/conectar-flow", "navFlow"], ["/minhas-apis", "navApis"]] as const).map(([href, key]) => (
             <Link key={href} href={href} className="block rounded-[10px] px-2 py-1.5 text-sm hover:bg-white/5">{t(key)}</Link>
@@ -535,15 +535,16 @@ export function InfluencerChat() {
           <button type="button" aria-label={`${t("remove")}: ${chat.title}`} onClick={() => deleteChat(chat.id)} className="mr-1 hidden rounded-full p-1 text-muted-foreground hover:text-foreground group-hover:block"><X className="size-3.5" /></button>
         </div>
       ))}
+      <div className="sticky bottom-0 -mx-3 -mb-3 mt-4 flex items-center gap-3 bg-[#111113] px-4 py-3">
+        <span aria-hidden className="grid size-9 place-items-center rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#A98BFF] text-sm font-bold text-white">{(session?.user?.name ?? "?").slice(0, 1).toUpperCase()}</span>
+        <span className="min-w-0 truncate text-sm font-medium">{session?.user?.name ?? ""}</span>
+      </div>
     </aside>
     <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[22px] bg-[#111113] ring-1 ring-white/10" data-testid="influencer-chat">
-      <header className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-8">
-        {started ? (
-          <p className="min-w-0 flex-1 truncate text-sm font-semibold" data-testid="chat-user-bubble">{prompt}</p>
-        ) : (
-          <p className="text-sm font-semibold text-muted-foreground">ClipGringa</p>
-        )}
-        <button type="button" onClick={reset} className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"><Plus className="size-3.5" /> {t("newChat")}</button>
+      <header className="flex items-center justify-between gap-3 px-4 py-3 sm:px-8">
+        <p className="min-w-0 flex-1 truncate text-sm font-semibold" data-testid="chat-user-bubble">{started ? prompt : ""}</p>
+        {started && <button type="button" onClick={reset} className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"><Plus className="size-3.5" /> {t("newChat")}</button>}
+        <Link href="/conectar-flow" className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.07] px-4 py-2 text-sm font-medium hover:bg-white/10">{t("navFlow")}</Link>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-8 sm:px-8">
@@ -551,7 +552,7 @@ export function InfluencerChat() {
         <>
           <div className="flex items-center justify-center gap-3 pt-6">
             <span aria-hidden className="grid size-11 place-items-center rounded-[14px] bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white shadow-[0_10px_28px_-10px_#7B3FE4]"><Sparkles className="size-6" /></span>
-            <h1 className="text-3xl font-bold uppercase tracking-tight sm:text-4xl">{t("home")}</h1>
+            <h1 className="text-3xl font-bold uppercase tracking-tight sm:text-4xl">{session?.user?.name && <span aria-hidden>{session.user.name.split(" ")[0]}, </span>}{t("home")}</h1>
           </div>
           {composer}
           {nicheRow}
