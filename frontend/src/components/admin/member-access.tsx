@@ -43,7 +43,10 @@ function InviteCard({ onDone }: { onDone: () => void }) {
         setResult({ ok: false, text: "Esse e-mail não parece válido. Confira e tente de novo." });
       } else {
         const notConfigured = typeof data.detail === "string" && /não configurado|not configured/i.test(data.detail);
-        setResult({ ok: false, text: notConfigured
+        const refused = typeof data.detail === "string" && /recusado|incorretos/i.test(data.detail);
+        setResult({ ok: false, text: refused
+          ? `${data.created ? "O usuário foi criado, mas a" : "A"} caixa de e-mail recusou o usuário ou a senha. Confira a senha do e-mail de envio no card acima (teste entrando no webmail da Hostinger) e salve de novo. Depois clique aqui para reenviar.`
+          : notConfigured
           ? `${data.created ? "O usuário foi criado, mas o" : "O"} e-mail de envio ainda não está configurado. No Admin, em Configurações, preencha “E-mail de envio” (contato@gringatools.com) e a senha dele. Depois clique aqui de novo para reenviar.`
           : `${data.created ? "O usuário foi criado, mas o" : "O"} e-mail não saiu agora. Clique em liberar de novo para reenviar.` });
         if (data.created) onDone();

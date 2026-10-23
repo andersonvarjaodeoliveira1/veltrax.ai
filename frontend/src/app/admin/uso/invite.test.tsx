@@ -58,3 +58,12 @@ it("saves the sender e-mail and its password from the usage page", async () => {
   expect(JSON.parse(patch!.body!).updates).toEqual({ SMTP_USER: "contato@gringatools.com", SMTP_PASSWORD: "segredo-da-caixa" });
   expect(screen.getByLabelText(/Senha desse e-mail/)).toHaveValue("");
 });
+
+it("explains when the sender mailbox refuses the password", async () => {
+  stubFetch(new Response(JSON.stringify({ error: "email_failed", created: true, detail: '{"detail":"E-mail de envio recusado: usuário ou senha da caixa de e-mail incorretos."}' }), { status: 502 }));
+  const user = userEvent.setup();
+  render(<AdminUsagePage />);
+  await user.type(await screen.findByLabelText(/E-mail do membro/), "x@y.com");
+  await user.click(screen.getByRole("button", { name: /Liberar e enviar e-mail/ }));
+  expect(await screen.findByText(/caixa de e-mail recusou o usuário ou a senha/)).toBeInTheDocument();
+});

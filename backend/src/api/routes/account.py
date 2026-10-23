@@ -1,4 +1,5 @@
 import logging
+import smtplib
 from typing import Literal, Optional
 from urllib.parse import urlparse
 
@@ -57,6 +58,12 @@ async def send_password_reset_email(
         email_result = await service.send_reset_email(user, body.url, invite=body.invite)
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except smtplib.SMTPAuthenticationError as exc:
+        logger.error("SMTP login refused for the sender mailbox (user %s)", user_id)
+        raise HTTPException(
+            status_code=502,
+            detail="E-mail de envio recusado: usuário ou senha da caixa de e-mail incorretos.",
+        ) from exc
     except Exception as exc:
         logger.exception("Failed to send password reset email for user %s", user_id)
         raise HTTPException(
