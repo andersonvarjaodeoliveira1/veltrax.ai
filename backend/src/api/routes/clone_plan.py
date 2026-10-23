@@ -989,6 +989,19 @@ async def influencer_storyboard(request: Request, db: AsyncSession = Depends(get
     if camera in CAMERAS:
         ctx["camera_note"] = f"\nCAMERA: every scene is shot as {CAMERAS[camera]}. Keep the same camera style in all scenes."
         ctx["delivery"] = (ctx.get("delivery") or "") + ctx["camera_note"]
+    TONES = {
+        "calm": "calm, warm and reassuring",
+        "lively": "energetic, upbeat and enthusiastic",
+        "deep": "deep, low-pitched and confident",
+        "soft": "soft, gentle and intimate, almost whispered",
+        "young": "young, bright and playful",
+        "mature": "mature, experienced and trustworthy",
+    }
+    tone = str(data.get("voice_tone") or "")
+    custom_voice = " ".join(str(data.get("voice_custom") or "").split())[:120]
+    voice_text = TONES.get(tone, "") if not custom_voice else custom_voice
+    if voice_text:
+        ctx["delivery"] = (ctx.get("delivery") or "") + f"\nVOICE: the person speaks with a {voice_text} voice, the same voice in every scene."
     if data.get("show_product"):
         ctx["delivery"] = (ctx.get("delivery") or "") + "\nPRODUCT: the product is visible in the scene and the person holds it up to the camera at least once while talking about it."
     ctx["delivery"] = (ctx.get("delivery") or "") + (
