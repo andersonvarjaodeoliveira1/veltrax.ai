@@ -44,6 +44,20 @@ describe("Criar influencer", () => {
     await waitFor(() => expect(promptBody?.get("image_url")).toBe("https://i.pinimg.com/736x/a.jpg"));
   });
 
+  it("quando a busca automática falha, leva ao Pinterest já com a busca", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (String(url).includes("influencer-profile")) return new Response(JSON.stringify({ name: "Marta", age: "50", look: "loira", setting: "cozinha", searches: ["mulher loira 50 anos"] }), { status: 200 });
+      return new Response(JSON.stringify({ detail: "x" }), { status: 502 });
+    }));
+    render(<InfluencerPage />);
+    fireEvent.change(screen.getByLabelText("Anúncio ou descrição da pessoa"), { target: { value: "Mulher loira de 50 anos na cozinha" } });
+    fireEvent.click(screen.getByRole("button", { name: /Descobrir a pessoa/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Buscar fotos automaticamente/ }));
+    const open = await screen.findByRole("link", { name: /Abrir o Pinterest com a busca/ });
+    expect(open.getAttribute("href")).toContain("q=mulher%20loira%2050%20anos");
+    expect(screen.getByTestId("photo-drop")).toBeInTheDocument();
+  });
+
   it("mostra um erro simples quando a leitura falha", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ detail: "x" }), { status: 502 })));
     render(<InfluencerPage />);

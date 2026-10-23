@@ -50,6 +50,7 @@ export default function InfluencerPage() {
   const [prompts, setPrompts] = useState<string[]>([]);
   const [busy, setBusy] = useState<"profile" | "prompt" | "pins" | null>(null);
   const [pins, setPins] = useState<Pin[]>([]);
+  const [pinsFailed, setPinsFailed] = useState(false);
   const [pickedPin, setPickedPin] = useState<Pin | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<number | null>(null);
@@ -96,17 +97,19 @@ export default function InfluencerPage() {
 
   async function findPins() {
     setError(null);
+    setPinsFailed(false);
     setBusy("pins");
     try {
       const response = await fetch("/api/multiplier/clone/influencer-pins", {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ queries: searches }),
       });
-      if (!response.ok) { setError(await errorOf(response, "Não consegui buscar no Pinterest agora. Use os botões abaixo para buscar à mão.")); return; }
+      if (!response.ok) { setPinsFailed(true); return; }
       const data = await response.json();
-      setPins(Array.isArray(data.pins) ? data.pins : []);
-      if (!Array.isArray(data.pins) || data.pins.length === 0) setError("O Pinterest não devolveu fotos. Tente os botões de busca abaixo.");
+      const found = Array.isArray(data.pins) ? data.pins : [];
+      setPins(found);
+      if (found.length === 0) setPinsFailed(true);
     } catch {
-      setError("Sem conexão. Tente de novo.");
+      setPinsFailed(true);
     } finally { setBusy(null); }
   }
 
@@ -174,6 +177,29 @@ export default function InfluencerPage() {
             <Button type="button" onClick={() => void findPins()} disabled={busy !== null || searches.length === 0} className="rounded-full">
               {busy === "pins" ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4" />} {busy === "pins" ? "Buscando no Pinterest…" : "Buscar fotos automaticamente"}
             </Button>
+            {pinsFailed && (
+              <div role="status" className="space-y-3 rounded-[14px] border border-[#F5B454]/50 bg-[#F5B454]/10 p-4" data-testid="pins-fallback">
+                <p className="font-medium">Não consegui buscar as fotos sozinho agora. Vamos pelo Pinterest:</p>
+                <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
+                  <li>Toque em “Abrir o Pinterest com a busca”. Ele abre já com a descrição da pessoa.</li>
+                  <li>Escolha a foto que você quer, copie a imagem (ou salve).</li>
+                  <li>Volte aqui e cole com Ctrl+V, ou solte a foto na caixa abaixo.</li>
+                </ol>
+                <div className="flex flex-wrap gap-2">
+                  {searches[0] && (
+                    <a href={pinterestUrl(searches[0])} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-4 py-2 text-sm font-medium text-white">
+                      Abrir o Pinterest com a busca <ExternalLink className="size-3.5" />
+                    </a>
+                  )}
+                  <Button type="button" variant="outline" className="rounded-full" onClick={() => void findPins()} disabled={busy !== null}>Tentar de novo</Button>
+                </div>
+                <div onDragOver={(event) => event.preventDefault()}
+                  onDrop={(event) => { event.preventDefault(); const file = Array.from(event.dataTransfer.files).find((item) => item.type.startsWith("image/")); if (file) { setPhoto(file); setPickedPin(null); } }}
+                  className="grid min-h-20 place-items-center rounded-[12px] border border-dashed border-border px-4 text-center text-sm text-muted-foreground" data-testid="photo-drop">
+                  Solte a foto aqui ou cole com Ctrl+V
+                </div>
+              </div>
+            )}
             {pins.length > 0 && (
               <div className="space-y-2">
                 <p className="text-sm">Toque na foto que você quer usar:</p>
