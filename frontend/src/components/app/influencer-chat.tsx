@@ -72,6 +72,7 @@ const S = {
   video: ["vídeo", "video", "video"],
   videos: ["vídeos", "videos", "videos"],
   whichModel: ["Qual modelo do Flow?", "Which Flow model?", "¿Qué modelo de Flow?"],
+  modelAuto: ["Se sua conta não tiver o Lower Priority (sem custo), uso automaticamente a versão mais barata que ela tiver.", "If your account has no Lower Priority (free), I automatically use the cheapest version it has.", "Si tu cuenta no tiene Lower Priority (gratis), uso automáticamente la versión más barata que tenga."],
   credits: ["créditos por cena", "credits per scene", "créditos por escena"],
   zero: ["0 créditos", "0 credits", "0 créditos"],
   approveGen: ["Aprovar a geração", "Approve generation", "Aprobar la generación"],
@@ -384,7 +385,7 @@ export function InfluencerChat() {
 
   const board = boards[active] ?? null;
   const flowPackage = () => JSON.stringify({
-    app: "clipgringa-flow", version: 1, sceneCount: board?.scenes.length ?? 0, model: chosen.name, flowModel: chosen.needle, lowerPriority: lower, mode: "frames",
+    app: "clipgringa-flow", version: 1, sceneCount: board?.scenes.length ?? 0, model: chosen.name, flowModel: chosen.needle, lowerPriority: lower, fallbackModels: lower ? ["Lite", "Omni", "Fast"] : [], mode: "frames",
     videos: boards.map((item, v) => ({
       title: `${persona.name || "Influencer"} ${v + 1}`,
       scenes: item.scenes.map((_, index) => ({ imagePrompt: item.imagePrompts[index] ?? "", videoPrompt: item.videoPrompts[index] ?? "", file: `Video${String(v + 1).padStart(2, "0")}_Cena${String(index + 1).padStart(2, "0")}.mp4` })),
@@ -772,6 +773,7 @@ export function InfluencerChat() {
               </Chip>
             ))}
           </div>
+          <p className="text-xs text-muted-foreground">{t("modelAuto")}</p>
         </Msg>
       )}
       {(phase === "cost" || (phase === "board" && busy === "board")) && (

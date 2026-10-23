@@ -55,6 +55,7 @@
 
   /* ---------- pacote ---------- */
   let flowModel = "[Lower Priority]"; // modelo do Flow pedido pelo pacote (padrão: Lower Priority, 0 créditos)
+  let fallbackModels = []; // modelos mais baratos a tentar quando a conta não tem o pedido (ex.: sem Lower Priority)
   const isLowerPriority = () => flowModel === "[Lower Priority]";
 
   function parsePackage(raw) {
@@ -80,6 +81,7 @@
     if (!jobs.length) throw new Error("O pacote não tem cenas com prompts.");
     const wanted = String(data.flowModel || "").trim();
     flowModel = wanted && !/lower priority/i.test(wanted) ? wanted : "[Lower Priority]";
+    fallbackModels = Array.isArray(data.fallbackModels) ? data.fallbackModels.map((x) => String(x)).filter(Boolean) : [];
     return { jobs, keyword: data.keyword || "" };
   }
 
@@ -143,19 +145,29 @@
   }
 
   async function ensureModel(needle) {
-    const matches = (t) => t.includes(needle) && (needle === "[Lower Priority]" || !/\[Lower Priority\]/i.test(t));
+    const matchesOne = (t, n) => t.includes(n) && (n === "[Lower Priority]" || !/\[Lower Priority\]/i.test(t));
     const trigger = await waitFor(() => $$("button.mat-mdc-menu-trigger", overlay()).find(visible), 3000);
     if (!trigger) return text(null) || "";
-    if (matches(text(trigger))) return text(trigger);
+    if (matchesOne(text(trigger), needle)) return text(trigger);
     trigger.click();
-    const item = await waitFor(() => $$("[role=menuitem], .mat-mdc-menu-item", overlay()).find((i) => visible(i) && matches(text(i))), 4000);
+    const items = () => $$("[role=menuitem], .mat-mdc-menu-item", overlay()).filter(visible);
+    let item = await waitFor(() => items().find((i) => matchesOne(text(i), needle)), 4000);
+    let used = needle;
+    if (!item && fallbackModels.length) {
+      // A conta não tem o modelo pedido: usa o mais barato que ela tiver.
+      for (const alt of fallbackModels) {
+        item = items().find((i) => matchesOne(text(i), alt));
+        if (item) { used = alt; break; }
+      }
+      if (item) { flowModel = used; fallbackModels = []; setNow(`Sua conta não tem “${needle}”. Usando ${text(item).split("\n")[0]} (gasta créditos).`); }
+    }
     if (!item) {
       await closeSettings();
       throw new Error(`O Flow não mostrou o modelo “${needle}” nesta conta. ${needle === "[Lower Priority]" ? "Confira se o Veo 3.1 Lite [Lower Priority] aparece nos ajustes do Flow (ele é do plano Ultra)." : "Confira o nome do modelo nos ajustes do Flow."}`);
     }
     item.click();
     await sleep(500);
-    return needle;
+    return used;
   }
 
   async function configure(kind) {
