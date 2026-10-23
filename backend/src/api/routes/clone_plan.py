@@ -533,3 +533,116 @@ async def _run_parts(system: str, output_type: type[BaseModel], parts: list[Any]
         logger.exception("clone product look failed")
         raise HTTPException(status_code=502, detail="Could not read the photos. Try again.")
     return result.output
+
+
+# ---------------------------------------------------------------------------
+# Criar influencer (BETA): from the ad copy to the persona, Pinterest searches and photoreal prompts.
+# ---------------------------------------------------------------------------
+
+SKIN_ENDING = "visible pores, micro-texture, natural skin imperfections, subtle peach fuzz, natural skin sheen, no airbushing, no smoothing filters"
+
+INFLUENCER_PROFILE_SYSTEM = (
+    "You read a short-video ad (copy, avatar note, script) and describe the on-camera person it needs. "
+    "Return the persona in Brazilian Portuguese: a first name, the age range, a short physical look (hair, skin, clothes) "
+    "and the place where she/he films. Also return 3 different Pinterest search phrases (Portuguese, 3 to 8 words, "
+    "no brand names) that would find real-looking photos of that exact person: vary the angle (selfie, indoor, outdoor). "
+    "Use only what the ad says; never invent a medical or product claim."
+)
+
+PHOTOREAL_SYSTEM = (
+    "You write image-generation prompts for ultra-photorealistic photography, in English. Rules: assume photographic realism "
+    "(never cartoon, anime, illustration, painting, stylized); use concrete visual language, never vague words like "
+    "beautiful, amazing, stunning, perfect, gorgeous. Include, when it fits: camera and lens (e.g. Sony A7R V, 85mm f/1.4), "
+    "aperture, ISO, shutter speed, lighting type and time of day, environment, composition (POV, close-up, selfie), depth of "
+    "field, color science (e.g. Kodak Portra 400). For people add natural facial asymmetry, realistic skin texture, individual "
+    "hair strands, eye and lip micro-detail, clothing fabric texture. For phone-filmed creator videos prefer a handheld "
+    "smartphone selfie look (26mm equivalent, slight wide-angle distortion, mild handheld shake, subtle compression artifacts). "
+    "If a reference photo is attached, keep that person's face, age, hair and skin tone, and only change the scene described. "
+    "Return exactly 3 different prompts (vary composition, light or mood), no explanations."
+)
+
+
+class _InfluencerProfile(BaseModel):
+    name: str = Field(description="First name")
+    age: str = Field(description="Age or range, e.g. 50 a 55 anos")
+    look: str = Field(description="Short physical look and clothes")
+    setting: str = Field(description="Where she/he films")
+    searches: list[str] = Field(description="3 Pinterest search phrases")
+
+
+class _PhotorealPrompts(BaseModel):
+    prompts: list[str] = Field(description="3 English photorealistic image prompts")
+
+
+@router.post("/influencer-profile")
+async def influencer_profile(request: Request, db: AsyncSession = Depends(get_db)):
+    """Turns the ad text (or a persona note) into a persona and Pinterest searches."""
+    user_id = await _user_id(request, db)
+    from ...integrations import load_user_keys
+    from ...usage import get_balance, set_server_blocked, set_usage_user
+
+    await load_user_keys(db, user_id)
+    set_usage_user(user_id)
+    set_server_blocked((await get_balance(db, user_id))["exhausted"])
+    try:
+        data = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    ad = _clip((data or {}).get("ad") or "", 4000)
+    if len(ad) < 10:
+        raise HTTPException(status_code=400, detail="Paste the ad or describe the person")
+    _check_script_rate(user_id)
+    out = await _run_parts(INFLUENCER_PROFILE_SYSTEM, _InfluencerProfile, [ad])
+    return {
+        "name": _clip(out.name, 40),
+        "age": _clip(out.age, 40),
+        "look": _clip(out.look, 300),
+        "setting": _clip(out.setting, 200),
+        "searches": [_clip(item, 80) for item in out.searches if item.strip()][:3],
+    }
+
+
+@router.post("/influencer-prompt")
+async def influencer_prompt(request: Request, db: AsyncSession = Depends(get_db)):
+    """Writes 3 photorealistic prompts for the persona, optionally using the chosen reference photo."""
+    user_id = await _user_id(request, db)
+    from ...integrations import load_user_keys
+    from ...usage import get_balance, set_server_blocked, set_usage_user
+
+    await load_user_keys(db, user_id)
+    set_usage_user(user_id)
+    set_server_blocked((await get_balance(db, user_id))["exhausted"])
+    form = await request.form()
+    fields = {key: _clip(str(form.get(key) or ""), 400) for key in ("name", "age", "look", "setting", "extra")}
+    if not (fields["look"] or fields["age"]):
+        raise HTTPException(status_code=400, detail="Describe the person")
+    from pydantic_ai import BinaryContent
+
+    text = (
+        "Create the prompts for this person.\n"
+        f"Name: {fields['name']}\nAge: {fields['age']}\nLook: {fields['look']}\n"
+        f"Scene: {fields['setting']}\nExtra: {fields['extra']}"
+    )
+    parts: list[Any] = [text]
+    photo = form.get("image")
+    if photo is not None and hasattr(photo, "read"):
+        kind = (getattr(photo, "content_type", "") or "").lower()
+        data = await photo.read()
+        if kind not in PHOTO_TYPES:
+            raise HTTPException(status_code=400, detail="Send a PNG, JPG or WebP photo")
+        if len(data) > MAX_PHOTO_BYTES:
+            raise HTTPException(status_code=413, detail="The photo can have up to 5 MB")
+        parts.append(BinaryContent(data=data, media_type=kind))
+    _check_script_rate(user_id)
+    out = await _run_parts(PHOTOREAL_SYSTEM, _PhotorealPrompts, parts)
+    prompts: list[str] = []
+    for raw in out.prompts:
+        value = " ".join(str(raw).split()).rstrip(" .,;")
+        if not value:
+            continue
+        if SKIN_ENDING in value:
+            value = value.replace(SKIN_ENDING, "").rstrip(" .,;")
+        prompts.append(f"{value}. {SKIN_ENDING}")
+    if not prompts:
+        raise HTTPException(status_code=502, detail="Could not write the prompts. Try again.")
+    return {"prompts": prompts[:3]}
