@@ -232,7 +232,7 @@ export function InfluencerChat() {
 
   // Prompt de demonstração: digita e apaga exemplos, um após o outro.
   useEffect(() => {
-    if (prompt || phase !== "home" || typeof window === "undefined" || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    if (prompt || phase !== "home" || typeof window === "undefined") return;
     const texts = EXAMPLES.map((item) => item.prompt[lang]);
     let ti = 0; let n = 0; let erasing = false; let timer = 0;
     const tick = () => {
@@ -474,7 +474,15 @@ export function InfluencerChat() {
   );
 
   const composer = (
-    <div className="rounded-[26px] bg-[#1a191d] p-5 ring-1 ring-white/10 shadow-[0_20px_60px_-30px_#000] focus-within:ring-[#A98BFF]/50" data-testid="chat-composer">
+    <div className="relative">
+      {/* luz roxa girando em volta da caixa */}
+      <span aria-hidden className="pointer-events-none absolute -inset-1 overflow-hidden rounded-[30px] opacity-70 blur-lg">
+        <span className="absolute left-1/2 top-1/2 aspect-square w-[160%] -translate-x-1/2 -translate-y-1/2 animate-spin bg-[conic-gradient(from_0deg,transparent_0deg,#7B3FE4_70deg,#A98BFF_120deg,transparent_200deg,transparent_360deg)] [animation-duration:5s] motion-reduce:animate-none" />
+      </span>
+      <span aria-hidden className="pointer-events-none absolute -inset-px overflow-hidden rounded-[27px]">
+        <span className="absolute left-1/2 top-1/2 aspect-square w-[160%] -translate-x-1/2 -translate-y-1/2 animate-spin bg-[conic-gradient(from_0deg,transparent_0deg,#7B3FE4_70deg,#C9BBFA_120deg,transparent_200deg,transparent_360deg)] [animation-duration:5s] motion-reduce:animate-none" />
+      </span>
+    <div className="relative rounded-[26px] bg-[#1a191d] p-5 ring-1 ring-white/10 shadow-[0_20px_60px_-30px_#000]" data-testid="chat-composer">
       <textarea value={started ? "" : prompt} onChange={(event) => setPrompt(event.target.value)} rows={3} maxLength={600} disabled={started} aria-label={lang === "en" ? "Describe the influencer" : lang === "es" ? "Describe a la influencer" : "Descreva a influencer"}
         placeholder={phase === "home" ? (demo ? `${demo}▍` : t("ph")) : t("follow")}
         className="min-h-[96px] w-full resize-none bg-transparent px-1 py-1 text-lg outline-none placeholder:text-muted-foreground/70 disabled:opacity-60" />
@@ -504,6 +512,7 @@ export function InfluencerChat() {
           {busy ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-5" />}
         </button>
       </div>
+    </div>
     </div>
   );
 
