@@ -299,10 +299,10 @@ button[class*="to-[#7B3FE4]"]:active::before { animation-delay: 0.12s; border-co
   border-radius: 28px;
   padding: 2px;
   pointer-events: none;
-  background: conic-gradient(from var(--cg-angle), transparent 0 62%, #5a1baa 74%, #a98bff 88%, #ffffff 98%, transparent 100%);
+  background: conic-gradient(from var(--cg-angle), transparent 0 38%, #4a1596 52%, #7b3fe4 68%, #a98bff 84%, #ffffff 97%, transparent 100%);
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
-  animation: cg-orbit 3.2s linear infinite;
+  animation: cg-orbit 4.5s linear infinite;
 }
-.cg-orbit::after { filter: blur(10px); inset: -4px; padding: 5px; opacity: .9; }
+.cg-orbit::after { filter: blur(14px); inset: -6px; padding: 8px; opacity: 1; }
