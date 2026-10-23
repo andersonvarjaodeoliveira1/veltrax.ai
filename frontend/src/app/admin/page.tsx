@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { AdminUserToggle } from "@/components/admin/admin-user-toggle";
+import { MemberAccessPanel } from "@/components/admin/member-access";
 import { AffiliateReviewActions } from "@/components/admin/affiliate-review-actions";
 import {
   RuntimeSettingsForm,
@@ -253,6 +254,8 @@ export default async function AdminPage({
         <p className="mt-1 text-sm text-muted-foreground">Manage users and monitor overall platform activity.</p>
         <Link href="/admin/announcements" className="mt-3 inline-block text-sm font-medium text-brand underline-offset-4 hover:underline">Manage announcements</Link>
       </div>
+
+      <MemberAccessPanel />
 
       <section className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
         {stats.map((stat) => (
