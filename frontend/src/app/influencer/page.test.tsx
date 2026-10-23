@@ -24,6 +24,24 @@ describe("Criar influencer", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Gerar prompts$/ }));
     await waitFor(() => expect(screen.getByText(/POV selfie of a woman/)).toBeInTheDocument());
     expect(calls.some((url) => url.includes("influencer-prompt"))).toBe(true);
+    expect(screen.getByTestId("flow-generate")).toHaveTextContent(/Conecte aqui/);
+  });
+
+  it("busca fotos no Pinterest e usa a escolhida", async () => {
+    let promptBody: FormData | undefined;
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).includes("influencer-profile")) return new Response(JSON.stringify({ name: "Marta", age: "50", look: "loira", setting: "cozinha", searches: ["mulher loira"] }), { status: 200 });
+      if (String(url).includes("influencer-pins")) return new Response(JSON.stringify({ pins: [{ id: "1", thumb: "https://i.pinimg.com/474x/a.jpg", full: "https://i.pinimg.com/736x/a.jpg", link: "" }] }), { status: 200 });
+      promptBody = init?.body as FormData;
+      return new Response(JSON.stringify({ prompts: ["p. visible pores"] }), { status: 200 });
+    }));
+    render(<InfluencerPage />);
+    fireEvent.change(screen.getByLabelText("Anúncio ou descrição da pessoa"), { target: { value: "Mulher loira de 50 anos na cozinha" } });
+    fireEvent.click(screen.getByRole("button", { name: /Descobrir a pessoa/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Buscar fotos automaticamente/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Usar esta foto" }));
+    fireEvent.click(screen.getByRole("button", { name: /Gerar prompts com a foto/ }));
+    await waitFor(() => expect(promptBody?.get("image_url")).toBe("https://i.pinimg.com/736x/a.jpg"));
   });
 
   it("mostra um erro simples quando a leitura falha", async () => {

@@ -4,11 +4,15 @@ import { useEffect, useRef, useState } from "react";
 import { Check, ClipboardCopy, ExternalLink, ImagePlus, Loader2, Search, Sparkles, UserRound, X } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
 import { PageHeader } from "@/components/app/page-header";
 import { cn } from "@/lib/utils";
 
+type Pin = { id: string; thumb: string; full: string; link: string };
 type Profile = { name: string; age: string; look: string; setting: string; extra: string };
 const EMPTY: Profile = { name: "", age: "", look: "", setting: "", extra: "" };
+const FLOW_URL = "https://flow.google.com";
+const FLOW_TOOL_SHARE_URL = process.env.NEXT_PUBLIC_FLOW_TOOL_SHARE_URL ?? "";
 const inputClass = "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm";
 const pinterestUrl = (query: string) => `https://br.pinterest.com/search/pins/?q=${encodeURIComponent(query)}`;
 const AIS = [
@@ -44,10 +48,16 @@ export default function InfluencerPage() {
   const [photo, setPhoto] = useState<File | null>(null);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [prompts, setPrompts] = useState<string[]>([]);
-  const [busy, setBusy] = useState<"profile" | "prompt" | null>(null);
+  const [busy, setBusy] = useState<"profile" | "prompt" | "pins" | null>(null);
+  const [pins, setPins] = useState<Pin[]>([]);
+  const [pickedPin, setPickedPin] = useState<Pin | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [flowConnected, setFlowConnected] = useState(false);
+  useEffect(() => {
+    try { setFlowConnected(Boolean(JSON.parse(window.localStorage.getItem("gv-conectar-flow-v1") ?? "{}").flow)); } catch { /* storage unavailable */ }
+  }, []);
 
   useEffect(() => {
     if (!photo) { setPhotoUrl(null); return; }
@@ -60,7 +70,7 @@ export default function InfluencerPage() {
   useEffect(() => {
     const onPaste = (event: ClipboardEvent) => {
       const file = Array.from(event.clipboardData?.files ?? []).find((item) => item.type.startsWith("image/"));
-      if (file) setPhoto(file);
+      if (file) { setPhoto(file); setPickedPin(null); }
     };
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
@@ -84,6 +94,22 @@ export default function InfluencerPage() {
     } finally { setBusy(null); }
   }
 
+  async function findPins() {
+    setError(null);
+    setBusy("pins");
+    try {
+      const response = await fetch("/api/multiplier/clone/influencer-pins", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ queries: searches }),
+      });
+      if (!response.ok) { setError(await errorOf(response, "Não consegui buscar no Pinterest agora. Use os botões abaixo para buscar à mão.")); return; }
+      const data = await response.json();
+      setPins(Array.isArray(data.pins) ? data.pins : []);
+      if (!Array.isArray(data.pins) || data.pins.length === 0) setError("O Pinterest não devolveu fotos. Tente os botões de busca abaixo.");
+    } catch {
+      setError("Sem conexão. Tente de novo.");
+    } finally { setBusy(null); }
+  }
+
   async function writePrompts() {
     setError(null);
     setBusy("prompt");
@@ -91,6 +117,7 @@ export default function InfluencerPage() {
       const form = new FormData();
       (Object.keys(profile) as (keyof Profile)[]).forEach((key) => form.append(key, profile[key]));
       if (photo) form.append("image", photo);
+      else if (pickedPin) form.append("image_url", pickedPin.full);
       const response = await fetch("/api/multiplier/clone/influencer-prompt", { method: "POST", body: form });
       if (!response.ok) { setError(await errorOf(response, "Não consegui escrever os prompts. Tente de novo.")); return; }
       const data = await response.json();
@@ -144,13 +171,39 @@ export default function InfluencerPage() {
                 </a>
               ))}
             </div>
-            <p className="text-xs text-muted-foreground">O Pinterest abre em outra aba. Escolha a foto que você gostou, copie a imagem (ou salve) e volte aqui: cole com Ctrl+V ou toque em “Escolher foto”.</p>
+            <Button type="button" onClick={() => void findPins()} disabled={busy !== null || searches.length === 0} className="rounded-full">
+              {busy === "pins" ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4" />} {busy === "pins" ? "Buscando no Pinterest…" : "Buscar fotos automaticamente"}
+            </Button>
+            {pins.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm">Toque na foto que você quer usar:</p>
+                <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+                  {pins.map((pin) => (
+                    <li key={pin.id}>
+                      <button type="button" aria-label="Usar esta foto" aria-pressed={pickedPin?.id === pin.id} onClick={() => { setPickedPin(pin); setPhoto(null); }}
+                        className={cn("block w-full overflow-hidden rounded-[12px] border-2", pickedPin?.id === pin.id ? "border-[#A98BFF]" : "border-transparent")}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={pin.thumb} alt="Foto do Pinterest" loading="lazy" referrerPolicy="no-referrer" className="aspect-[3/4] w-full object-cover" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground">Ou busque à mão: o Pinterest abre em outra aba. Escolha a foto que você gostou, copie a imagem (ou salve) e volte aqui: cole com Ctrl+V ou toque em “Escolher foto”.</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
             <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" aria-label="Escolher foto da pessoa"
-              onChange={(event) => { const file = event.target.files?.[0]; if (file) setPhoto(file); event.target.value = ""; }} />
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => fileRef.current?.click()}><ImagePlus className="size-4" /> Escolher foto</Button>
+              onChange={(event) => { const file = event.target.files?.[0]; if (file) { setPhoto(file); setPickedPin(null); } event.target.value = ""; }} />
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => { setPickedPin(null); fileRef.current?.click(); }}><ImagePlus className="size-4" /> Escolher foto</Button>
+            {pickedPin && !photoUrl && (
+              <span className="relative inline-block">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={pickedPin.thumb} alt="Foto escolhida" referrerPolicy="no-referrer" className="h-24 w-20 rounded-[12px] border border-border object-cover" />
+                <button type="button" aria-label="Remover foto" onClick={() => setPickedPin(null)} className="absolute -right-2 -top-2 grid size-5 place-items-center rounded-full bg-black text-white"><X className="size-3" /></button>
+              </span>
+            )}
             {photoUrl && (
               <span className="relative inline-block">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -166,7 +219,7 @@ export default function InfluencerPage() {
         <Step n={3} title="Gerar o prompt realista">
           <label className="block space-y-1 text-sm">Algo a mais (opcional)<input value={profile.extra} onChange={(e) => setField("extra", e.target.value)} className={inputClass} maxLength={300} placeholder="Ex.: luz do fim de tarde, cozinha pequena" /></label>
           <Button type="button" onClick={() => void writePrompts()} disabled={busy !== null} className="rounded-full">
-            {busy === "prompt" ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />} {busy === "prompt" ? "Escrevendo os prompts…" : photo ? "Gerar prompts com a foto" : "Gerar prompts"}
+            {busy === "prompt" ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />} {busy === "prompt" ? "Escrevendo os prompts…" : photo || pickedPin ? "Gerar prompts com a foto" : "Gerar prompts"}
           </Button>
 
           {prompts.length > 0 && (
@@ -182,8 +235,26 @@ export default function InfluencerPage() {
                   <p className="whitespace-pre-line font-mono text-xs leading-relaxed">{prompt}</p>
                 </div>
               ))}
+              <div className="space-y-3 rounded-[14px] border border-[#A98BFF]/40 bg-[#7B3FE4]/10 p-4" data-testid="flow-generate">
+                <p className="font-medium">Gerar a imagem no Flow (usa os créditos da sua conta, não gasta os da plataforma)</p>
+                {flowConnected ? (
+                  <p className="text-sm text-muted-foreground">Seu Flow está conectado. Copie a opção que você gostou, abra o Flow, cole no campo “O que você quer criar?” e, se quiser manter o rosto da foto, toque em “+” e envie a foto como referência.</p>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Você ainda não conectou o seu Flow. <Link href="/conectar-flow" className="underline underline-offset-4">Conecte aqui</Link> (leva 1 minuto) e volte para gerar a imagem na sua conta.</p>
+                )}
+                <div className="flex flex-wrap items-center gap-2">
+                  <a href={FLOW_URL} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-4 py-2 text-sm font-medium text-white">Abrir o meu Flow <ExternalLink className="size-3.5" /></a>
+                  {FLOW_TOOL_SHARE_URL && (
+                    <a href={FLOW_TOOL_SHARE_URL} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-full border border-border px-4 py-2 text-sm hover:text-foreground">Abrir a ferramenta da Gringatools no Flow <ExternalLink className="size-3.5" /></a>
+                  )}
+                  {pickedPin && (
+                    <a href={pickedPin.full} target="_blank" rel="noopener noreferrer" download className="inline-flex items-center gap-1.5 rounded-full border border-border px-4 py-2 text-sm hover:text-foreground">Baixar a foto escolhida <ExternalLink className="size-3.5" /></a>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">Dica: gere com o modelo de imagem do Flow (ex.: Nano Banana Pro), escolha a melhor e use essa imagem como a pessoa das cenas do vídeo.</p>
+              </div>
               <div className="flex flex-wrap items-center gap-2 text-sm">
-                <span className="text-muted-foreground">Cole em qualquer IA de imagem, junto com a foto:</span>
+                <span className="text-muted-foreground">Ou cole em outra IA de imagem, junto com a foto:</span>
                 {AIS.map((ai) => (
                   <a key={ai.name} href={ai.href} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1 hover:text-foreground">{ai.name} <ExternalLink className="size-3 opacity-60" /></a>
                 ))}

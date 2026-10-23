@@ -625,7 +625,11 @@ async def influencer_prompt(request: Request, db: AsyncSession = Depends(get_db)
     )
     parts: list[Any] = [text]
     photo = form.get("image")
-    if photo is not None and hasattr(photo, "read"):
+    image_url = str(form.get("image_url") or "")
+    if (photo is None or not hasattr(photo, "read")) and image_url:
+        data, kind = await _download_pin_image(image_url)
+        parts.append(BinaryContent(data=data, media_type=kind))
+    elif photo is not None and hasattr(photo, "read"):
         kind = (getattr(photo, "content_type", "") or "").lower()
         data = await photo.read()
         if kind not in PHOTO_TYPES:
@@ -646,3 +650,86 @@ async def influencer_prompt(request: Request, db: AsyncSession = Depends(get_db)
     if not prompts:
         raise HTTPException(status_code=502, detail="Could not write the prompts. Try again.")
     return {"prompts": prompts[:3]}
+
+
+PIN_HOSTS = ("i.pinimg.com",)
+PIN_ACTOR = "epctex/pinterest-scraper"
+
+
+async def _download_pin_image(url: str) -> tuple[bytes, str]:
+    """Downloads a chosen Pinterest picture. Only Pinterest's own image host is accepted."""
+    from urllib.parse import urlparse
+
+    import requests
+
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or parsed.hostname not in PIN_HOSTS:
+        raise HTTPException(status_code=400, detail="Invalid photo address")
+
+    def fetch() -> tuple[bytes, str]:
+        response = requests.get(url, timeout=20, stream=True)
+        response.raise_for_status()
+        kind = (response.headers.get("content-type") or "").split(";")[0].strip().lower()
+        body = response.raw.read(MAX_PHOTO_BYTES + 1, decode_content=True)
+        return body, kind
+
+    try:
+        data, kind = await asyncio.to_thread(fetch)
+    except Exception:
+        raise HTTPException(status_code=502, detail="Could not download the photo")
+    if kind not in PHOTO_TYPES or len(data) > MAX_PHOTO_BYTES:
+        raise HTTPException(status_code=400, detail="Send a PNG, JPG or WebP photo")
+    return data, kind
+
+
+@router.post("/influencer-pins")
+async def influencer_pins(request: Request, db: AsyncSession = Depends(get_db)):
+    """Searches Pinterest (through Apify) for the persona's look and returns picture links to choose from."""
+    user_id = await _user_id(request, db)
+    try:
+        data = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    queries = [_clip(str(q), 80) for q in ((data or {}).get("queries") or []) if str(q).strip()][:3]
+    if not queries:
+        raise HTTPException(status_code=400, detail="Send at least one search")
+    token = get_config().apify_api_token
+    if not token:
+        raise HTTPException(status_code=503, detail="Pinterest search is not configured")
+    _check_script_rate(user_id)
+
+    def run() -> list[dict[str, str]]:
+        from apify_client import ApifyClient
+
+        client = ApifyClient(token)
+        pins: list[dict[str, str]] = []
+        seen: set[str] = set()
+        for query in queries:
+            call = client.actor(PIN_ACTOR).call(
+                run_input={"search": query, "getDetails": False, "maxItems": 8, "endPage": 1},
+                timeout_secs=90,
+            )
+            for item in client.dataset(call["defaultDatasetId"]).iterate_items():
+                images = item.get("images") or {}
+                small = (images.get("474x") or {}).get("url")
+                big = (images.get("736x") or {}).get("url") or small
+                if not small or not big or big in seen or urlparse_host(big) not in PIN_HOSTS:
+                    continue
+                seen.add(big)
+                pins.append({"id": str(item.get("id") or big), "thumb": small, "full": big, "link": str(item.get("url") or ""), "query": query})
+        return pins
+
+    try:
+        pins = await asyncio.wait_for(asyncio.to_thread(run), timeout=240)
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="Pinterest took too long. Try again.")
+    except Exception:
+        logger.exception("influencer pins failed")
+        raise HTTPException(status_code=502, detail="Could not search Pinterest. Try again.")
+    return {"pins": pins[:24]}
+
+
+def urlparse_host(url: str) -> str:
+    from urllib.parse import urlparse
+
+    return urlparse(url).hostname or ""
