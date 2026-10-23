@@ -7,7 +7,7 @@ import { FLOW_MODELS, readFlowCategory, saveFlowCategory } from "@/lib/flow-mode
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/app/page-header";
 
-const FLOW_URL = "https://flow.google.com";
+const FLOW_URL = "https://labs.google/fx/pt/tools/flow";
 // Link compartilhado do app "ClipGringa — Gerar Vídeos" dentro do Flow. Só aparece depois de criado e configurado.
 const FLOW_TOOL_SHARE_URL = process.env.NEXT_PUBLIC_FLOW_TOOL_SHARE_URL ?? "";
 const KEY = "gv-conectar-flow-v1";

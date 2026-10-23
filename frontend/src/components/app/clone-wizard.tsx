@@ -61,7 +61,7 @@ const SENT_KEY = "gv-clonagem-sent";
 const IDLE_MS = 10 * 60 * 1000; // projeto parado: some e começa um novo
 const WAIT_FLOW_MS = 2 * 60 * 60 * 1000; // depois de enviar ao Flow a pessoa precisa de tempo para gerar e voltar
 // Ferramenta "ClipGringa — Gerar Vídeos" no Flow (BETA). Trocar pelo link compartilhado quando for liberada aos membros.
-const FLOW_HOME_URL = "https://flow.google.com";
+const FLOW_HOME_URL = "https://labs.google/fx/pt/tools/flow";
 const FLOW_TOOL_URL = "https://flow.google.com/project/50e752e7-9a93-4477-8e3a-9bd266ec636b/tool/fccd23dc-ee0d-437a-9f45-a5ad87ccefce";
 // Créditos do Flow por geração de 8s (conta sem Lower Priority). Fonte: support.google.com/flow/answer/16526234. Podem mudar.
 const NEXT_HINTS = [
@@ -1261,7 +1261,7 @@ export function CloneWizard() {
               <summary className="cursor-pointer text-base font-semibold">{lowPriority ? "Gerar no Flow · Lower Priority (sem custo)" : "Gerar no Flow"}</summary>
               <div className="mt-3 rounded-[12px] border border-border bg-card p-3">{modelChooser()}</div>
               <ol className="mt-3 list-decimal space-y-1 pl-5 text-muted-foreground">
-                <li>Abra o <a href="https://flow.google.com" target="_blank" rel="noopener noreferrer" className="text-[#A98BFF] underline">Flow</a> e, para cada cena, cole o <b>prompt da imagem</b> (Nano Banana, 9:16, x1).</li>
+                <li>Abra o <a href="https://labs.google/fx/pt/tools/flow" target="_blank" rel="noopener noreferrer" className="text-[#A98BFF] underline">Flow</a> e, para cada cena, cole o <b>prompt da imagem</b> (Nano Banana, 9:16, x1).</li>
                 <li>Depois anime a imagem: modelo {lowPriority ? <><b>Veo 3.1 - Lite [Lower Priority]</b> (o Flow mostra “A geração vai usar 0 créditos”)</> : <b>{(FLOW_MODELS.find((m) => m.id === p.flowModel) ?? FLOW_MODELS[0]).name}</b>}, 8s, x1, e cole o <b>prompt da animação</b>.</li>
                 <li>Baixe com o nome indicado (Video01_Cena01.mp4…) e envie todos aqui embaixo.</li>
               </ol>

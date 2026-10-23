@@ -15,7 +15,7 @@ type Pin = { id: string; thumb: string; full: string; link: string };
 type Board = { scenes: { line: string; what: string }[]; imagePrompts: string[]; videoPrompts: string[] };
 type Profile = { name: string; age: string; look: string; setting: string; extra: string };
 const EMPTY: Profile = { name: "", age: "", look: "", setting: "", extra: "" };
-const FLOW_URL = "https://flow.google.com";
+const FLOW_URL = "https://labs.google/fx/pt/tools/flow";
 const FLOW_TOOL_SHARE_URL = process.env.NEXT_PUBLIC_FLOW_TOOL_SHARE_URL ?? "";
 const inputClass = "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm";
 const pinterestUrl = (query: string) => `https://br.pinterest.com/search/pins/?q=${encodeURIComponent(query)}`;

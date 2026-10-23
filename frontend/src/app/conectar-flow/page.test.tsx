@@ -11,7 +11,7 @@ it("guides the member through the two steps and remembers them", async () => {
   render(<ConnectFlowPage />);
   expect(screen.getByRole("status")).toHaveTextContent(/Faça os dois passos para liberar/);
   const open = screen.getByRole("link", { name: /Abrir o Flow e entrar/ });
-  expect(open).toHaveAttribute("href", "https://flow.google.com");
+  expect(open).toHaveAttribute("href", "https://labs.google/fx/pt/tools/flow");
   await user.click(open);
   await user.click(screen.getByRole("link", { name: /Baixar a extensão/ }));
   expect(await screen.findByText(/Tudo certo/)).toBeInTheDocument();

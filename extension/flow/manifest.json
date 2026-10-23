@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ClipGringa · Flow",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Gera sozinho as imagens e os vídeos do seu pacote do ClipGringa dentro do seu projeto no Google Flow.",
   "permissions": [
     "storage",
@@ -9,7 +9,8 @@
     "debugger"
   ],
   "host_permissions": [
-    "https://flow.google.com/*"
+    "https://flow.google.com/*",
+    "https://labs.google/fx/*/tools/flow/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -17,7 +18,8 @@
   "content_scripts": [
     {
       "matches": [
-        "https://flow.google.com/*"
+        "https://flow.google.com/*",
+        "https://labs.google/fx/*/tools/flow/*"
       ],
       "js": [
         "content.js"

@@ -172,7 +172,7 @@ export default function PrivacyPolicyPage() {
             <p>
               The optional &ldquo;ClipGringa &middot; Flow&rdquo; Chrome extension helps you run the
               prompts of a ClipGringa package inside your own Google Flow project. It only runs on{" "}
-              <code>flow.google.com</code>.
+              <code>flow.google.com</code> and <code>labs.google</code> (Flow pages only).
             </p>
             <p>
               The extension does not collect, sell, or transmit personal data, and it makes no
