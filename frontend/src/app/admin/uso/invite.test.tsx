@@ -10,6 +10,7 @@ function stubFetch(inviteResponse: Response) {
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
     calls.push({ url, body: init?.body as string | undefined });
     if (url === "/api/admin/invite") return inviteResponse;
+    if (url === "/api/admin/runtime-settings") return new Response(JSON.stringify({ settings: [] }), { status: 200 });
     return new Response(JSON.stringify({ users: [] }), { status: 200 });
   }));
   return calls;
@@ -44,4 +45,16 @@ it("points to the e-mail settings when sending is not configured yet", async () 
   await user.type(await screen.findByLabelText(/E-mail do membro/), "x@y.com");
   await user.click(screen.getByRole("button", { name: /Liberar e enviar e-mail/ }));
   expect(await screen.findByText(/e-mail de envio ainda não está configurado/)).toBeInTheDocument();
+});
+
+it("saves the sender e-mail and its password from the usage page", async () => {
+  const calls = stubFetch(new Response("{}", { status: 200 }));
+  const user = userEvent.setup();
+  render(<AdminUsagePage />);
+  await user.type(await screen.findByLabelText(/Senha desse e-mail/), "segredo-da-caixa");
+  await user.click(screen.getByRole("button", { name: "Salvar" }));
+  expect(await screen.findByText(/Salvo\. Agora os e-mails/)).toBeInTheDocument();
+  const patch = calls.find((c) => c.url === "/api/admin/runtime-settings" && c.body);
+  expect(JSON.parse(patch!.body!).updates).toEqual({ SMTP_USER: "contato@gringatools.com", SMTP_PASSWORD: "segredo-da-caixa" });
+  expect(screen.getByLabelText(/Senha desse e-mail/)).toHaveValue("");
 });
