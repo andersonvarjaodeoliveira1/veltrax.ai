@@ -73,6 +73,29 @@ describe("Criar influencer", () => {
     expect(screen.getByRole("button", { name: /Copiar pacote e abrir o Flow/ })).toBeInTheDocument();
   });
 
+  it("envia produto, ângulo e idioma ao montar o storyboard", async () => {
+    let body: Record<string, unknown> = {};
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).includes("influencer-profile")) return new Response(JSON.stringify({ name: "Marta", age: "50", look: "loira", setting: "cozinha", searches: ["x"] }), { status: 200 });
+      if (String(url).includes("product-look")) return new Response(JSON.stringify({ look: "dark blue jar with a white lid" }), { status: 200 });
+      if (String(url).includes("influencer-storyboard")) { body = JSON.parse(String(init?.body)); return new Response(JSON.stringify({ scenes: [{ line: "a", what: "b" }], imagePrompts: ["i"], videoPrompts: ["v"] }), { status: 200 }); }
+      return new Response(JSON.stringify({ pins: [] }), { status: 200 });
+    }));
+    render(<InfluencerPage />);
+    fireEvent.change(screen.getByLabelText("Anúncio ou descrição da pessoa"), { target: { value: "Mulher loira de 50 anos na cozinha mostrando o produto" } });
+    fireEvent.click(screen.getByRole("button", { name: /Descobrir a pessoa/ }));
+    await screen.findByTestId("product-block");
+    fireEvent.change(screen.getByLabelText("Fotos do produto"), { target: { files: [new File(["x"], "p.png", { type: "image/png" })] } });
+    expect(await screen.findByDisplayValue(/dark blue jar/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: "Pergunta" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Inglês" }));
+    fireEvent.click(screen.getByRole("button", { name: /Montar o storyboard/ }));
+    await waitFor(() => expect(body.angle).toBe("question"));
+    expect(body.language).toBe("en");
+    expect(body.product_look).toBe("dark blue jar with a white lid");
+    expect(body.show_product).toBe(true);
+  });
+
   it("mostra um erro simples quando a leitura falha", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ detail: "x" }), { status: 502 })));
     render(<InfluencerPage />);

@@ -704,7 +704,8 @@ async def influencer_pins(request: Request, db: AsyncSession = Depends(get_db)):
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON body")
     queries = [_clip(str(q), 80) for q in ((data or {}).get("queries") or []) if str(q).strip()][:3]
-    if not queries:
+    author = _pinterest_author(str((data or {}).get("author") or ""))
+    if not queries and not author:
         raise HTTPException(status_code=400, detail="Send at least one search")
     token = get_config().apify_api_token
     if not token:
@@ -717,11 +718,11 @@ async def influencer_pins(request: Request, db: AsyncSession = Depends(get_db)):
         client = ApifyClient(token)
         pins: list[dict[str, str]] = []
         seen: set[str] = set()
-        for query in queries:
-            call = client.actor(PIN_ACTOR).call(
-                run_input={"search": query, "getDetails": False, "maxItems": 8, "endPage": 1},
-                timeout_secs=90,
-            )
+        jobs: list[tuple[str, dict[str, Any]]] = [(q, {"search": q, "getDetails": False, "maxItems": 8, "endPage": 1}) for q in queries]
+        if author:
+            jobs = [(f"@{author}", {"startUrls": [{"url": f"https://www.pinterest.com/{author}/"}], "getDetails": False, "maxItems": 16, "endPage": 1})] + jobs
+        for query, run_input in jobs:
+            call = client.actor(PIN_ACTOR).call(run_input=run_input, timeout_secs=90)
             for item in client.dataset(call["defaultDatasetId"]).iterate_items():
                 images = item.get("images") or {}
                 small = (images.get("474x") or {}).get("url")
@@ -739,7 +740,20 @@ async def influencer_pins(request: Request, db: AsyncSession = Depends(get_db)):
     except Exception:
         logger.exception("influencer pins failed")
         raise HTTPException(status_code=502, detail="Could not search Pinterest. Try again.")
-    return {"pins": pins[:24]}
+    return {"pins": pins[:30]}
+
+
+def _pinterest_author(value: str) -> str:
+    """Accepts a Pinterest profile link or @name and returns the bare username ('' when invalid)."""
+    import re as _re
+
+    text = value.strip()
+    match = _re.search(r"pinterest\.[a-z.]+/([A-Za-z0-9_.-]{2,40})/?", text)
+    name = match.group(1) if match else text.lstrip("@")
+    name = name.strip("/")
+    if name.lower() in {"pin", "search", "ideas", "today", "explore"}:
+        return ""
+    return name if _re.fullmatch(r"[A-Za-z0-9_.-]{2,40}", name) else ""
 
 
 def urlparse_host(url: str) -> str:
@@ -786,6 +800,15 @@ async def influencer_storyboard(request: Request, db: AsyncSession = Depends(get
         f"\nOVERRIDE for the line length: each line has {max(10, high - 3)} to {high} words (never more than {high}), so it is spoken at about {wps} words per second and ends about one second before the 8-second clip ends. "
         "Never cut a sentence in the middle: end every line at the end of a sentence; merge short neighbouring sentences of the same idea to fill the window."
     )
+    angle = str(data.get("angle") or "")
+    ANGLES = {
+        "curiosity": "a curiosity hook that opens a gap the viewer wants to close",
+        "problem": "a hook that names the viewer's problem in their own words",
+        "proof": "a hook that opens with a concrete result or proof that was already in the copy",
+        "question": "a direct question to the viewer",
+    }
+    if angle in ANGLES:
+        ctx["scene_note"] += f"\nOPENING ANGLE: rewrite ONLY the first scene's line as {ANGLES[angle]}, keeping the same claim, mechanism and facts from the copy. Do not add new claims."
     import re as _re
 
     ages = [int(n) for n in _re.findall(r"\d{2}", str(persona.get("age") or ""))]

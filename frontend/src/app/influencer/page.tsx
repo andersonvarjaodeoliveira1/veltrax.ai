@@ -79,6 +79,13 @@ export default function InfluencerPage() {
   const [board, setBoard] = useState<Board | null>(null);
   const [sent, setSent] = useState<string | null>(null);
   const [frames, setFrames] = useState(true);
+  const [author, setAuthor] = useState("");
+  const [angle, setAngle] = useState("");
+  const [language, setLanguage] = useState("pt-BR");
+  const [productName, setProductName] = useState("");
+  const [productLook, setProductLook] = useState("");
+  const [productBusy, setProductBusy] = useState(false);
+  const productRef = useRef<HTMLInputElement>(null);
   const [cadence, setCadence] = useState<"natural" | "fast" | "faster">("natural");
   const [energy, setEnergy] = useState<"calm" | "lively">("calm");
   const wordsPerSecond = cadence === "natural" ? 2.5 : cadence === "fast" ? 2.75 : 3.1;
@@ -145,7 +152,7 @@ export default function InfluencerPage() {
     setBusy("pins");
     try {
       const response = await fetch("/api/multiplier/clone/influencer-pins", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ queries: list }),
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ queries: list, author: author.trim() }),
       });
       if (!response.ok) { setPinsFailed(true); return; }
       const data = await response.json();
@@ -157,13 +164,28 @@ export default function InfluencerPage() {
     } finally { setBusy(null); }
   }
 
+  async function readProduct(files: FileList) {
+    setError(null);
+    setProductBusy(true);
+    try {
+      const form = new FormData();
+      Array.from(files).slice(0, 3).forEach((file) => form.append("images", file));
+      const response = await fetch("/api/multiplier/clone/product-look", { method: "POST", body: form });
+      if (!response.ok) { setError(await errorOf(response, "Não consegui ler a foto do produto. Use PNG, JPG ou WebP de até 5 MB.")); return; }
+      const data = await response.json();
+      setProductLook(typeof data.look === "string" ? data.look : "");
+    } catch {
+      setError("Sem conexão. Tente de novo.");
+    } finally { setProductBusy(false); }
+  }
+
   async function buildBoard() {
     setError(null);
     setBusy("board");
     try {
       const response = await fetch("/api/multiplier/clone/influencer-storyboard", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ copy: copy4, scene_count: sceneCount, persona: profile, language: "pt-BR", cadence, energy }),
+        body: JSON.stringify({ copy: copy4, scene_count: sceneCount, persona: profile, language, cadence, energy, angle, product: productName.trim(), product_look: productLook.trim(), show_product: Boolean(productLook.trim() || productName.trim()) }),
       });
       if (!response.ok) { setError(await errorOf(response, "Não consegui montar o storyboard. Confira a fala e tente de novo.")); return; }
       setBoard(await response.json());
@@ -258,9 +280,12 @@ export default function InfluencerPage() {
                 </a>
               ))}
             </div>
-            <Button type="button" onClick={() => void findPins()} disabled={busy !== null || searches.length === 0} className="rounded-full">
+            <Button type="button" onClick={() => void findPins()} disabled={busy !== null || (searches.length === 0 && !author.trim())} className="rounded-full">
               {busy === "pins" ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4" />} {busy === "pins" ? "Buscando no Pinterest…" : "Buscar fotos automaticamente"}
             </Button>
+            <label className="block space-y-1 text-sm">Ou busque pelo perfil de um autor no Pinterest (link ou @)
+              <input value={author} onChange={(event) => setAuthor(event.target.value)} maxLength={120} className={inputClass} placeholder="https://br.pinterest.com/nome-do-perfil/ ou @nome" aria-label="Perfil do autor no Pinterest" />
+            </label>
             {pinsFailed && (
               <div role="status" className="space-y-3 rounded-[14px] border border-[#F5B454]/50 bg-[#F5B454]/10 p-4" data-testid="pins-fallback">
                 <p className="font-medium">Não consegui buscar as fotos sozinho agora. Vamos pelo Pinterest:</p>
@@ -391,6 +416,43 @@ export default function InfluencerPage() {
                   {item.name} · {item.credits} créd./cena <span className="opacity-70">({item.note})</span>
                 </button>
               ))}
+            </div>
+          </div>
+          <div className="space-y-2 rounded-[14px] border border-border p-3" data-testid="product-block">
+            <p className="text-sm font-medium">Produto na mão (opcional)</p>
+            <p className="text-xs text-muted-foreground">Envie 1 a 3 fotos do produto. A pessoa aparece segurando e usando o mesmo produto em todas as cenas, sem texto inventado no rótulo.</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <input ref={productRef} type="file" multiple accept="image/png,image/jpeg,image/webp" className="sr-only" aria-label="Fotos do produto"
+                onChange={(event) => { if (event.target.files?.length) void readProduct(event.target.files); event.target.value = ""; }} />
+              <Button type="button" variant="outline" className="rounded-full" onClick={() => productRef.current?.click()} disabled={productBusy}>
+                {productBusy ? <Loader2 className="size-4 animate-spin" /> : <ImagePlus className="size-4" />} {productBusy ? "Lendo o produto…" : "Enviar fotos do produto"}
+              </Button>
+              <input value={productName} onChange={(event) => setProductName(event.target.value)} maxLength={120} placeholder="Nome do produto (opcional)" aria-label="Nome do produto" className={cn(inputClass, "max-w-xs")} />
+            </div>
+            {productLook && (
+              <label className="block space-y-1 text-xs text-muted-foreground">Como o produto aparece (pode ajustar)
+                <textarea value={productLook} onChange={(event) => setProductLook(event.target.value)} rows={2} maxLength={500} className={inputClass} aria-label="Aparência do produto" />
+              </label>
+            )}
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2">
+              <p className="text-sm">Abertura (opcional)</p>
+              <div role="radiogroup" aria-label="Ângulo da abertura" className="flex flex-wrap gap-2">
+                {([["", "Como está"], ["curiosity", "Curiosidade"], ["problem", "Problema"], ["proof", "Prova"], ["question", "Pergunta"]] as const).map(([value, label]) => (
+                  <button key={value || "none"} type="button" role="radio" aria-checked={angle === value} onClick={() => setAngle(value)}
+                    className={cn("rounded-full border px-3 py-1.5 text-sm", angle === value ? "border-transparent bg-primary text-primary-foreground" : "border-border text-muted-foreground")}>{label}</button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <p className="text-sm">Idioma da fala</p>
+              <div role="radiogroup" aria-label="Idioma da fala" className="flex flex-wrap gap-2">
+                {([["pt-BR", "Português"], ["en", "Inglês"], ["es", "Espanhol"]] as const).map(([value, label]) => (
+                  <button key={value} type="button" role="radio" aria-checked={language === value} onClick={() => setLanguage(value)}
+                    className={cn("rounded-full border px-3 py-1.5 text-sm", language === value ? "border-transparent bg-primary text-primary-foreground" : "border-border text-muted-foreground")}>{label}</button>
+                ))}
+              </div>
             </div>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
