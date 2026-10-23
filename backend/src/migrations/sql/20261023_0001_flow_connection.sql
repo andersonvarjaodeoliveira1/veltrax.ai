@@ -1,0 +1,9 @@
+CREATE TABLE IF NOT EXISTS flow_connection (
+    user_id VARCHAR(36) PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    connected BOOLEAN NOT NULL DEFAULT false,
+    plan VARCHAR(40),
+    credits INTEGER,
+    connected_since TIMESTAMP WITH TIME ZONE,
+    disconnected_at TIMESTAMP WITH TIME ZONE,
+    checked_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+)

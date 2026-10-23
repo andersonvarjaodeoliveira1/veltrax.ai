@@ -10,6 +10,7 @@ type UserUsage = {
   id: string; email: string; name: string; created_at: string | null;
   tokens_in: number; tokens_out: number; tokens_in_30d: number; tokens_out_30d: number; tokens_own_key: number;
   calls: number; jobs: number; videos: number; clips: number;
+  flow?: { connected: boolean; plan: string | null; credits: number | null; checked_at: string | null; disconnected_at: string | null };
   balance: { unlimited: boolean; granted: number | null; used: number; remaining: number | null; exhausted: boolean };
 };
 type Detail = {
@@ -100,7 +101,7 @@ export default function AdminUsagePage() {
           <p className="border-b px-4 py-3 text-xs text-muted-foreground">Total de tokens de todos os usuários: <b className="text-foreground tabular-nums">{fmt.format(totalTokens)}</b>. “Chave própria” = tokens que saíram da chave do próprio usuário (não custam ao servidor).</p>
           <table className="min-w-full divide-y">
             <thead><tr>
-              <th className={th}>Usuário</th><th className={th}>Tokens (total)</th><th className={th}>Últimos 30 dias</th><th className={th}>Chave própria</th><th className={th}>Saldo restante</th>
+              <th className={th}>Usuário</th><th className={th}>Tokens (total)</th><th className={th}>Últimos 30 dias</th><th className={th}>Chave própria</th><th className={th}>Saldo restante</th><th className={th}>Conta do Flow</th>
               <th className={th}>Vídeos montados</th><th className={th}>Cortes</th><th className={th} />
             </tr></thead>
             <tbody className="divide-y">
@@ -127,6 +128,20 @@ export default function AdminUsagePage() {
                             <button key={amount} type="button" className="rounded-full border px-2 py-0.5 text-[11px] hover:bg-muted" onClick={() => void addTokens(user.id, amount)}>+{fmt.format(amount)}</button>
                           ))}
                         </span>
+                      </>
+                    )}
+                  </td>
+                  <td className={td}>
+                    {!user.flow?.checked_at ? <span className="text-muted-foreground">nunca conectou</span> : user.flow.connected ? (
+                      <>
+                        <span className="font-medium text-[#5BD69A]">● conectada</span>
+                        <span className="block text-xs text-muted-foreground">{user.flow.plan ? `plano ${user.flow.plan}` : "plano não lido"}{user.flow.credits !== null ? ` · ${fmt.format(user.flow.credits)} créditos` : ""}</span>
+                        <span className="block text-xs text-muted-foreground">visto {new Date(user.flow.checked_at).toLocaleString("pt-BR")}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="font-medium text-[#F5B454]">● desconectada</span>
+                        <span className="block text-xs text-muted-foreground">desde {new Date(user.flow.disconnected_at ?? user.flow.checked_at).toLocaleString("pt-BR")}</span>
                       </>
                     )}
                   </td>

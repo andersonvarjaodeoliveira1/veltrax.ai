@@ -172,14 +172,18 @@ export default function PrivacyPolicyPage() {
             <p>
               The optional &ldquo;ClipGringa &middot; Flow&rdquo; Chrome extension helps you run the
               prompts of a ClipGringa package inside your own Google Flow project. It only runs on{" "}
-              <code>flow.google.com</code> and <code>labs.google</code> (Flow pages only).
+              <code>flow.google.com</code>, <code>labs.google</code> (Flow pages only) and on the
+              ClipGringa site itself, where it answers whether your Flow account is connected.
             </p>
             <p>
-              The extension does not collect, sell, or transmit personal data, and it makes no
-              network requests of its own. The package you paste into it (prompts and file names)
+              The extension does not sell personal data and makes no network requests of its own.
+              While you are signed in to ClipGringa, it tells the site whether your Google account
+              is signed in to Flow and, when Flow shows them on screen, your Flow plan name and
+              credit balance. ClipGringa stores only those values and the time of the last check,
+              so you and the ClipGringa administrator can see the connection status. The package you paste into it (prompts and file names)
               and its progress are kept only in your browser&apos;s local extension storage so a
               run can continue after a reload; you can remove them by deleting the extension. We
-              do not receive your Google account details, your Flow content, or your Flow credits.
+              do not receive your Google password or e-mail, your Flow projects, prompts or generated media.
             </p>
             <p>
               The &ldquo;debugger&rdquo; permission is used only to send a real mouse click to the

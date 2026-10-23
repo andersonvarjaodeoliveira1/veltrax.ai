@@ -27,3 +27,15 @@ it("lets the member pick the Flow category and remembers it", async () => {
   expect(screen.getByRole("button", { name: /Veo 3.1 - Fast/ })).toHaveAttribute("aria-pressed", "true");
   expect(window.localStorage.getItem("gv-flow-model")).toBe("fast");
 });
+
+it("shows the connected account when the extension answers, and warns when it is missing", async () => {
+  render(<ConnectFlowPage />);
+  window.postMessage({ source: "clipgringa-flow", type: "status", loggedIn: true, plan: "Pro", credits: 840, seenAt: Date.now() }, window.location.origin);
+  expect(await screen.findByText("Conta do Flow conectada")).toBeInTheDocument();
+  expect(screen.getByTestId("flow-status")).toHaveTextContent(/Plano Pro · 840 créditos/);
+});
+
+it("says the extension was not found when nobody answers", async () => {
+  render(<ConnectFlowPage />);
+  expect(await screen.findByText("Extensão do Flow não encontrada", {}, { timeout: 4000 })).toBeInTheDocument();
+});

@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { signOut, useSession } from "@/lib/auth-client";
 import { useBillingSummary } from "@/hooks/use-billing-summary";
 import { useTokenBalance } from "@/hooks/use-token-balance";
+import { useFlowConnection } from "@/hooks/use-flow-connection";
 import { ADMIN_WHATSAPP_URL } from "@/lib/token-balance";
 import { formatBillingPlanName } from "@/lib/billing-plans";
 import { getUpgradeState } from "@/components/billing/upgrade-prompt";
@@ -55,6 +56,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [billing] = useBillingSummary(Boolean(session?.user));
   const tokens = useTokenBalance(Boolean(session?.user));
+  useFlowConnection(Boolean(session?.user));
   // The editor needs every pixel — collapse the sidebar to an icon rail there.
   const compact = /^\/tasks\/[^/]+\/edit/.test(pathname);
 

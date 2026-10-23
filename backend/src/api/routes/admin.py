@@ -278,8 +278,11 @@ async def users_usage(request: Request, db: AsyncSession = Depends(get_db)):
                        COALESCE(l.own, 0) AS tokens_own_key, COALESCE(l.server_used, 0) AS server_used,
                        u.is_admin AS is_admin, q.granted AS granted, COALESCE(l.calls, 0) AS calls,
                        COALESCE(j.jobs, 0) AS jobs, COALESCE(j.videos, 0) AS videos,
-                       COALESCE(c.clips, 0) AS clips
+                       COALESCE(c.clips, 0) AS clips,
+                       fc.connected AS flow_connected, fc.plan AS flow_plan, fc.credits AS flow_credits,
+                       fc.checked_at AS flow_checked_at, fc.disconnected_at AS flow_disconnected_at
                 FROM users u
+                LEFT JOIN flow_connection fc ON fc.user_id = u.id
                 LEFT JOIN (
                     SELECT user_id,
                            SUM(input_tokens) AS tin, SUM(output_tokens) AS tout,
@@ -313,6 +316,13 @@ async def users_usage(request: Request, db: AsyncSession = Depends(get_db)):
         item.update({key: int(row[key] or 0) for key in numeric})
         from ...usage import balance_from
 
+        item["flow"] = {
+            "connected": bool(row["flow_connected"]),
+            "plan": row["flow_plan"],
+            "credits": row["flow_credits"],
+            "checked_at": row["flow_checked_at"].isoformat() if row["flow_checked_at"] else None,
+            "disconnected_at": row["flow_disconnected_at"].isoformat() if row["flow_disconnected_at"] else None,
+        }
         item["balance"] = balance_from(bool(row["is_admin"]), row["granted"], int(row["server_used"] or 0))
         users.append(item)
     return {"users": users}

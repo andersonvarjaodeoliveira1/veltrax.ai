@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Check, Download, ExternalLink, Film, Link2 } from "lucide-react";
 import { useSession } from "@/lib/auth-client";
+import { useFlowConnection } from "@/hooks/use-flow-connection";
 import { FLOW_MODELS, readFlowCategory, saveFlowCategory } from "@/lib/flow-models";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/app/page-header";
@@ -18,6 +19,7 @@ export default function ConnectFlowPage() {
   const [done, setDone] = useState<Done>({ flow: false, extension: false });
   const { data: session } = useSession();
   const isAdmin = Boolean((session?.user as { is_admin?: boolean } | undefined)?.is_admin);
+  const { state: flowState, account } = useFlowConnection(true, false);
   const [category, setCategory] = useState<string>(FLOW_MODELS[0].id);
   useEffect(() => { setCategory(readFlowCategory() ?? FLOW_MODELS[0].id); }, []);
   const chooseCategory = (id: string) => { setCategory(id); saveFlowCategory(id); };
@@ -42,6 +44,23 @@ export default function ConnectFlowPage() {
   return (
     <div className="mx-auto w-full max-w-3xl space-y-6 p-4 sm:p-8">
       <PageHeader icon={Link2} title="Conectar ao Flow" description={<>Os vídeos são gerados na <b>sua</b> conta do Flow. Faça os passos abaixo uma vez e deixe a conta conectada neste navegador.</>} />
+
+      <section data-testid="flow-status" aria-live="polite" className={cn("flex flex-wrap items-center gap-3 rounded-[18px] border p-4 text-sm",
+        flowState === "connected" ? "border-[#5BD69A]/40 bg-[#5BD69A]/10" : flowState === "unknown" ? "border-border bg-card" : "border-[#F5B454]/40 bg-[#F5B454]/10")}>
+        <span className={cn("size-2.5 rounded-full", flowState === "connected" ? "bg-[#5BD69A]" : flowState === "unknown" ? "bg-muted-foreground" : "bg-[#F5B454]")} />
+        <div className="min-w-0 flex-1">
+          <p className="font-medium">
+            {flowState === "connected" ? "Conta do Flow conectada" : flowState === "logged-out" ? "Conta do Flow não conectada" : flowState === "no-extension" ? "Extensão do Flow não encontrada" : "Verificando a conexão…"}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {flowState === "connected"
+              ? `${account.plan ? `Plano ${account.plan}` : "Plano não identificado"}${account.credits !== null ? ` · ${account.credits} créditos` : ""}. O ClipGringa só lê o plano e o saldo que o Flow mostra na tela.`
+              : flowState === "logged-out" ? "Abra o Flow e entre com a sua conta Google (passo 1). Avisamos aqui quando conectar."
+              : flowState === "no-extension" ? "Instale ou ligue a extensão do ClipGringa no Chrome (passo 2)."
+              : "Só um instante."}
+          </p>
+        </div>
+      </section>
 
       <section className="space-y-3 rounded-[18px] border border-border bg-card p-5" data-testid="step-category">
         <p className="font-medium">Sua categoria no Flow</p>

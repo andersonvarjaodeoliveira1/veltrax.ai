@@ -1,5 +1,7 @@
 """Minhas APIs: cada usuário conecta as próprias chaves."""
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, Field
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth_headers import get_authenticated_user_id
@@ -55,3 +57,38 @@ async def my_balance(request: Request, db: AsyncSession = Depends(get_db)):
     from ...usage import get_balance
 
     return await get_balance(db, _uid(request))
+
+
+flow_router = APIRouter(prefix="/flow", tags=["flow"])
+
+
+class FlowStatus(BaseModel):
+    connected: bool
+    plan: str | None = Field(default=None, max_length=40)
+    credits: int | None = Field(default=None, ge=0, le=10_000_000)
+
+
+@flow_router.post("/status")
+async def save_flow_status(body: FlowStatus, request: Request, db: AsyncSession = Depends(get_db)):
+    """A extensão avisa (pelo site) se a conta do Flow do membro está conectada. Só guarda plano e saldo lidos na tela."""
+    user_id = _uid(request)
+    await db.execute(
+        text(
+            """
+            INSERT INTO flow_connection (user_id, connected, plan, credits, connected_since, disconnected_at, checked_at)
+            VALUES (:u, :c, :p, :k, CASE WHEN :c THEN now() END, CASE WHEN :c THEN NULL ELSE now() END, now())
+            ON CONFLICT (user_id) DO UPDATE SET
+                connected_since = CASE WHEN :c AND NOT flow_connection.connected THEN now()
+                                       WHEN :c THEN flow_connection.connected_since ELSE flow_connection.connected_since END,
+                disconnected_at = CASE WHEN NOT :c AND flow_connection.connected THEN now()
+                                       WHEN :c THEN NULL ELSE flow_connection.disconnected_at END,
+                connected = :c,
+                plan = CASE WHEN :c THEN COALESCE(:p, flow_connection.plan) ELSE flow_connection.plan END,
+                credits = CASE WHEN :c THEN COALESCE(:k, flow_connection.credits) ELSE flow_connection.credits END,
+                checked_at = now()
+            """
+        ),
+        {"u": user_id, "c": body.connected, "p": body.plan, "k": body.credits},
+    )
+    await db.commit()
+    return {"ok": True}
