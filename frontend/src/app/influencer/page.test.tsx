@@ -28,6 +28,9 @@ describe("Criar influencer", () => {
     fireEvent.click(screen.getByRole("button", { name: /Descobrir a pessoa/ }));
     expect(await screen.findByDisplayValue("Marta")).toBeInTheDocument();
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "25");
+    expect(screen.getByTestId("xp")).toHaveTextContent("10 XP");
+    expect(screen.getByTestId("cheer")).toHaveTextContent(/Etapa 1 concluída/);
+    expect(screen.getByTestId("mission")).toHaveTextContent(/Missão: Toque na foto/);
     expect(screen.queryByLabelText("Anúncio ou descrição da pessoa")).toBeNull();
     fireEvent.click(await screen.findByRole("button", { name: /Avançar sem foto/ }));
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "50");
@@ -80,6 +83,8 @@ describe("Criar influencer", () => {
     expect(await screen.findByTestId("storyboard")).toHaveTextContent("Eu não dormia");
     expect(screen.getByText(/gasto estimado/)).toHaveTextContent(/créditos do seu Flow/);
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "100");
+    expect(screen.getByTestId("xp")).toHaveTextContent("60 XP");
+    expect(screen.getByTestId("cheer")).toHaveTextContent(/Tudo pronto/);
     expect(screen.getByRole("button", { name: /Copiar pacote e abrir o Flow/ })).toBeInTheDocument();
   });
 
