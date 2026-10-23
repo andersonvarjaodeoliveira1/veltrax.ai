@@ -210,7 +210,10 @@ function InviteCard({ onDone }: { onDone: () => void }) {
       } else if (data.error === "invalid_email") {
         setResult({ ok: false, text: "Esse e-mail não parece válido. Confira e tente de novo." });
       } else {
-        setResult({ ok: false, text: `${data.created ? "O usuário foi criado, mas o" : "O"} e-mail não saiu agora. Clique em liberar de novo para reenviar.` });
+        const notConfigured = typeof data.detail === "string" && /não configurado|not configured/i.test(data.detail);
+        setResult({ ok: false, text: notConfigured
+          ? `${data.created ? "O usuário foi criado, mas o" : "O"} e-mail de envio ainda não está configurado. No Admin, em Configurações, preencha “E-mail de envio” (contato@gringatools.com) e a senha dele. Depois clique aqui de novo para reenviar.`
+          : `${data.created ? "O usuário foi criado, mas o" : "O"} e-mail não saiu agora. Clique em liberar de novo para reenviar.` });
         if (data.created) onDone();
       }
     } catch {

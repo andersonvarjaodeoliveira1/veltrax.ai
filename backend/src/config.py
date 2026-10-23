@@ -141,6 +141,12 @@ class Config:
                 "http://sp.localhost:3107",
             ],
         )
+        # E-mail por SMTP (ex.: a caixa contato@gringatools.com da Hostinger). Se estiver configurado, tem prioridade sobre o SES.
+        self.smtp_user = self._get_runtime_setting("SMTP_USER")
+        self.smtp_password = self._get_runtime_setting("SMTP_PASSWORD")
+        self.smtp_host = self._get_runtime_setting("SMTP_HOST") or "smtp.hostinger.com"
+        self.smtp_port = int(self._get_runtime_setting("SMTP_PORT") or 465)
+        self.smtp_from = self._get_optional_env("SMTP_FROM") or (f"ClipGringa <{self.smtp_user}>" if self.smtp_user else None)
         self.aws_region = self._get_optional_env("AWS_REGION")
         self.aws_access_key_id = self._get_optional_env("AWS_ACCESS_KEY_ID")
         self.aws_secret_access_key = self._get_optional_env("AWS_SECRET_ACCESS_KEY")
@@ -207,6 +213,10 @@ class Config:
             "PEXELS_API_KEY": self.pexels_api_key,
             "VEO_API_KEY": self.veo_api_key,
             "VEO_PROJECT_ID": self.veo_project_id,
+            "SMTP_USER": self.smtp_user,
+            "SMTP_PASSWORD": self.smtp_password,
+            "SMTP_HOST": self.smtp_host,
+            "SMTP_PORT": str(self.smtp_port),
         }
 
     @staticmethod

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import smtplib
+import ssl
 from dataclasses import dataclass
+from email.message import EmailMessage
 from typing import Optional
 
 import boto3
@@ -23,9 +26,20 @@ class SesEmailService:
         self.access_key_id = self.config.aws_access_key_id
         self.secret_access_key = self.config.aws_secret_access_key
         self.from_email = self.config.ses_from_email
+        self.smtp_user = getattr(self.config, "smtp_user", None)
+        self.smtp_password = getattr(self.config, "smtp_password", None)
+        self.smtp_host = getattr(self.config, "smtp_host", None)
+        self.smtp_port = getattr(self.config, "smtp_port", 465)
+        self.smtp_from = getattr(self.config, "smtp_from", None)
+
+    @property
+    def smtp_configured(self) -> bool:
+        return bool(self.smtp_user and self.smtp_password and self.smtp_host)
 
     @property
     def is_configured(self) -> bool:
+        if self.smtp_configured:
+            return True
         return bool(
             self.region
             and self.access_key_id
@@ -54,11 +68,32 @@ class SesEmailService:
             },
         )
 
+    def _send_smtp(self, recipient: str, content: EmailContent) -> dict:
+        message = EmailMessage()
+        message["Subject"] = content.subject
+        message["From"] = self.smtp_from or self.smtp_user
+        message["To"] = recipient
+        message.set_content(content.text)
+        message.add_alternative(content.html, subtype="html")
+        context = ssl.create_default_context()
+        port = int(self.smtp_port)
+        if port == 465:
+            server = smtplib.SMTP_SSL(self.smtp_host, port, timeout=25, context=context)
+        else:
+            server = smtplib.SMTP(self.smtp_host, port, timeout=25)
+            server.starttls(context=context)
+        with server:
+            server.login(self.smtp_user, self.smtp_password)
+            server.send_message(message)
+        return {"provider": "smtp", "to": recipient}
+
     async def send_email(self, recipient: str, content: EmailContent) -> dict:
+        if self.smtp_configured:
+            return await asyncio.to_thread(self._send_smtp, recipient, content)
         if not self.is_configured:
             raise RuntimeError(
-                "Amazon SES is not configured. Set AWS_REGION, AWS_ACCESS_KEY_ID, "
-                "AWS_SECRET_ACCESS_KEY and SES_FROM_EMAIL."
+                "E-mail não configurado. Preencha o e-mail de envio e a senha no Admin "
+                "(ou configure o Amazon SES: AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY e SES_FROM_EMAIL)."
             )
 
         response = await asyncio.to_thread(self._send, recipient, content)

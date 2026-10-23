@@ -8,6 +8,8 @@ type Entry = { pt: string; es: string };
 
 const E: Record<string, Entry> = {
   // Criar / recuperar senha
+  "Could not send reset link": { pt: "Não foi possível enviar o link agora. Tente de novo.", es: "No se pudo enviar el enlace ahora. Inténtalo de nuevo." },
+  "Failed to reset password": { pt: "Não foi possível salvar a senha. Peça um novo link.", es: "No se pudo guardar la contraseña. Pide un nuevo enlace." },
   "Choose a new password": { pt: "Escolha a sua senha", es: "Elige tu contraseña" },
   "You'll be signed out on other devices.": { pt: "Você será desconectado dos outros aparelhos.", es: "Se cerrará tu sesión en los otros dispositivos." },
   "New password (at least 10 characters)": { pt: "Nova senha (mínimo 10 caracteres)", es: "Nueva contraseña (mínimo 10 caracteres)" },
@@ -272,6 +274,7 @@ const E: Record<string, Entry> = {
 
 /** Frases com números/variáveis. */
 export const PATTERNS: Array<{ re: RegExp; pt: (m: RegExpMatchArray) => string; es: (m: RegExpMatchArray) => string }> = [
+  { re: /^If an account exists for (.+), a reset link is on its way\. Check your inbox and spam folder\.$/, pt: (m) => `Se existir uma conta para ${m[1]}, o link já está a caminho. Confira a caixa de entrada e o spam.`, es: (m) => `Si existe una cuenta para ${m[1]}, el enlace va en camino. Revisa tu bandeja de entrada y el spam.` },
   { re: /^YouTube: videos up to (\d+(?:\.\d+)?) min\.$/, pt: (m) => `YouTube: vídeos de até ${m[1]} min.`, es: (m) => `YouTube: videos de hasta ${m[1]} min.` },
   { re: /^Creating clip (\d+)\/(\d+)(?:\.\.\.|…)$/, pt: (m) => `Criando corte ${m[1]} de ${m[2]}…`, es: (m) => `Creando corte ${m[1]} de ${m[2]}…` },
   { re: /^(\d+) clips? ready below — more on the way\.$/, pt: (m) => `${m[1]} ${m[1] === "1" ? "corte pronto" : "cortes prontos"} abaixo — mais a caminho.`, es: (m) => `${m[1]} ${m[1] === "1" ? "corte listo" : "cortes listos"} abajo — más en camino.` },

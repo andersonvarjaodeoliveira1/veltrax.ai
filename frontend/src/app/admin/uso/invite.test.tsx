@@ -36,3 +36,12 @@ it("says so when the e-mail did not go out", async () => {
   await user.click(screen.getByRole("button", { name: /Liberar e enviar e-mail/ }));
   expect(await screen.findByText(/O usuário foi criado, mas o e-mail não saiu agora/)).toBeInTheDocument();
 });
+
+it("points to the e-mail settings when sending is not configured yet", async () => {
+  stubFetch(new Response(JSON.stringify({ error: "email_failed", created: true, detail: '{"detail":"E-mail não configurado. Preencha..."}' }), { status: 502 }));
+  const user = userEvent.setup();
+  render(<AdminUsagePage />);
+  await user.type(await screen.findByLabelText(/E-mail do membro/), "x@y.com");
+  await user.click(screen.getByRole("button", { name: /Liberar e enviar e-mail/ }));
+  expect(await screen.findByText(/e-mail de envio ainda não está configurado/)).toBeInTheDocument();
+});

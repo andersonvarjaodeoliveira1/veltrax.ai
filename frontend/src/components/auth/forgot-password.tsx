@@ -38,7 +38,7 @@ export function ForgotPassword() {
       <div className="mt-8">
         {sent ? (
           <p className="text-sm text-green-600">
-            If an account exists for {email}, a reset link is on its way. Check your inbox and spam folder.
+            {`If an account exists for ${email}, a reset link is on its way. Check your inbox and spam folder.`}
           </p>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">

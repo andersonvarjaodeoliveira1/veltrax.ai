@@ -87,6 +87,26 @@ SETTING_METADATA = {
         "description": "Google Cloud project number used for Veo (Automação, BETA).",
         "input_type": "text",
     },
+    "SMTP_USER": {
+        "label": "E-mail de envio (usuário SMTP)",
+        "description": "Caixa que envia os e-mails do app (convite, nova senha). Ex.: contato@gringatools.com.",
+        "input_type": "text",
+    },
+    "SMTP_PASSWORD": {
+        "label": "Senha do e-mail de envio",
+        "description": "Senha da caixa de e-mail acima (Hostinger). Fica criptografada e nunca volta para a tela.",
+        "input_type": "password",
+    },
+    "SMTP_HOST": {
+        "label": "Servidor SMTP (opcional)",
+        "description": "Deixe vazio para usar smtp.hostinger.com.",
+        "input_type": "text",
+    },
+    "SMTP_PORT": {
+        "label": "Porta SMTP (opcional)",
+        "description": "Deixe vazio para usar 465 (SSL).",
+        "input_type": "text",
+    },
 }
 
 

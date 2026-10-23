@@ -26,6 +26,10 @@ RUNTIME_SETTING_KEYS: tuple[str, ...] = (
     "PEXELS_API_KEY",
     "VEO_API_KEY",
     "VEO_PROJECT_ID",
+    "SMTP_USER",
+    "SMTP_PASSWORD",
+    "SMTP_HOST",
+    "SMTP_PORT",
 )
 
 PROCESS_ENV_SETTING_KEYS = frozenset(
