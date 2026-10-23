@@ -793,7 +793,7 @@ export function InfluencerChat() {
             ))}
           </ol>
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => { void copyOut("pack", flowPackage()); window.open(FLOW_URL, "_blank", "noopener"); }}
+            <button type="button" onClick={() => { const raw = flowPackage(); window.postMessage({ source: "clipgringa-page", type: "flow-package", raw }, window.location.origin); void copyOut("pack", raw); window.open(FLOW_URL, "_blank", "noopener"); }}
               className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-4 py-2 text-sm font-medium text-white">
               {sent === "pack" ? <Check className="size-4" /> : <ClipboardCopy className="size-4" />} {t("pack")}
             </button>

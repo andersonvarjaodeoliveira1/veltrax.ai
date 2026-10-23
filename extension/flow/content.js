@@ -492,6 +492,21 @@
     body.style.display = hidden ? "flex" : "none"; el("min").textContent = hidden ? "–" : "+";
   });
 
+  // Pacote enviado direto pelo site: coloca no painel e começa sozinho.
+  const PENDING_KEY = "clipgringa-flow-pending-v1";
+  async function takePending() {
+    try {
+      if (running) return;
+      const got = (await chrome.storage.local.get(PENDING_KEY))[PENDING_KEY];
+      if (!got || !got.raw || Date.now() - got.at > 30 * 60 * 1000) { if (got) await chrome.storage.local.remove(PENDING_KEY); return; }
+      await chrome.storage.local.remove(PENDING_KEY);
+      el("pkg").value = got.raw;
+      setNow("Pacote recebido do ClipGringa. Começando…");
+      start();
+    } catch (_e) { /* sem acesso ao armazenamento */ }
+  }
+  try { chrome.storage.onChanged.addListener((changes) => { if (changes[PENDING_KEY]) takePending(); }); } catch (_e) { /* ignore */ }
+
   window.__clipgringaDebug = { el, start, getState: () => state };
 
   storage.get().then((saved) => {
@@ -502,5 +517,5 @@
       setNow(left ? `Pacote carregado: ${left} cena(s) faltando. Clique em Começar para continuar.` : "Pacote concluído. Clique em Limpar para começar outro.");
       render();
     }
-  });
+  }).then(takePending);
 })();

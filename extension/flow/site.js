@@ -5,6 +5,18 @@
   window.__clipgringaBridge = true;
   const KEY = "clipgringa-flow-account-v1";
 
+  const PENDING = "clipgringa-flow-pending-v1";
+  // Recebe o pacote do site e guarda para a aba do Flow começar sozinha.
+  window.addEventListener("message", async (event) => {
+    if (event.source !== window || !event.data || event.data.source !== "clipgringa-page" || event.data.type !== "flow-package") return;
+    let ok = false;
+    try {
+      await chrome.storage.local.set({ [PENDING]: { raw: String(event.data.raw || ""), at: Date.now() } });
+      ok = true;
+    } catch (_e) { /* extensão recarregada */ }
+    window.postMessage({ source: "clipgringa-flow", type: "package-ack", ok }, window.location.origin);
+  });
+
   window.addEventListener("message", async (event) => {
     if (event.source !== window || !event.data || event.data.source !== "clipgringa-page" || event.data.type !== "flow-status?") return;
     let data = {};
