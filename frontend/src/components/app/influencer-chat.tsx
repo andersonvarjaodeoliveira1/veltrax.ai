@@ -5,7 +5,7 @@ import { ArrowRight, ArrowUp, Check, ClipboardCopy, ImagePlus, Loader2, Plus, Sp
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth-client";
 import { FLOW_CHOICES, defaultFlowCategory, saveFlowCategory } from "@/lib/flow-models";
-import { useI18n } from "@/lib/i18n";
+import { LanguageSwitcher, useI18n } from "@/lib/i18n";
 import { EXAMPLES, SKILLS, type Lang3, type SkillId } from "@/lib/influencer-examples";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -41,6 +41,13 @@ const S = {
   recreate: ["Recriar", "Recreate", "Recrear"],
   all: ["Todos", "All", "Todos"],
   newChat: ["Novo chat", "New chat", "Nuevo chat"],
+  seeMore: ["Ver mais", "See more", "Ver más"],
+  navLib: ["Biblioteca", "Library", "Biblioteca"],
+  navFolders: ["Pastas", "Folders", "Carpetas"],
+  navAuto: ["Automação", "Automation", "Automatización"],
+  navFlow: ["Conectar Flow", "Connect Flow", "Conectar Flow"],
+  navApis: ["Minhas APIs", "My APIs", "Mis APIs"],
+  navApp: ["Voltar ao ClipGringa", "Back to ClipGringa", "Volver a ClipGringa"],
   think: ["Entendendo o pedido…", "Understanding your request…", "Entendiendo el pedido…"],
   build: ["Montando a influencer…", "Building the influencer…", "Armando a la influencer…"],
   skip: ["Pular", "Skip", "Omitir"],
@@ -100,6 +107,7 @@ const S = {
   vCta: ["CTA", "CTA", "CTA"],
   go: ["Continuar", "Continue", "Continuar"],
   createProject: ["Criar projeto", "Create project", "Crear proyecto"],
+  follow: ["Para pedir outra influencer, toque em Novo chat", "To request another influencer, tap New chat", "Para pedir otra influencer, toca en Nuevo chat"],
   skillsLink: ["Skills", "Skills", "Skills"],
   projects: ["Projetos", "Projects", "Proyectos"],
   noProject: ["Sem projeto", "No project", "Sin proyecto"],
@@ -124,16 +132,15 @@ const S = {
   preview: ["Pré-visualização", "Preview", "Vista previa"],
 } as const;
 
-const Avatar = () => <span aria-hidden className="mt-1 size-6 shrink-0 rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#A98BFF]" />;
 const Msg = ({ children, testid }: { children: React.ReactNode; testid?: string }) => (
-  <div className="flex gap-3" data-testid={testid}><Avatar /><div className="min-w-0 flex-1 space-y-3 text-sm">{children}</div></div>
+  <div className="min-w-0 space-y-3 text-[15px] leading-relaxed" data-testid={testid}>{children}</div>
 );
 const Chip = ({ on, onClick, children, role }: { on?: boolean; onClick: () => void; children: React.ReactNode; role?: string }) => (
   <button type="button" role={role} aria-checked={role ? Boolean(on) : undefined} aria-pressed={role ? undefined : on} onClick={onClick}
     className={cn("rounded-full border px-4 py-1.5 text-sm", on ? "border-transparent bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:text-foreground")}>{children}</button>
 );
 const Working = ({ text }: { text: string }) => (
-  <div role="status" className="flex items-center gap-3 text-sm text-muted-foreground"><Avatar /><Loader2 className="size-4 animate-spin text-[#A98BFF]" /> {text}</div>
+  <div role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin text-[#A98BFF]" /> {text}</div>
 );
 
 export function InfluencerChat() {
@@ -216,7 +223,7 @@ export function InfluencerChat() {
   const mark = (key: string) => setWorked((current) => (current[key] ? current : { ...current, [key]: Math.max(1, Math.round((Date.now() - t0.current) / 1000)) }));
 
   useEffect(() => { setModel(defaultFlowCategory(isAdmin)); }, [isAdmin]);
-  useEffect(() => { endRef.current?.scrollIntoView?.({ behavior: "smooth", block: "end" }); }, [phase, qi, pins.length, prompts.length, boards.length]);
+  useEffect(() => { if (phase !== "home") endRef.current?.scrollIntoView?.({ behavior: "smooth", block: "end" }); }, [phase, qi, pins.length, prompts.length, boards.length]);
 
   // Prompt de demonstração: digita e apaga exemplos, um após o outro.
   useEffect(() => {
@@ -446,40 +453,48 @@ export function InfluencerChat() {
   const totalCredits = chosen.credits * SCENES * videoCount;
   const started = phase !== "home";
 
-  const composer = (
-    <div className="space-y-3 rounded-[26px] border border-border bg-card/95 p-4 shadow-lg backdrop-blur focus-within:border-[#A98BFF]/60" data-testid="chat-composer">
-      <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={3} maxLength={600} disabled={started} aria-label={lang === "en" ? "Describe the influencer" : lang === "es" ? "Describe a la influencer" : "Descreva a influencer"}
-        placeholder={phase === "home" ? (demo ? `${demo}▍` : t("ph")) : ""}
-        className="min-h-[72px] w-full resize-none bg-transparent px-2 py-1 text-base outline-none disabled:opacity-60" />
-      <div role="group" aria-label={t("niche")} className="flex flex-wrap gap-1.5">
+  const nicheRow = (
+    <div className="flex flex-wrap items-center gap-1 text-sm">
+      <div role="group" aria-label={t("niche")} className="flex flex-wrap gap-1">
         {SKILLS.map((item) => (
-          <button key={item.id} type="button" disabled={started} aria-pressed={skill === item.id} onClick={() => setSkill(skill === item.id ? "" : item.id)}
-            className={cn("rounded-full border px-2.5 py-1 text-xs disabled:opacity-60", skill === item.id ? "border-transparent bg-primary text-primary-foreground" : "border-border text-muted-foreground")}>
+          <button key={item.id} type="button" disabled={started} aria-pressed={skill === item.id} title={item.hint[lang]} onClick={() => setSkill(skill === item.id ? "" : item.id)}
+            className={cn("rounded-[10px] px-3 py-1.5 text-xs font-medium transition disabled:opacity-60", skill === item.id ? "bg-[#7B3FE4]/30 text-white" : "text-muted-foreground hover:bg-white/5 hover:text-foreground")}>
             {item.emoji} {item.name[lang]}
           </button>
         ))}
       </div>
-      <div className="flex items-center gap-2">
+      <Link href="/influencer/skills" className="ml-auto inline-flex items-center gap-1.5 rounded-[10px] px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-white/5 hover:text-foreground">⚡ {t("skillsLink")}</Link>
+    </div>
+  );
+
+  const composer = (
+    <div className="rounded-[24px] bg-[#1a191d] p-4 ring-1 ring-white/5 focus-within:ring-[#A98BFF]/50" data-testid="chat-composer">
+      <textarea value={started ? "" : prompt} onChange={(event) => setPrompt(event.target.value)} rows={3} maxLength={600} disabled={started} aria-label={lang === "en" ? "Describe the influencer" : lang === "es" ? "Describe a la influencer" : "Descreva a influencer"}
+        placeholder={phase === "home" ? (demo ? `${demo}▍` : t("ph")) : t("follow")}
+        className="min-h-[84px] w-full resize-none bg-transparent px-1 py-1 text-base outline-none placeholder:text-muted-foreground/70 disabled:opacity-60" />
+      <div className="mt-2 flex items-center gap-2">
         <input ref={attachRef} type="file" multiple accept="image/png,image/jpeg,image/webp" className="sr-only" aria-label={t("attachPhoto")}
           onChange={(event) => { const files = Array.from(event.target.files ?? []).slice(0, 3); if (files.length) setAttached(files); event.target.value = ""; }} />
-        <button type="button" disabled={started} onClick={() => attachRef.current?.click()} className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground disabled:opacity-60">
-          <ImagePlus className="size-4" /> {attached.length ? `${attached.length} ✓` : t("attachPhoto")}
+        <button type="button" disabled={started} title={t("attachPhoto")} aria-label={t("attachPhoto")} onClick={() => attachRef.current?.click()}
+          className="relative grid size-9 place-items-center rounded-full text-muted-foreground hover:bg-white/5 hover:text-foreground disabled:opacity-60">
+          <Plus className="size-5" />
+          {attached.length > 0 && <span className="absolute -right-0.5 -top-0.5 grid size-4 place-items-center rounded-full bg-[#7B3FE4] text-[10px] text-white">{attached.length}</span>}
         </button>
         {attached.length > 0 && !started && <button type="button" aria-label={t("stop")} onClick={() => setAttached([])} className="text-muted-foreground hover:text-foreground"><X className="size-3.5" /></button>}
         <select aria-label={t("modelLabel")} value={model} onChange={(event) => { setModel(event.target.value); saveFlowCategory(event.target.value); setModelChosen(true); }} disabled={started}
-          className="max-w-[9rem] truncate rounded-full border border-border bg-background px-2 py-1 text-xs text-muted-foreground disabled:opacity-60">
+          className="max-w-[10rem] truncate rounded-full bg-white/5 px-3 py-1.5 text-xs font-medium disabled:opacity-60">
           {FLOW_CHOICES.map((item) => <option key={item.id} value={item.id}>{item.id === "lower" ? "Lower Priority" : item.name}</option>)}
         </select>
         {projects.length > 0 && (
           <select aria-label={t("projects")} value={project} onChange={(event) => setProject(event.target.value)} disabled={started}
-            className="max-w-[8rem] truncate rounded-full border border-border bg-background px-2 py-1 text-xs text-muted-foreground disabled:opacity-60">
+            className="max-w-[8rem] truncate rounded-full bg-white/5 px-3 py-1.5 text-xs text-muted-foreground disabled:opacity-60">
             <option value="">{t("noProject")}</option>
             {projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select>
         )}
-        <span className="ml-auto hidden whitespace-nowrap text-xs text-muted-foreground lg:inline">{t("askFirst")}</span>
+        <span className="ml-auto hidden items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground lg:inline-flex">✋ {t("askFirst")}</span>
         <button type="button" aria-label={t("send")} title={t("send")} onClick={start} disabled={started || prompt.trim().length < 8}
-          className={cn("flex size-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white shadow-[0_8px_20px_-8px_#7B3FE4] disabled:opacity-50", "ml-auto lg:ml-0")}>
+          className="ml-auto flex size-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#A98BFF] to-[#7B3FE4] text-white disabled:opacity-40 lg:ml-0">
           {busy ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-5" />}
         </button>
       </div>
@@ -487,10 +502,11 @@ export function InfluencerChat() {
   );
 
   return (
-    <div className="grid min-h-[calc(100vh-3rem)] lg:grid-cols-[250px_minmax(0,1fr)] xl:grid-cols-[250px_minmax(0,1fr)_280px]">
-    <aside className="hidden space-y-2 border-r border-border bg-card/40 px-3 py-5 lg:block" aria-label={t("chats")} data-testid="chat-sidebar">
-      <button type="button" onClick={reset} className="flex w-full items-center gap-2 rounded-[14px] bg-card px-3 py-2.5 text-sm font-medium hover:bg-muted"><Plus className="size-4" /> {t("newChat")}</button>
-      <Link href="/influencer/skills" className="flex w-full items-center gap-2 rounded-[14px] px-3 py-2.5 text-sm font-medium hover:bg-card">⚡ {t("skillsLink")}</Link>
+    <div className={cn("grid h-screen gap-3 overflow-hidden bg-[#09080C] p-3 lg:grid-cols-[250px_minmax(0,1fr)]", started && (pin || persona.name) && "xl:grid-cols-[250px_minmax(0,1fr)_280px]")}>
+    <aside className="hidden min-h-0 space-y-1 overflow-y-auto rounded-[22px] bg-[#111113] p-3 ring-1 ring-white/10 lg:block" aria-label={t("chats")} data-testid="chat-sidebar">
+      <Link href="/list" className="mb-2 flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground hover:text-foreground">← {t("navApp")}</Link>
+      <button type="button" onClick={reset} className="flex w-full items-center gap-3 rounded-[14px] bg-white/5 px-2 py-2 text-sm font-medium hover:bg-white/10"><span aria-hidden className="grid size-7 place-items-center rounded-[9px] bg-white/10"><Plus className="size-4" /></span> {t("newChat")}</button>
+      <Link href="/influencer/skills" className="flex w-full items-center gap-3 rounded-[14px] px-2 py-2 text-sm font-medium hover:bg-white/5"><span aria-hidden className="grid size-7 place-items-center rounded-[9px] bg-white/10 text-xs">⚡</span> {t("skillsLink")}</Link>
       <div className="space-y-1.5 px-1 pt-2" data-testid="chat-projects">
         <p className="px-2 text-xs text-muted-foreground">{t("projects")}</p>
         <div className="flex flex-wrap gap-1.5 px-1">
@@ -502,6 +518,15 @@ export function InfluencerChat() {
           <button type="button" aria-label={t("createProject")} onClick={addProject} className="rounded-full border border-border px-2 text-xs hover:text-foreground"><Plus className="size-3.5" /></button>
         </div>
       </div>
+      <details className="px-1 pt-2 text-sm">
+        <summary className="cursor-pointer px-1 py-1 text-xs text-muted-foreground">{t("seeMore")}</summary>
+        <nav className="space-y-0.5 pt-1">
+          {([["/list", "navLib"], ["/folders", "navFolders"], ["/automacao", "navAuto"], ["/conectar-flow", "navFlow"], ["/minhas-apis", "navApis"]] as const).map(([href, key]) => (
+            <Link key={href} href={href} className="block rounded-[10px] px-2 py-1.5 text-sm hover:bg-white/5">{t(key)}</Link>
+          ))}
+          <div className="px-2 pt-1"><LanguageSwitcher /></div>
+        </nav>
+      </details>
       <p className="px-2 pt-3 text-xs text-muted-foreground">{t("chats")}</p>
       {chats.filter((c) => !filter2 || c.project === filter2).length === 0 && <p className="px-2 text-xs text-muted-foreground">{t("noChats")}</p>}
       {chats.filter((c) => !filter2 || c.project === filter2).map((chat) => (
@@ -511,14 +536,17 @@ export function InfluencerChat() {
         </div>
       ))}
     </aside>
-    <section className="mx-auto w-full max-w-3xl min-w-0 space-y-6 px-4 py-8 sm:px-8" data-testid="influencer-chat">
-      {started && (
-        <div className="flex items-center justify-between gap-2">
-          <p className="max-w-[80%] rounded-full border border-border bg-card px-5 py-2 text-xs font-semibold uppercase tracking-wide" data-testid="chat-user-bubble">{prompt}</p>
-          <button type="button" onClick={reset} className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"><Plus className="size-3.5" /> {t("newChat")}</button>
-        </div>
-      )}
-
+    <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[22px] bg-[#111113] ring-1 ring-white/10" data-testid="influencer-chat">
+      <header className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-8">
+        {started ? (
+          <p className="min-w-0 flex-1 truncate text-sm font-semibold" data-testid="chat-user-bubble">{prompt}</p>
+        ) : (
+          <p className="text-sm font-semibold text-muted-foreground">ClipGringa</p>
+        )}
+        <button type="button" onClick={reset} className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"><Plus className="size-3.5" /> {t("newChat")}</button>
+      </header>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-8 sm:px-8">
       {phase === "home" && (
         <>
           <div className="flex items-center justify-center gap-3 pt-6">
@@ -526,6 +554,7 @@ export function InfluencerChat() {
             <h1 className="text-3xl font-bold uppercase tracking-tight sm:text-4xl">{t("home")}</h1>
           </div>
           {composer}
+          {nicheRow}
           <div className="space-y-3" data-testid="my-models">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs text-muted-foreground">{t("myModel")}:</span>
@@ -556,25 +585,26 @@ export function InfluencerChat() {
               </div>
             )}
           </div>
-          <div className="space-y-4" data-testid="influencer-examples">
-            <div role="group" aria-label={t("all")} className="flex flex-wrap gap-2">
+          <div className="space-y-4 pt-4" data-testid="influencer-examples">
+            <div role="group" aria-label={t("all")} className="flex flex-wrap justify-center gap-1.5">
               {([["all", t("all")], ...SKILLS.map((s) => [s.id, `${s.emoji} ${s.name[lang]}`])] as [SkillId | "all", string][]).map(([id, label]) => (
-                <Chip key={id} on={filter === id} onClick={() => setFilter(id)}>{label}</Chip>
+                <button key={id} type="button" aria-pressed={filter === id} onClick={() => setFilter(id)}
+                  className={cn("rounded-[10px] px-3.5 py-1.5 text-xs font-medium", filter === id ? "bg-white/10 text-foreground" : "text-muted-foreground hover:bg-white/5")}>{label}</button>
               ))}
             </div>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-x-4 gap-y-6 sm:grid-cols-2 2xl:grid-cols-3">
               {shown.map((item) => (
-                <button key={item.id} type="button" onClick={() => { setPrompt(item.prompt[lang]); setSkill(item.skill); }}
-                  className="overflow-hidden rounded-[18px] border border-border bg-card text-left transition hover:border-[#A98BFF]">
-                  <div className="relative flex h-24 items-center justify-center text-4xl" style={{ background: `linear-gradient(135deg, ${item.from}, ${item.to})` }} aria-hidden>
-                    {item.emoji}
-                    <span className="absolute left-3 top-3 rounded-full bg-black/40 px-2 py-0.5 text-[10px] font-medium text-white">{SKILLS.find((s) => s.id === item.skill)?.name[lang]}</span>
+                <button key={item.id} type="button" onClick={() => { setPrompt(item.prompt[lang]); setSkill(item.skill); }} className="group text-left">
+                  <div className="relative aspect-[4/3] overflow-hidden rounded-[16px] ring-1 ring-white/10" style={{ background: `linear-gradient(135deg, ${item.from}, ${item.to})` }} aria-hidden>
+                    <span className="absolute inset-0 grid place-items-center text-6xl transition group-hover:scale-110">{item.emoji}</span>
+                    <span className="absolute left-3 top-3 rounded-full bg-black/40 px-2 py-0.5 text-[10px] font-medium text-white">{SKILLS.find((x) => x.id === item.skill)?.name[lang]}</span>
                   </div>
-                  <div className="space-y-2 p-3.5">
-                    <p className="text-sm font-medium leading-snug">{item.title[lang]}</p>
-                    <p className="text-xs text-muted-foreground"><b>{t("fmt")}:</b> {item.format[lang]}</p>
-                    <span className="inline-block rounded-full bg-[#7B3FE4] px-3.5 py-1 text-xs font-medium text-white">{t("recreate")}</span>
-                  </div>
+                  <span className="mt-2 flex items-center gap-2">
+                    <span aria-hidden className="grid size-7 shrink-0 place-items-center rounded-[9px] bg-white/10 text-sm">{item.emoji}</span>
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{item.title[lang]}</span>
+                    <span className="rounded-full bg-[#7B3FE4] px-3 py-1 text-xs font-medium text-white opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100">{t("recreate")}</span>
+                  </span>
+                  <span className="mt-1 line-clamp-2 block text-xs text-muted-foreground">{item.format[lang]}</span>
                 </button>
               ))}
             </div>
@@ -684,7 +714,7 @@ export function InfluencerChat() {
       {busy === "prompt" && <Working text={t("writing")} />}
       {["prompt", "count", "model", "cost", "board"].includes(phase) && prompts.length > 0 && (
         <Msg testid="chat-prompt">
-          {worked.prompt && <p className="text-xs text-muted-foreground" data-testid="worked">{t("worked")} {worked.prompt}s</p>}
+          {worked.prompt && <p className="flex items-center gap-3 text-xs text-muted-foreground" data-testid="worked"><span>{t("worked")} {worked.prompt}s</span><span aria-hidden className="h-px flex-1 bg-white/10" /></p>}
           <p>{t("promptReady")}</p>
           {prompts.slice(0, 2).map((text, i) => (
             <div key={text} className="space-y-2 rounded-[16px] border border-border bg-card p-3">
@@ -747,7 +777,7 @@ export function InfluencerChat() {
 
       {phase === "board" && board && (
         <Msg testid="storyboard">
-          {worked.board && <p className="text-xs text-muted-foreground">{t("worked")} {worked.board}s</p>}
+          {worked.board && <p className="flex items-center gap-3 text-xs text-muted-foreground"><span>{t("worked")} {worked.board}s</span><span aria-hidden className="h-px flex-1 bg-white/10" /></p>}
           <p>{t("ready")}</p>
           {boards.length > 1 && (
             <div role="tablist" aria-label={t("video_n")} className="flex flex-wrap gap-2">
@@ -786,10 +816,11 @@ export function InfluencerChat() {
       )}
 
       <div ref={endRef} />
-
-      {phase !== "home" && <div className="sticky bottom-3 z-10">{composer}</div>}
+      </div>
+      </div>
+      {phase !== "home" && <div className="px-4 pb-4 sm:px-8"><div className="mx-auto w-full max-w-3xl">{composer}</div></div>}
     </section>
-    <aside className="hidden px-4 py-8 xl:block" aria-label={t("preview")} data-testid="chat-preview">
+    <aside className={cn("hidden min-h-0 overflow-y-auto rounded-[22px] bg-[#111113] p-4 ring-1 ring-white/10", started && (pin || persona.name) && "xl:block")} aria-label={t("preview")} data-testid="chat-preview">
       {(pin || persona.name) && started && (
         <div className="sticky top-6 space-y-3 rounded-[18px] border border-border bg-card p-3">
           <p className="text-xs text-muted-foreground">{t("preview")}</p>
