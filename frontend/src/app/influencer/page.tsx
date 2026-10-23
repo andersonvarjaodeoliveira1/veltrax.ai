@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useSession } from "@/lib/auth-client";
 import { FLOW_MODELS, readFlowCategory, saveFlowCategory } from "@/lib/flow-models";
+import { LastFrame } from "@/components/app/last-frame";
 import { PageHeader } from "@/components/app/page-header";
 import { cn } from "@/lib/utils";
 
@@ -66,6 +67,7 @@ export default function InfluencerPage() {
   const [sceneCount, setSceneCount] = useState(4);
   const [board, setBoard] = useState<Board | null>(null);
   const [sent, setSent] = useState<string | null>(null);
+  const [frames, setFrames] = useState(true);
   useEffect(() => { setModel(readFlowCategory() ?? FLOW_MODELS[0].id); }, []);
   useEffect(() => {
     setCopy4((current) => current || ad);
@@ -151,6 +153,7 @@ export default function InfluencerPage() {
     model: isAdmin ? "Veo 3.1 - Lite [Lower Priority]" : chosen.name,
     flowModel: isAdmin ? "[Lower Priority]" : chosen.needle,
     lowerPriority: isAdmin,
+    mode: frames ? "frames" : "scenes",
     videos: [{
       title: profile.name || "Influencer",
       scenes: (board?.scenes ?? []).map((_, index) => ({
@@ -360,6 +363,18 @@ export default function InfluencerPage() {
               ))}
             </div>
           </div>
+          <div className="space-y-2">
+            <p className="text-sm">Como o Flow gera cada cena?</p>
+            <div role="radiogroup" aria-label="Modo de geração" className="flex flex-wrap gap-2">
+              {([[true, "Por frames (recomendado)"], [false, "Cena solta"]] as const).map(([value, label]) => (
+                <button key={label} type="button" role="radio" aria-checked={frames === value} onClick={() => setFrames(value)}
+                  className={cn("rounded-full border px-4 py-1.5 text-sm", frames === value ? "border-transparent bg-primary text-primary-foreground" : "border-border text-muted-foreground")}>{label}</button>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">{frames
+              ? "No Flow, escolha Vídeo > Frames. A cena 1 começa na imagem da pessoa; cada cena seguinte começa no último quadro da anterior. A pessoa e o cenário não mudam, e custa o mesmo por cena."
+              : "Cada cena começa do zero a partir do prompt. É mais rápido, mas o rosto pode variar entre as cenas."}</p>
+          </div>
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <span>Cenas:</span>
             <button type="button" aria-label="Menos uma cena" className="size-8 rounded-full border border-border" onClick={() => setSceneCount((n) => Math.max(1, n - 1))}>−</button>
@@ -379,6 +394,8 @@ export default function InfluencerPage() {
                     <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Cena {index + 1}</p>
                     <p>“{scene.line}”</p>
                     <p className="text-xs text-muted-foreground">{scene.what}</p>
+                    {frames && (index === 0 ? <p className="mt-1 text-xs text-[#A98BFF]">Frame inicial: a imagem da pessoa (passo 3).</p> : <p className="mt-1 text-xs text-[#A98BFF]">Frame inicial: o último frame da cena {index}.</p>)}
+                    {frames && <LastFrame sceneNumber={index + 1} nextScene={index < board.scenes.length - 1} />}
                   </li>
                 ))}
               </ol>
@@ -392,7 +409,7 @@ export default function InfluencerPage() {
                   {sent === "all" ? <Check className="size-4 text-[#5BD69A]" /> : <ClipboardCopy className="size-4" />} Copiar só os prompts
                 </button>
               </div>
-              <p className="text-xs text-muted-foreground">Com a extensão ClipGringa · Flow, cole o pacote nela e ela gera e baixa as cenas sozinha. Sem a extensão, use “Copiar só os prompts” e cole no Flow cena por cena. Depois suba os vídeos na Automação para montar com legenda.</p>
+              <p className="text-xs text-muted-foreground">Com a extensão ClipGringa · Flow, cole o pacote nela e ela gera e baixa as cenas sozinha. Sem a extensão, use “Copiar só os prompts” e cole no Flow cena por cena. Depois suba os vídeos na Automação para montar com legenda. A extensão ainda não encadeia os frames sozinha: no modo por frames, use o botão “Subir o vídeo da cena” em cada cena para pegar o último frame.</p>
             </div>
           )}
         </Step>
