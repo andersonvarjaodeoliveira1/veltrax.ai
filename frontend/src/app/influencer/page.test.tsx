@@ -43,6 +43,16 @@ describe("Criar influencer em chat", () => {
     expect(screen.queryByText(/XP|Missão|Etapa/)).toBeNull();
   });
 
+  it("Enter envia o pedido e mostra a estimativa de gasto por vídeo", async () => {
+    mockApi();
+    render(<InfluencerPage />);
+    expect(screen.getByTestId("cost-estimate")).toHaveTextContent(/Sem custo|Estimativa de gasto/);
+    const box = screen.getByLabelText("Descreva a influencer");
+    fireEvent.change(box, { target: { value: "Influencer de 22 anos, loira, vendendo roupas" } });
+    fireEvent.keyDown(box, { key: "Enter" });
+    expect(await screen.findByTestId("chat-niche")).toBeInTheDocument();
+  });
+
   it("clicar em Recriar preenche o pedido e o nicho", () => {
     mockApi();
     render(<InfluencerPage />);

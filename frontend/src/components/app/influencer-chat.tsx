@@ -64,6 +64,9 @@ const S = {
   toneSoft: ["Suave", "Soft", "Suave"],
   toneYoung: ["Jovem", "Young", "Joven"],
   toneMature: ["Madura", "Mature", "Madura"],
+  creditsWord: ["créditos", "credits", "créditos"],
+  estimate: ["Estimativa de gasto", "Estimated cost", "Gasto estimado"],
+  estFree: ["Sem custo no Lower Priority. Se a sua conta não tiver, usa o Lite (~40 créditos por vídeo).", "Free with Lower Priority. If your account has none, it uses Lite (~40 credits per video).", "Sin costo con Lower Priority. Si tu cuenta no lo tiene, usa Lite (~40 créditos por video)."],
   seeMore: ["Ver mais", "See more", "Ver más"],
   navLib: ["Biblioteca", "Library", "Biblioteca"],
   navFolders: ["Pastas", "Folders", "Carpetas"],
@@ -505,7 +508,7 @@ export function InfluencerChat() {
         <span className="absolute left-1/2 top-1/2 aspect-square w-[160%] -translate-x-1/2 -translate-y-1/2 animate-spin bg-[conic-gradient(from_0deg,transparent_0deg,#7B3FE4_70deg,#C9BBFA_120deg,transparent_200deg,transparent_360deg)] [animation-duration:5s] motion-reduce:animate-none" />
       </span>
     <div className="relative rounded-[26px] bg-[#1a191d] p-5 ring-1 ring-white/10 shadow-[0_20px_60px_-30px_#000]" data-testid="chat-composer">
-      <textarea value={started ? "" : prompt} onChange={(event) => setPrompt(event.target.value)} rows={3} maxLength={600} disabled={started} aria-label={lang === "en" ? "Describe the influencer" : lang === "es" ? "Describe a la influencer" : "Descreva a influencer"}
+      <textarea value={started ? "" : prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); if (!started && !busy && prompt.trim().length >= 8) start(); } }} rows={3} maxLength={600} disabled={started} aria-label={lang === "en" ? "Describe the influencer" : lang === "es" ? "Describe a la influencer" : "Descreva a influencer"}
         placeholder={phase === "home" ? (demo ? `${demo}▍` : t("ph")) : t("follow")}
         className="min-h-[96px] w-full resize-none bg-transparent px-1 py-1 text-lg outline-none placeholder:text-muted-foreground/70 disabled:opacity-60" />
       <div className="mt-2 flex items-center gap-2">
@@ -518,8 +521,8 @@ export function InfluencerChat() {
         </button>
         {attached.length > 0 && !started && <button type="button" aria-label={t("stop")} onClick={() => setAttached([])} className="text-muted-foreground hover:text-foreground"><X className="size-3.5" /></button>}
         <select aria-label={t("modelLabel")} value={model} onChange={(event) => { setModel(event.target.value); saveFlowCategory(event.target.value); setModelChosen(true); }} disabled={started}
-          className="max-w-[10rem] truncate rounded-full bg-white/5 px-3 py-1.5 text-xs font-medium disabled:opacity-60">
-          {FLOW_CHOICES.map((item) => <option key={item.id} value={item.id}>{item.id === "lower" ? "Lower Priority · 0 créditos" : item.name}</option>)}
+          className="max-w-[14rem] truncate rounded-full bg-white/5 px-3 py-1.5 text-xs font-medium text-foreground disabled:opacity-60 [&>option]:bg-[#1a191d] [&>option]:text-white">
+          {FLOW_CHOICES.map((item) => <option key={item.id} value={item.id}>{item.id === "lower" ? "Lower Priority" : item.name} · {item.credits === 0 ? `0 ${t("creditsWord")}` : `~${item.credits * SCENES} ${t("creditsWord")}/${t("video")}`}</option>)}
         </select>
         {projects.length > 0 && (
           <select aria-label={t("projects")} value={project} onChange={(event) => setProject(event.target.value)} disabled={started}
@@ -534,6 +537,9 @@ export function InfluencerChat() {
           {busy ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-5" />}
         </button>
       </div>
+      <p className="mt-2 px-1 text-[11px] text-muted-foreground" data-testid="cost-estimate">
+        {chosen.credits === 0 ? t("estFree") : `${t("estimate")}: ~${chosen.credits * SCENES} ${t("creditsWord")} / ${t("video")} (${SCENES} ${t("scenesWord")} × ${chosen.credits})`}
+      </p>
     </div>
     </div>
   );
