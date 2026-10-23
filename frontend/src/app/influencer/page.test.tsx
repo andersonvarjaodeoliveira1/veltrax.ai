@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import InfluencerPage from "./page";
 
-beforeEach(() => window.localStorage.clear());
+beforeEach(() => { window.localStorage.clear(); window.localStorage.setItem("gv-influencer-intro", "1"); });
 afterEach(() => vi.restoreAllMocks());
 
 // Leva o teste da etapa 2 (pessoa e foto) até a etapa 4 (vídeo), sem escolher foto.
@@ -162,5 +162,16 @@ describe("Chat de criação", () => {
     fireEvent.click(screen.getByRole("button", { name: /Montar 2 storyboards/ }));
     expect(await screen.findByRole("tab", { name: "Vídeo 2" })).toBeInTheDocument();
     expect(boardCalls).toBe(2);
+  });
+});
+
+describe("Primeiro uso", () => {
+  it("mostra a missão de 3 toques e depois o chat", async () => {
+    window.localStorage.clear();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 200 })));
+    render(<InfluencerPage />);
+    for (let i = 0; i < 3; i += 1) fireEvent.click(await screen.findByRole("button", { name: /(Toque para continuar|Começar o chat)/ }));
+    expect(await screen.findByLabelText("Descreva a influencer")).toBeInTheDocument();
+    expect(window.localStorage.getItem("gv-influencer-intro")).toBe("1");
   });
 });

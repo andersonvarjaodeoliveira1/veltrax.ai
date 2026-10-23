@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowRight, Check, Loader2, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
@@ -39,6 +39,17 @@ const TXT = {
   format: { pt: "Formato", en: "Format", es: "Formato" },
   all: { pt: "Todos", en: "All", es: "Todos" },
 } as const;
+const INTRO = [
+  { emoji: "✍️", pt: ["1. Você descreve", "Escreva em uma frase quem é a sua influencer."], en: ["1. You describe", "Write in one sentence who your influencer is."], es: ["1. Tú describes", "Escribe en una frase quién es tu influencer."] },
+  { emoji: "💬", pt: ["2. Eu pergunto", "Respondo com 3 opções por vez. Você toca, ou pula."], en: ["2. I ask", "I give 3 options at a time. You tap, or skip."], es: ["2. Yo pregunto", "Te doy 3 opciones por vez. Tocas, o omites."] },
+  { emoji: "🎬", pt: ["3. Você aprova e gera", "Escolhe a foto, aprova o gasto e gera os vídeos no seu Flow."], en: ["3. You approve and generate", "Pick the photo, approve the cost and generate videos in your Flow."], es: ["3. Apruebas y generas", "Eliges la foto, apruebas el gasto y generas los videos en tu Flow."] },
+] as const;
+const INTRO_KEY = "gv-influencer-intro";
+const TXT_INTRO = {
+  tap: { pt: "Toque para continuar", en: "Tap to continue", es: "Toca para continuar" },
+  go: { pt: "Começar o chat", en: "Start the chat", es: "Empezar el chat" },
+  welcome: { pt: "Bem-vindo! Missão rápida de 3 toques", en: "Welcome! Quick 3-tap mission", es: "¡Bienvenido! Misión rápida de 3 toques" },
+} as const;
 const tx = (key: keyof typeof TXT, lang: Lang3) => TXT[key][lang];
 
 export function InfluencerChat({ onReady, busy }: { onReady: (brief: Brief) => void; busy: boolean }) {
@@ -54,6 +65,15 @@ export function InfluencerChat({ onReady, busy }: { onReady: (brief: Brief) => v
   const [working, setWorking] = useState<"" | "ask" | "build">("");
   const [error, setError] = useState(false);
   const [filter, setFilter] = useState<SkillId | "all">("all");
+  const [intro, setIntro] = useState(-1);
+  useEffect(() => {
+    try { setIntro(window.localStorage.getItem(INTRO_KEY) ? INTRO.length : 0); } catch { setIntro(INTRO.length); }
+  }, []);
+  const nextIntro = () => {
+    const n = intro + 1;
+    setIntro(n);
+    if (n >= INTRO.length) { try { window.localStorage.setItem(INTRO_KEY, "1"); } catch { /* sem armazenamento */ } }
+  };
 
   async function call(withAnswers: { question: string; answer: string }[]) {
     const response = await fetch("/api/multiplier/clone/influencer-brief", {
@@ -93,6 +113,25 @@ export function InfluencerChat({ onReady, busy }: { onReady: (brief: Brief) => v
 
   const q = questions[index];
   const shown = EXAMPLES.filter((item) => filter === "all" || item.skill === filter);
+
+  if (intro >= 0 && intro < INTRO.length) {
+    const card = INTRO[intro];
+    return (
+      <section className="space-y-3" data-testid="influencer-intro">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#A98BFF]">{TXT_INTRO.welcome[lang]}</p>
+        <div role="progressbar" aria-valuemin={0} aria-valuemax={INTRO.length} aria-valuenow={intro} className="h-2 overflow-hidden rounded-full bg-border">
+          <div className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A98BFF] transition-all" style={{ width: `${(intro / INTRO.length) * 100}%` }} />
+        </div>
+        <button type="button" onClick={nextIntro} className="gt-pop w-full space-y-2 rounded-[18px] border border-[#A98BFF]/40 bg-card p-6 text-center">
+          <span className="block text-5xl" aria-hidden>{card.emoji}</span>
+          <span className="block text-lg font-semibold">{card[lang][0]}</span>
+          <span className="block text-sm text-muted-foreground">{card[lang][1]}</span>
+          <span className="block text-xs font-semibold text-[#A98BFF]">{intro === INTRO.length - 1 ? TXT_INTRO.go[lang] : TXT_INTRO.tap[lang]} →</span>
+        </button>
+      </section>
+    );
+  }
+  if (intro < 0) return null;
 
   return (
     <section className="space-y-5" data-testid="influencer-chat">
