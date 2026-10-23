@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, ArrowUp, Check, ClipboardCopy, ImagePlus, Loader2, Plus, X } from "lucide-react";
+import { ArrowRight, ArrowUp, Check, ClipboardCopy, ImagePlus, Loader2, Plus, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth-client";
 import { FLOW_CHOICES, defaultFlowCategory, saveFlowCategory } from "@/lib/flow-models";
@@ -447,10 +447,10 @@ export function InfluencerChat() {
   const started = phase !== "home";
 
   const composer = (
-    <div className="space-y-2 rounded-[26px] border border-border bg-card/95 p-3 shadow-lg backdrop-blur focus-within:border-[#A98BFF]/60" data-testid="chat-composer">
-      <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={2} maxLength={600} disabled={started} aria-label={lang === "en" ? "Describe the influencer" : lang === "es" ? "Describe a la influencer" : "Descreva a influencer"}
+    <div className="space-y-3 rounded-[26px] border border-border bg-card/95 p-4 shadow-lg backdrop-blur focus-within:border-[#A98BFF]/60" data-testid="chat-composer">
+      <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={3} maxLength={600} disabled={started} aria-label={lang === "en" ? "Describe the influencer" : lang === "es" ? "Describe a la influencer" : "Descreva a influencer"}
         placeholder={phase === "home" ? (demo ? `${demo}▍` : t("ph")) : ""}
-        className="w-full resize-none bg-transparent px-2 py-1 text-sm outline-none disabled:opacity-60" />
+        className="min-h-[72px] w-full resize-none bg-transparent px-2 py-1 text-base outline-none disabled:opacity-60" />
       <div role="group" aria-label={t("niche")} className="flex flex-wrap gap-1.5">
         {SKILLS.map((item) => (
           <button key={item.id} type="button" disabled={started} aria-pressed={skill === item.id} onClick={() => setSkill(skill === item.id ? "" : item.id)}
@@ -479,7 +479,7 @@ export function InfluencerChat() {
         )}
         <span className="ml-auto hidden whitespace-nowrap text-xs text-muted-foreground lg:inline">{t("askFirst")}</span>
         <button type="button" aria-label={t("send")} title={t("send")} onClick={start} disabled={started || prompt.trim().length < 8}
-          className={cn("flex size-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white disabled:opacity-40", "ml-auto md:ml-0")}>
+          className={cn("flex size-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white shadow-[0_8px_20px_-8px_#7B3FE4] disabled:opacity-50", "ml-auto lg:ml-0")}>
           {busy ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-5" />}
         </button>
       </div>
@@ -487,8 +487,8 @@ export function InfluencerChat() {
   );
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[200px_minmax(0,1fr)] xl:grid-cols-[200px_minmax(0,1fr)_260px]">
-    <aside className="hidden space-y-2 lg:block" aria-label={t("chats")} data-testid="chat-sidebar">
+    <div className="grid min-h-[calc(100vh-3rem)] lg:grid-cols-[250px_minmax(0,1fr)] xl:grid-cols-[250px_minmax(0,1fr)_280px]">
+    <aside className="hidden space-y-2 border-r border-border bg-card/40 px-3 py-5 lg:block" aria-label={t("chats")} data-testid="chat-sidebar">
       <button type="button" onClick={reset} className="flex w-full items-center gap-2 rounded-[14px] bg-card px-3 py-2.5 text-sm font-medium hover:bg-muted"><Plus className="size-4" /> {t("newChat")}</button>
       <Link href="/influencer/skills" className="flex w-full items-center gap-2 rounded-[14px] px-3 py-2.5 text-sm font-medium hover:bg-card">⚡ {t("skillsLink")}</Link>
       <div className="space-y-1.5 px-1 pt-2" data-testid="chat-projects">
@@ -511,7 +511,7 @@ export function InfluencerChat() {
         </div>
       ))}
     </aside>
-    <section className="mx-auto w-full max-w-3xl min-w-0 space-y-6" data-testid="influencer-chat">
+    <section className="mx-auto w-full max-w-3xl min-w-0 space-y-6 px-4 py-8 sm:px-8" data-testid="influencer-chat">
       {started && (
         <div className="flex items-center justify-between gap-2">
           <p className="max-w-[80%] rounded-full border border-border bg-card px-5 py-2 text-xs font-semibold uppercase tracking-wide" data-testid="chat-user-bubble">{prompt}</p>
@@ -521,10 +521,13 @@ export function InfluencerChat() {
 
       {phase === "home" && (
         <>
-          <h1 className="pt-4 text-center text-3xl font-semibold tracking-tight">{t("home")}</h1>
+          <div className="flex items-center justify-center gap-3 pt-6">
+            <span aria-hidden className="grid size-11 place-items-center rounded-[14px] bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white shadow-[0_10px_28px_-10px_#7B3FE4]"><Sparkles className="size-6" /></span>
+            <h1 className="text-3xl font-bold uppercase tracking-tight sm:text-4xl">{t("home")}</h1>
+          </div>
           {composer}
           <div className="space-y-3" data-testid="my-models">
-            <div className="flex flex-wrap items-center justify-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs text-muted-foreground">{t("myModel")}:</span>
               <Chip on={selModelId === ""} onClick={() => setSelModelId("")}>{t("noModel")}</Chip>
               {models.map((m) => (
@@ -554,16 +557,16 @@ export function InfluencerChat() {
             )}
           </div>
           <div className="space-y-4" data-testid="influencer-examples">
-            <div role="group" aria-label={t("all")} className="flex flex-wrap justify-center gap-2">
+            <div role="group" aria-label={t("all")} className="flex flex-wrap gap-2">
               {([["all", t("all")], ...SKILLS.map((s) => [s.id, `${s.emoji} ${s.name[lang]}`])] as [SkillId | "all", string][]).map(([id, label]) => (
                 <Chip key={id} on={filter === id} onClick={() => setFilter(id)}>{label}</Chip>
               ))}
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {shown.map((item) => (
                 <button key={item.id} type="button" onClick={() => { setPrompt(item.prompt[lang]); setSkill(item.skill); }}
                   className="overflow-hidden rounded-[18px] border border-border bg-card text-left transition hover:border-[#A98BFF]">
-                  <div className="relative flex h-28 items-center justify-center text-5xl" style={{ background: `linear-gradient(135deg, ${item.from}, ${item.to})` }} aria-hidden>
+                  <div className="relative flex h-24 items-center justify-center text-4xl" style={{ background: `linear-gradient(135deg, ${item.from}, ${item.to})` }} aria-hidden>
                     {item.emoji}
                     <span className="absolute left-3 top-3 rounded-full bg-black/40 px-2 py-0.5 text-[10px] font-medium text-white">{SKILLS.find((s) => s.id === item.skill)?.name[lang]}</span>
                   </div>
@@ -786,7 +789,7 @@ export function InfluencerChat() {
 
       {phase !== "home" && <div className="sticky bottom-3 z-10">{composer}</div>}
     </section>
-    <aside className="hidden xl:block" aria-label={t("preview")} data-testid="chat-preview">
+    <aside className="hidden px-4 py-8 xl:block" aria-label={t("preview")} data-testid="chat-preview">
       {(pin || persona.name) && started && (
         <div className="sticky top-6 space-y-3 rounded-[18px] border border-border bg-card p-3">
           <p className="text-xs text-muted-foreground">{t("preview")}</p>
