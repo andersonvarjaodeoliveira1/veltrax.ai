@@ -68,6 +68,22 @@ describe("Criar influencer em chat", () => {
     expect(screen.getByText(/visible pores/)).toBeInTheDocument();
   });
 
+  it("aceita a opção Outro e manda o texto escrito como resposta", async () => {
+    const bodies: Record<string, unknown>[] = [];
+    mockApi({ brief: (body) => ((body as { answers?: unknown }).answers ? json(BRIEF) : json({ questions: [{ question: "Qual estilo?", options: [{ label: "Casual" }, { label: "Chique" }, { label: "Esportivo" }] }] })) }, bodies);
+    render(<InfluencerPage />);
+    fireEvent.click(within(screen.getByRole("group", { name: "Nicho (opcional)" })).getByRole("button", { name: /Shopee/ }));
+    await sendPrompt();
+    await noProduct();
+    fireEvent.click(await screen.findByRole("radio", { name: /Outro/ }));
+    const next = screen.getByRole("button", { name: /Continuar/ });
+    expect(next).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Escreva o que você quer"), { target: { value: "Estilo praia" } });
+    fireEvent.click(next);
+    expect(await screen.findByTestId("chat-approval")).toBeInTheDocument();
+    expect(JSON.stringify(bodies)).toContain("Estilo praia");
+  });
+
   it("escolhe quantos vídeos, mostra o gasto e monta um storyboard por vídeo", async () => {
     const bodies: Record<string, unknown>[] = [];
     mockApi({}, bodies);

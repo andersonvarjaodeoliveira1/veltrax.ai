@@ -41,6 +41,8 @@ const S = {
   recreate: ["Recriar", "Recreate", "Recrear"],
   all: ["Todos", "All", "Todos"],
   newChat: ["Novo chat", "New chat", "Nuevo chat"],
+  other: ["Outro", "Other", "Otro"],
+  otherHint: ["Escreva o que você quer", "Write what you want", "Escribe lo que quieres"],
   seeMore: ["Ver mais", "See more", "Ver más"],
   navLib: ["Biblioteca", "Library", "Biblioteca"],
   navFolders: ["Pastas", "Folders", "Carpetas"],
@@ -161,6 +163,8 @@ export function InfluencerChat() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [qi, setQi] = useState(0);
   const [picked, setPicked] = useState<string | null>(null);
+  const [isOther, setIsOther] = useState(false);
+  const [otherText, setOtherText] = useState("");
   const [answers, setAnswers] = useState<{ question: string; answer: string }[]>([]);
   const [persona, setPersona] = useState<Persona>({ name: "", age: "", look: "", setting: "" });
   const [searches, setSearches] = useState<string[]>([]);
@@ -311,8 +315,9 @@ export function InfluencerChat() {
 
   async function answer(skipped: boolean) {
     const current = questions[qi];
-    const next = skipped || !picked ? answers : [...answers, { question: current.question, answer: picked }];
-    setAnswers(next); setPicked(null);
+    const chosen = isOther ? otherText.trim() : picked;
+    const next = skipped || !chosen ? answers : [...answers, { question: current.question, answer: chosen }];
+    setAnswers(next); setPicked(null); setIsOther(false); setOtherText("");
     if (qi + 1 < questions.length) { setQi(qi + 1); return; }
     setQuestions([]); setBusy("build");
     try { const data = await brief(next); if (data) takeBrief(data); } catch { setError(t("error")); } finally { setBusy(""); }
@@ -650,16 +655,25 @@ export function InfluencerChat() {
           <p className="font-medium">{q.question}</p>
           <div role="radiogroup" aria-label={q.question} className="grid gap-2">
             {q.options.slice(0, 3).map((option, n) => (
-              <button key={option.label} type="button" role="radio" aria-checked={picked === option.label} onClick={() => setPicked(option.label)}
+              <button key={option.label} type="button" role="radio" aria-checked={picked === option.label} onClick={() => { setPicked(option.label); setIsOther(false); }}
                 className={cn("flex items-start gap-3 rounded-[16px] border px-4 py-3 text-left transition", picked === option.label ? "border-[#A98BFF] bg-[#7B3FE4]/15" : "border-border bg-card hover:border-[#A98BFF]/60")}>
                 <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border border-border text-[11px]" aria-hidden>{n + 1}</span>
                 <span><span className="font-medium">{option.label}</span>{option.detail && <span className="block text-xs text-muted-foreground">{option.detail}</span>}</span>
               </button>
             ))}
+            <button type="button" role="radio" aria-checked={isOther} onClick={() => { setIsOther(true); setPicked(null); }}
+              className={cn("flex items-start gap-3 rounded-[16px] border px-4 py-3 text-left transition", isOther ? "border-[#A98BFF] bg-[#7B3FE4]/15" : "border-border bg-card hover:border-[#A98BFF]/60")}>
+              <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border border-border text-[11px]" aria-hidden>✎</span>
+              <span className="font-medium">{t("other")}</span>
+            </button>
+            {isOther && (
+              <textarea autoFocus value={otherText} onChange={(event) => setOtherText(event.target.value)} rows={2} maxLength={300} aria-label={t("otherHint")} placeholder={t("otherHint")}
+                className="w-full resize-none rounded-[16px] border border-[#A98BFF]/60 bg-card px-4 py-3 text-sm outline-none" />
+            )}
           </div>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" className="rounded-full" onClick={() => void answer(true)}>{t("skip")}</Button>
-            <Button type="button" className="rounded-full" disabled={!picked} onClick={() => void answer(false)}>{t("next")} <ArrowRight className="size-4" /></Button>
+            <Button type="button" className="rounded-full" disabled={isOther ? otherText.trim().length < 2 : !picked} onClick={() => void answer(false)}>{t("next")} <ArrowRight className="size-4" /></Button>
           </div>
         </Msg>
       )}
