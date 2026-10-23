@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { Check, ClipboardCopy, Download, Loader2, Sparkles, Trash2, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -418,9 +417,6 @@ export default function AutomationPage() {
                         <Download className="size-4" /> Baixar vídeo
                       </a>
                     )}
-                    <Link href="/multiplicador" className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted">
-                      <Sparkles className="size-4" /> Criar variações
-                    </Link>
                     <Button size="sm" variant="outline" disabled title="Em breve">Agendar (em breve)</Button>
                     <Button size="sm" variant="ghost" aria-label="Excluir" onClick={() => remove(item.id)}><Trash2 className="size-4" /></Button>
                   </div>

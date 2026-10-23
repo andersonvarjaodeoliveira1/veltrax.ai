@@ -5,7 +5,7 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowRight, CornerDownLeft, Download, Film, FolderOpen, Layers, LogOut, KeyRound, Link2, MessageCircle, Plus, Search, Shield, UserRound, Workflow,
+  ArrowRight, CornerDownLeft, Download, Film, FolderOpen, LogOut, KeyRound, Link2, MessageCircle, Plus, Search, Shield, UserRound, Workflow,
 } from "lucide-react";
 import { toast } from "sonner";
 import { signOut, useSession } from "@/lib/auth-client";
@@ -34,7 +34,6 @@ const WHATSAPP_URL = "https://wa.me/5511913142143?text=" + encodeURIComponent("O
 const NAV: NavItem[] = [
   { href: "/list", label: "Library", group: "Criar", icon: Film, match: (p) => p.startsWith("/list") || p.startsWith("/tasks") },
   { href: "/folders", label: "Folders", icon: FolderOpen, match: (p) => p.startsWith("/folders") },
-  { href: "/multiplicador", label: "Multiplicador", icon: Layers, match: (p) => p.startsWith("/multiplicador"), badge: "BETA" },
   { href: "/influencer", label: "Criar influencer", icon: UserRound, match: (p) => p.startsWith("/influencer"), badge: "BETA" },
   { href: "/automacao", label: "Automação", icon: Workflow, match: (p) => p.startsWith("/automacao"), badge: "BETA" },
   { href: DOWNLOADER_URL, label: "Baixar vídeo", icon: Download, match: () => false, external: true },
