@@ -1,8 +1,15 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import InfluencerPage from "./page";
 
+beforeEach(() => window.localStorage.clear());
 afterEach(() => vi.restoreAllMocks());
+
+// Leva o teste da etapa 2 (pessoa e foto) até a etapa 4 (vídeo), sem escolher foto.
+async function toVideoStep() {
+  fireEvent.click(await screen.findByRole("button", { name: /Avançar sem foto/ }));
+  fireEvent.click(await screen.findByRole("button", { name: /Pular para o vídeo/ }));
+}
 
 describe("Criar influencer", () => {
   it("do anúncio à busca no Pinterest e aos prompts", async () => {
@@ -16,12 +23,15 @@ describe("Criar influencer", () => {
     }));
     render(<InfluencerPage />);
     expect(screen.queryByText(/Gerar prompts/)).toBeNull();
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "0");
     fireEvent.change(screen.getByLabelText("Anúncio ou descrição da pessoa"), { target: { value: "Avatar: Mulher branca, loira, de +50 anos, na cozinha." } });
     fireEvent.click(screen.getByRole("button", { name: /Descobrir a pessoa/ }));
-    const link = await screen.findByRole("link", { name: /mulher loira 50 anos selfie/ });
-    expect(link.getAttribute("href")).toContain("pinterest.com/search/pins/?q=mulher%20loira");
-    expect(screen.getByDisplayValue("Marta")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /^Gerar prompts$/ }));
+    expect(await screen.findByDisplayValue("Marta")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "25");
+    expect(screen.queryByLabelText("Anúncio ou descrição da pessoa")).toBeNull();
+    fireEvent.click(await screen.findByRole("button", { name: /Avançar sem foto/ }));
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "50");
+    fireEvent.click(await screen.findByRole("button", { name: /^Gerar prompts$/ }));
     await waitFor(() => expect(screen.getByText(/POV selfie of a woman/)).toBeInTheDocument());
     expect(calls.some((url) => url.includes("influencer-prompt"))).toBe(true);
     expect(screen.getByTestId("flow-generate")).toHaveTextContent(/Conecte aqui/);
@@ -38,9 +48,8 @@ describe("Criar influencer", () => {
     render(<InfluencerPage />);
     fireEvent.change(screen.getByLabelText("Anúncio ou descrição da pessoa"), { target: { value: "Mulher loira de 50 anos na cozinha" } });
     fireEvent.click(screen.getByRole("button", { name: /Descobrir a pessoa/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /Buscar fotos automaticamente/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Usar esta foto" }));
-    fireEvent.click(screen.getByRole("button", { name: /Gerar prompts com a foto/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Gerar prompts com a foto/ }));
     await waitFor(() => expect(promptBody?.get("image_url")).toBe("https://i.pinimg.com/736x/a.jpg"));
   });
 
@@ -52,7 +61,6 @@ describe("Criar influencer", () => {
     render(<InfluencerPage />);
     fireEvent.change(screen.getByLabelText("Anúncio ou descrição da pessoa"), { target: { value: "Mulher loira de 50 anos na cozinha" } });
     fireEvent.click(screen.getByRole("button", { name: /Descobrir a pessoa/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /Buscar fotos automaticamente/ }));
     const open = await screen.findByRole("link", { name: /Abrir o Pinterest com a busca/ });
     expect(open.getAttribute("href")).toContain("q=mulher%20loira%2050%20anos");
     expect(screen.getByTestId("photo-drop")).toBeInTheDocument();
@@ -67,9 +75,11 @@ describe("Criar influencer", () => {
     const copy = "Esta melatonina natural que não se acha na farmácia me fez parar de acordar no meio da noite e ninguém fala sobre isso. Até dois meses atrás eu achava normal ficar cansada o dia todo e depender de café para fazer qualquer coisa.";
     fireEvent.change(screen.getByLabelText("Anúncio ou descrição da pessoa"), { target: { value: copy } });
     fireEvent.click(screen.getByRole("button", { name: /Descobrir a pessoa/ }));
+    await toVideoStep();
     fireEvent.click(await screen.findByRole("button", { name: /Montar o storyboard/ }));
     expect(await screen.findByTestId("storyboard")).toHaveTextContent("Eu não dormia");
     expect(screen.getByText(/gasto estimado/)).toHaveTextContent(/créditos do seu Flow/);
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "100");
     expect(screen.getByRole("button", { name: /Copiar pacote e abrir o Flow/ })).toBeInTheDocument();
   });
 
@@ -84,6 +94,7 @@ describe("Criar influencer", () => {
     render(<InfluencerPage />);
     fireEvent.change(screen.getByLabelText("Anúncio ou descrição da pessoa"), { target: { value: "Mulher loira de 50 anos na cozinha mostrando o produto" } });
     fireEvent.click(screen.getByRole("button", { name: /Descobrir a pessoa/ }));
+    await toVideoStep();
     await screen.findByTestId("product-block");
     fireEvent.change(screen.getByLabelText("Fotos do produto"), { target: { files: [new File(["x"], "p.png", { type: "image/png" })] } });
     expect(await screen.findByDisplayValue(/dark blue jar/)).toBeInTheDocument();

@@ -667,6 +667,7 @@ async def influencer_prompt(request: Request, db: AsyncSession = Depends(get_db)
 
 PIN_HOSTS = ("i.pinimg.com",)
 PIN_ACTOR = "epctex/pinterest-scraper"
+GOOGLE_ACTOR = "apify/google-search-scraper"
 
 
 async def _download_pin_image(url: str) -> tuple[bytes, str]:
@@ -718,19 +719,7 @@ async def influencer_pins(request: Request, db: AsyncSession = Depends(get_db)):
         client = ApifyClient(token)
         pins: list[dict[str, str]] = []
         seen: set[str] = set()
-        jobs: list[tuple[str, dict[str, Any]]] = [(q, {"search": q, "getDetails": False, "maxItems": 8, "endPage": 1}) for q in queries]
-        if author:
-            jobs = [(f"@{author}", {"startUrls": [f"https://www.pinterest.com/{author}/"], "getDetails": False, "maxItems": 16, "endPage": 1})] + jobs
-        for query, run_input in jobs:
-            call = client.actor(PIN_ACTOR).call(run_input=run_input, timeout_secs=90)
-            items = list(client.dataset(call["defaultDatasetId"]).iterate_items())
-            if items and items[0].get("type") == "user":
-                # A profile only lists pin links: fetch the first ones to get their pictures.
-                links = [str(link) for link in (items[0].get("pins") or []) if str(link).startswith("https://www.pinterest.com/pin/")][:12]
-                if not links:
-                    continue
-                call = client.actor(PIN_ACTOR).call(run_input={"startUrls": links, "getDetails": True, "maxItems": 12}, timeout_secs=120)
-                items = list(client.dataset(call["defaultDatasetId"]).iterate_items())
+        def collect(items: list[dict[str, Any]], query: str) -> None:
             for item in items:
                 images = item.get("images") or {}
                 small = (images.get("474x") or {}).get("url")
@@ -739,6 +728,45 @@ async def influencer_pins(request: Request, db: AsyncSession = Depends(get_db)):
                     continue
                 seen.add(big)
                 pins.append({"id": str(item.get("id") or big), "thumb": small, "full": big, "link": str(item.get("url") or ""), "query": query})
+
+        def pin_details(links: list[str]) -> list[dict[str, Any]]:
+            if not links:
+                return []
+            call = client.actor(PIN_ACTOR).call(run_input={"startUrls": links, "getDetails": True, "maxItems": len(links)}, timeout_secs=120)
+            return list(client.dataset(call["defaultDatasetId"]).iterate_items())
+
+        def google_pin_links(query: str) -> list[str]:
+            """Looks the persona up on Google restricted to Pinterest pins: the search is far better than Pinterest's own."""
+            call = client.actor(GOOGLE_ACTOR).call(
+                run_input={"queries": f"site:pinterest.com/pin {' '.join(query.split()[:7])}", "maxPagesPerQuery": 1, "countryCode": "br", "languageCode": "pt-BR", "saveHtmlToKeyValueStore": False},
+                timeout_secs=90,
+            )
+            links: list[str] = []
+            for page in client.dataset(call["defaultDatasetId"]).iterate_items():
+                for result in page.get("organicResults") or []:
+                    link = _pin_link(str(result.get("url") or ""))
+                    if link and link not in links:
+                        links.append(link)
+            return links[:12]
+
+        if author:
+            call = client.actor(PIN_ACTOR).call(run_input={"startUrls": [f"https://www.pinterest.com/{author}/"], "getDetails": False, "maxItems": 16, "endPage": 1}, timeout_secs=90)
+            items = list(client.dataset(call["defaultDatasetId"]).iterate_items())
+            if items and items[0].get("type") == "user":
+                links = [str(link) for link in (items[0].get("pins") or []) if str(link).startswith("https://www.pinterest.com/pin/")][:12]
+                items = pin_details(links)
+            collect(items, f"@{author}")
+        for query in queries:
+            before = len(pins)
+            try:
+                collect(pin_details(google_pin_links(query)), query)
+            except Exception:
+                logger.warning("google pin search failed", exc_info=True)
+            if len(pins) - before < 4:
+                # Backup: Pinterest's own search works best with a short phrase.
+                short = " ".join(query.split()[:4])
+                call = client.actor(PIN_ACTOR).call(run_input={"search": short, "getDetails": False, "maxItems": 8, "endPage": 1}, timeout_secs=90)
+                collect(list(client.dataset(call["defaultDatasetId"]).iterate_items()), query)
         return pins
 
     try:
@@ -749,6 +777,14 @@ async def influencer_pins(request: Request, db: AsyncSession = Depends(get_db)):
         logger.exception("influencer pins failed")
         raise HTTPException(status_code=502, detail="Could not search Pinterest. Try again.")
     return {"pins": pins[:30]}
+
+
+def _pin_link(url: str) -> str:
+    """Returns the canonical pin link for a Pinterest result URL ('' when it is not a pin)."""
+    import re as _re
+
+    match = _re.search(r"pinterest\.[a-z.]+/pin/(?:[^/?#]*?-)?(\d{6,25})", url)
+    return f"https://www.pinterest.com/pin/{match.group(1)}/" if match else ""
 
 
 def _pinterest_author(value: str) -> str:

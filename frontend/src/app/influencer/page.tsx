@@ -26,6 +26,47 @@ const AIS = [
   { name: "Claude", href: "https://claude.ai/new" },
 ];
 
+const STEPS = ["Anúncio", "Pessoa e foto", "Prompt", "Vídeo"];
+
+function Stepper({ step, maxStep, onGo, finished }: { step: number; maxStep: number; onGo: (n: number) => void; finished: boolean }) {
+  const percent = finished ? 100 : Math.round(((step - 1) / STEPS.length) * 100);
+  const left = STEPS.length - (step - 1);
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between text-xs">
+        <span className="font-medium text-foreground">{finished ? "Tudo pronto! 🎉" : `Etapa ${step} de ${STEPS.length} · ${STEPS[step - 1]}`}</span>
+        <span className="text-muted-foreground">{finished ? "100%" : left === 1 ? "Falta só a última" : `Faltam ${left} etapas`}</span>
+      </div>
+      <div role="progressbar" aria-label="Progresso" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} className="h-3 w-full overflow-hidden rounded-full bg-[#7B3FE4]/15">
+        <div className="progress-sheen relative h-full overflow-hidden rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A98BFF] transition-[width] duration-700 ease-out" style={{ width: `${Math.max(percent, 6)}%` }} />
+      </div>
+    <nav aria-label="Etapas" className="flex flex-wrap items-center gap-2">
+      {STEPS.map((label, index) => {
+        const n = index + 1;
+        const done = n < maxStep || (n < step);
+        return (
+          <button key={label} type="button" disabled={n > maxStep} aria-current={n === step ? "step" : undefined} onClick={() => onGo(n)}
+            className={cn("inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-40",
+              n === step ? "border-[#A98BFF] bg-[#7B3FE4]/20 text-foreground" : "border-border text-muted-foreground")}>
+            <span className="grid size-5 place-items-center rounded-full bg-[#7B3FE4]/30 text-[11px]">{done ? <Check className="size-3 text-[#5BD69A]" /> : n}</span>
+            {label}
+          </button>
+        );
+      })}
+    </nav>
+    </div>
+  );
+}
+
+function Nav({ back, next, nextLabel = "Avançar", nextDisabled }: { back?: () => void; next?: () => void; nextLabel?: string; nextDisabled?: boolean }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-4">
+      {back ? <Button type="button" variant="outline" className="rounded-full" onClick={back}>Voltar</Button> : <span />}
+      {next && <Button type="button" className="rounded-full" onClick={next} disabled={nextDisabled}>{nextLabel}</Button>}
+    </div>
+  );
+}
+
 function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
   return (
     <section className="space-y-4 rounded-[18px] border border-border bg-card p-5">
@@ -62,11 +103,21 @@ export default function InfluencerPage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [flowConnected, setFlowConnected] = useState(false);
   const [restored, setRestored] = useState(false);
+  const [step, setStep] = useState(1);
+  const [maxStep, setMaxStep] = useState(1);
+  const go = (n: number) => {
+    setStep(n);
+    setMaxStep((current) => Math.max(current, n));
+    document.getElementById("influencer-topo")?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+  };
   useEffect(() => {
     try {
       const saved = JSON.parse(window.localStorage.getItem("gv-influencer-v1") ?? "{}");
       if (typeof saved.ad === "string") setAd(saved.ad);
-      if (saved.profile && typeof saved.profile === "object") setProfile({ ...EMPTY, ...saved.profile });
+      if (saved.profile && typeof saved.profile === "object") {
+        setProfile({ ...EMPTY, ...saved.profile });
+        if (saved.profile.look || saved.profile.age) { setStep(2); setMaxStep(2); }
+      }
       if (Array.isArray(saved.searches)) setSearches(saved.searches);
       if (typeof saved.copy4 === "string") setCopy4(saved.copy4);
     } catch { /* storage unavailable */ }
@@ -123,6 +174,11 @@ export default function InfluencerPage() {
     return () => window.removeEventListener("paste", onPaste);
   }, []);
 
+  useEffect(() => {
+    if ((photo || pickedPin) && step === 2) go(3);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [photo, pickedPin]);
+
   const setField = (key: keyof Profile, value: string) => setProfile((current) => ({ ...current, [key]: value }));
 
   async function analyse() {
@@ -140,6 +196,7 @@ export default function InfluencerPage() {
       setPins([]);
       setPickedPin(null);
       setBusy(null);
+      go(2);
       if (found.length) await findPins(found);
       return;
     } catch {
@@ -246,6 +303,9 @@ export default function InfluencerPage() {
       <PageHeader icon={UserRound} title="Criar influencer" description="Do anúncio até a pessoa: achamos o rosto no Pinterest e escrevemos o prompt realista para gerar a imagem em qualquer IA." />
       <span className="inline-block rounded-full border border-[#A98BFF]/40 px-2.5 py-0.5 text-[11px] font-semibold tracking-wider text-[#A98BFF]">BETA</span>
 
+      <div id="influencer-topo" />
+      <Stepper step={step} maxStep={maxStep} onGo={go} finished={Boolean(board)} />
+
       {busy && (
         <div role="status" className="flex items-center gap-3 rounded-[14px] border border-[#A98BFF]/40 bg-[#7B3FE4]/10 px-4 py-3 text-sm">
           <Loader2 className="size-4 animate-spin text-[#A98BFF]" />
@@ -254,16 +314,17 @@ export default function InfluencerPage() {
       )}
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
 
-      <Step n={1} title="Cole o anúncio (ou descreva a pessoa)">
+      {step === 1 && <Step n={1} title="Cole o anúncio (ou descreva a pessoa)">
         <textarea value={ad} onChange={(event) => setAd(event.target.value)} rows={6} maxLength={4000} aria-label="Anúncio ou descrição da pessoa" className={inputClass}
           placeholder={"Ex.: Avatar: Mulher branca, loira, de +50 anos, gravando na cozinha da sua casa usando a câmera do celular.\nH1: ..."} />
         <Button type="button" onClick={() => void analyse()} disabled={busy !== null || ad.trim().length < 10} className="rounded-full">
           {busy === "profile" ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />} {busy === "profile" ? "Lendo o anúncio…" : "Descobrir a pessoa"}
         </Button>
-      </Step>
+        {hasProfile && <Nav next={() => go(2)} nextLabel="Já tenho a pessoa: avançar" />}
+      </Step>}
 
-      {hasProfile && (
-        <Step n={2} title="Confira a pessoa e escolha a foto no Pinterest">
+      {step === 2 && (
+        <Step n={2} title="Confira a pessoa e escolha a foto">
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="space-y-1 text-sm">Nome<input value={profile.name} onChange={(e) => setField("name", e.target.value)} className={inputClass} maxLength={40} /></label>
             <label className="space-y-1 text-sm">Idade<input value={profile.age} onChange={(e) => setField("age", e.target.value)} className={inputClass} maxLength={40} /></label>
@@ -272,21 +333,15 @@ export default function InfluencerPage() {
           </div>
 
           <div className="space-y-2">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Buscas prontas no Pinterest</p>
-            <div className="flex flex-wrap gap-2">
-              {searches.map((query) => (
-                <a key={query} href={pinterestUrl(query)} target="_blank" rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-sm hover:text-foreground">
-                  <Search className="size-3.5" /> {query} <ExternalLink className="size-3 opacity-60" />
-                </a>
-              ))}
-            </div>
             <Button type="button" onClick={() => void findPins()} disabled={busy !== null || (searches.length === 0 && !author.trim())} className="rounded-full">
-              {busy === "pins" ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4" />} {busy === "pins" ? "Buscando no Pinterest…" : "Buscar fotos automaticamente"}
+              {busy === "pins" ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4" />} {busy === "pins" ? "Buscando fotos…" : pins.length ? "Buscar de novo" : "Buscar fotos automaticamente"}
             </Button>
-            <label className="block space-y-1 text-sm">Ou busque pelo perfil de um autor no Pinterest (link ou @)
-              <input value={author} onChange={(event) => setAuthor(event.target.value)} maxLength={120} className={inputClass} placeholder="https://br.pinterest.com/nome-do-perfil/ ou @nome" aria-label="Perfil do autor no Pinterest" />
-            </label>
+            <details className="rounded-[12px] border border-border p-3" data-testid="author-search">
+              <summary className="cursor-pointer text-sm text-muted-foreground">Quer fotos de um autor específico? (opcional)</summary>
+              <label className="mt-2 block space-y-1 text-sm">Perfil do autor no Pinterest (link ou @)
+                <input value={author} onChange={(event) => setAuthor(event.target.value)} maxLength={120} className={inputClass} placeholder="https://br.pinterest.com/nome-do-perfil/ ou @nome" aria-label="Perfil do autor no Pinterest" />
+              </label>
+            </details>
             {pinsFailed && (
               <div role="status" className="space-y-3 rounded-[14px] border border-[#F5B454]/50 bg-[#F5B454]/10 p-4" data-testid="pins-fallback">
                 <p className="font-medium">Não consegui buscar as fotos sozinho agora. Vamos pelo Pinterest:</p>
@@ -326,7 +381,6 @@ export default function InfluencerPage() {
                 </ul>
               </div>
             )}
-            <p className="text-xs text-muted-foreground">Ou busque à mão: o Pinterest abre em outra aba. Escolha a foto que você gostou, copie a imagem (ou salve) e volte aqui: cole com Ctrl+V ou toque em “Escolher foto”.</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
@@ -348,11 +402,19 @@ export default function InfluencerPage() {
               </span>
             )}
           </div>
+          <Nav back={() => go(1)} next={() => go(3)} nextLabel={photo || pickedPin ? "Avançar" : "Avançar sem foto"} />
         </Step>
       )}
 
-      {hasProfile && (
+      {step === 3 && (
         <Step n={3} title="Gerar o prompt realista">
+          {(photoUrl || pickedPin) && (
+            <div className="flex items-center gap-3 text-sm text-muted-foreground">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={photoUrl ?? pickedPin?.thumb} alt="Foto escolhida" referrerPolicy="no-referrer" className="h-20 w-16 rounded-[12px] border border-border object-cover" />
+              <div>Foto escolhida ✓ <button type="button" className="underline underline-offset-4" onClick={() => { setPhoto(null); setPickedPin(null); go(2); }}>Trocar foto</button></div>
+            </div>
+          )}
           <label className="block space-y-1 text-sm">Algo a mais (opcional)<input value={profile.extra} onChange={(e) => setField("extra", e.target.value)} className={inputClass} maxLength={300} placeholder="Ex.: luz do fim de tarde, cozinha pequena" /></label>
           <Button type="button" onClick={() => void writePrompts()} disabled={busy !== null} className="rounded-full">
             {busy === "prompt" ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />} {busy === "prompt" ? "Escrevendo os prompts…" : photo || pickedPin ? "Gerar prompts com a foto" : "Gerar prompts"}
@@ -397,10 +459,11 @@ export default function InfluencerPage() {
               </div>
             </div>
           )}
+          <Nav back={() => go(2)} next={() => go(4)} nextLabel={prompts.length ? "Avançar para o vídeo" : "Pular para o vídeo"} />
         </Step>
       )}
 
-      {hasProfile && (
+      {step === 4 && (
         <Step n={4} title="Fazer o vídeo barato no seu Flow">
           <p className="text-sm text-muted-foreground">O app divide a fala em cenas de uns 8 segundos e escreve os prompts de imagem e de movimento, sempre com a mesma pessoa. Você só confere e manda para o Flow.</p>
           <label className="block space-y-1 text-sm">Fala do vídeo (a copy)
@@ -530,6 +593,7 @@ export default function InfluencerPage() {
               <p className="text-xs text-muted-foreground">Com a extensão ClipGringa · Flow, cole o pacote nela e ela gera e baixa as cenas sozinha. Sem a extensão, use “Copiar só os prompts” e cole no Flow cena por cena. Depois suba os vídeos na Automação para montar com legenda. A extensão ainda não encadeia os frames sozinha: no modo por frames, use o botão “Subir o vídeo da cena” em cada cena para pegar o último frame.</p>
             </div>
           )}
+          <Nav back={() => go(3)} />
         </Step>
       )}
     </main>
