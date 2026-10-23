@@ -3,7 +3,8 @@ import { generateId } from "better-auth";
 import { auth } from "@/lib/auth";
 import { fetchBackend } from "@/server/backend-api";
 
-const INVITE_DAYS = 3;
+// O convite só deixa de valer quando a pessoa escolhe a senha (o link é apagado ao usar). Na prática, não expira.
+const INVITE_DAYS = 3650;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export type InviteResult =

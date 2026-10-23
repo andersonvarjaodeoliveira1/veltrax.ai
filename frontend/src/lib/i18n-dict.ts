@@ -10,6 +10,7 @@ const E: Record<string, Entry> = {
   // Criar / recuperar senha
   "Could not send reset link": { pt: "Não foi possível enviar o link agora. Tente de novo.", es: "No se pudo enviar el enlace ahora. Inténtalo de nuevo." },
   "Failed to reset password": { pt: "Não foi possível salvar a senha. Peça um novo link.", es: "No se pudo guardar la contraseña. Pide un nuevo enlace." },
+  "Too many attempts. Wait a few minutes and try again.": { pt: "Muitas tentativas seguidas. Espere uns minutos e tente de novo.", es: "Demasiados intentos. Espera unos minutos e inténtalo de nuevo." },
   "Choose a new password": { pt: "Escolha a sua senha", es: "Elige tu contraseña" },
   "You'll be signed out on other devices.": { pt: "Você será desconectado dos outros aparelhos.", es: "Se cerrará tu sesión en los otros dispositivos." },
   "New password (at least 10 characters)": { pt: "Nova senha (mínimo 10 caracteres)", es: "Nueva contraseña (mínimo 10 caracteres)" },

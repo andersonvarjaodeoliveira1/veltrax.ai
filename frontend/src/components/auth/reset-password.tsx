@@ -33,7 +33,11 @@ export function ResetPassword() {
 
     setLoading(false);
     if (response.error) {
-      setMessage(response.error.message || "Failed to reset password");
+      setMessage(
+        response.error.status === 429
+          ? "Too many attempts. Wait a few minutes and try again."
+          : response.error.message || "Failed to reset password",
+      );
       return;
     }
 

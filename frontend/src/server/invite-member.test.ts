@@ -19,7 +19,7 @@ beforeEach(() => {
   fetchBackend.mockResolvedValue(new Response("{}", { status: 200 }));
 });
 
-it("creates the user with an unknown password and emails a 3-day set-password link", async () => {
+it("creates the user with an unknown password and emails a set-password link that does not expire", async () => {
   const result = await inviteMember("  Alison.Guimaraes13@Gmail.com ");
   expect(result).toEqual({ ok: true, userId: "u-new", created: true, emailSent: true });
   expect(adapter.createUser).toHaveBeenCalledWith({ email: "alison.guimaraes13@gmail.com", name: "alison guimaraes13", emailVerified: true });
@@ -28,8 +28,8 @@ it("creates the user with an unknown password and emails a 3-day set-password li
   expect(verification.value).toBe("u-new");
   expect(verification.identifier).toMatch(/^reset-password:.{24}$/);
   const days = (verification.expiresAt.getTime() - Date.now()) / 86_400_000;
-  expect(days).toBeGreaterThan(2.9);
-  expect(days).toBeLessThanOrEqual(3);
+  expect(days).toBeGreaterThan(3000);
+  expect(days).toBeLessThanOrEqual(3650);
   const [path, init] = fetchBackend.mock.calls[0];
   expect(path).toBe("/account/password-reset-email");
   expect(init.userId).toBe("u-new");
