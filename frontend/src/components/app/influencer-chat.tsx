@@ -69,6 +69,7 @@ const S = {
   hint1: ["Isso pode levar até 1 minuto", "This can take up to 1 minute", "Esto puede tardar hasta 1 minuto"],
   hint2: ["Pode deixar esta aba aberta, eu aviso quando terminar", "Keep this tab open, I will tell you when it is done", "Deja esta pestaña abierta, te aviso al terminar"],
   hint3: ["Quase lá…", "Almost there…", "Casi listo…"],
+  noPhotoHint: ["Sem foto, o Flow cria o rosto sozinho, com o modelo mais barato (Lower Priority se a sua conta tiver).", "Without a photo, Flow creates the face itself with the cheapest model (Lower Priority if your account has it).", "Sin foto, Flow crea el rostro con el modelo más barato (Lower Priority si tu cuenta lo tiene)."],
   estimate: ["Estimativa de gasto", "Estimated cost", "Gasto estimado"],
   estFree: ["Sem custo no Lower Priority. Se a sua conta não tiver, usa o Lite (~40 créditos por vídeo).", "Free with Lower Priority. If your account has none, it uses Lite (~40 credits per video).", "Sin costo con Lower Priority. Si tu cuenta no lo tiene, usa Lite (~40 créditos por video)."],
   seeMore: ["Ver mais", "See more", "Ver más"],
@@ -172,12 +173,19 @@ const Chip = ({ on, onClick, children, role }: { on?: boolean; onClick: () => vo
 );
 function Working({ text, hints }: { text: string; hints?: string[] }) {
   const [seconds, setSeconds] = useState(0);
-  useEffect(() => { const timer = window.setInterval(() => setSeconds((n) => n + 1), 1000); return () => window.clearInterval(timer); }, []);
+  useEffect(() => { const timer = window.setInterval(() => setSeconds((n) => n + 0.5), 500); return () => window.clearInterval(timer); }, []);
+  // Sobe rápido no começo e desacelera perto do fim, até a resposta chegar (não passa de 95%).
+  const percent = Math.min(95, Math.round(95 * (1 - Math.exp(-seconds / 18))));
   const hint = hints && hints.length ? hints[Math.floor(seconds / 5) % hints.length] : "";
   return (
-    <div role="status" className="space-y-2 rounded-[16px] border border-white/10 bg-white/[0.03] px-4 py-3 text-sm">
-      <div className="flex items-center gap-2 text-foreground"><Loader2 className="size-4 animate-spin text-[#A98BFF]" /> <span>{text}</span><span className="ml-auto text-xs tabular-nums text-muted-foreground">{seconds}s</span></div>
-      <div className="h-1 overflow-hidden rounded-full bg-white/10"><span className="block h-full w-1/3 animate-[progress-sheen_1.6s_ease-in-out_infinite] rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A98BFF]" /></div>
+    <div role="status" aria-live="polite" className="space-y-2.5 rounded-[18px] border border-white/10 bg-white/[0.03] px-4 py-3.5 text-sm">
+      <div className="flex items-center gap-2 text-foreground"><Loader2 className="size-4 animate-spin text-[#A98BFF]" /> <span>{text}</span><span className="ml-auto text-xs tabular-nums text-muted-foreground">{Math.floor(seconds)}s</span></div>
+      <div className="flex items-center gap-3">
+        <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
+          <span className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-[#5A1BAA] via-[#7B3FE4] to-[#A98BFF] shadow-[0_0_12px_#7B3FE4] transition-[width] duration-500 ease-out" style={{ width: `${percent}%` }} />
+        </div>
+        <span className="w-9 text-right text-xs font-semibold tabular-nums text-[#C9BBFA]">{percent}%</span>
+      </div>
       {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
     </div>
   );
@@ -397,12 +405,12 @@ export function InfluencerChat() {
       Object.entries({ ...persona, extra: "" }).forEach(([key, value]) => form.append(key, value));
       if (file) form.append("image", file); else if (chosenPin) form.append("image_url", chosenPin.full);
       const response = await fetch("/api/multiplier/clone/influencer-prompt", { method: "POST", body: form });
-      if (!response.ok) { await fail(response); return; }
+      if (!response.ok) { await fail(response); setPhase("photos"); return; }
       const data = await response.json();
       setPrompts(Array.isArray(data.prompts) ? data.prompts : []);
       mark("prompt");
       setSummaries(Array.isArray(data.summaries) ? data.summaries : []);
-    } catch { setError(t("error")); } finally { setBusy(""); }
+    } catch { setError(t("error")); setPhase("photos"); } finally { setBusy(""); }
   }
 
   async function buildBoards() {
@@ -771,6 +779,9 @@ export function InfluencerChat() {
               <Button type="button" variant="outline" className="rounded-full" onClick={() => fileRef.current?.click()}><ImagePlus className="size-4" /> {t("upload")}</Button>
               <Button type="button" variant="ghost" className="rounded-full" onClick={() => void writePrompt(null, null)}>{t("noPhoto")}</Button>
             </div>
+          )}
+          {phase === "photos" && busy !== "pins" && (
+            <p className="text-xs text-muted-foreground">{t("noPhotoHint")}</p>
           )}
           {phase !== "photos" && pin && (
             // eslint-disable-next-line @next/next/no-img-element
