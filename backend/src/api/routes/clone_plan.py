@@ -430,7 +430,7 @@ async def _scene_prompts(system: str, scenes: list[dict[str, str]], variations: 
 
 async def stage_images(ctx: dict[str, Any], scenes: list[dict[str, str]], variations: list[dict[str, str]], model: Any = None):
     product = _product_block(ctx)
-    return await _scene_prompts(images_system(len(scenes), bool(product)), scenes, variations, None, model, product)
+    return await _scene_prompts(images_system(len(scenes), bool(product)) + (ctx.get("camera_note") or ""), scenes, variations, None, model, product)
 
 
 async def stage_videos(ctx: dict[str, Any], scenes: list[dict[str, str]], variations: list[dict[str, str]], lines: list[list[str]], model: Any = None):
@@ -978,6 +978,23 @@ async def influencer_storyboard(request: Request, db: AsyncSession = Depends(get
         f"\nDELIVERY: pace about {wps} words per second. "
         + ("Lively, upbeat, energetic delivery with expressive but natural micro-gestures and small nods. " if energy == "lively" else "Calm, restrained delivery: subtle controlled mouth movement, minimal jaw, NOT exaggerated, no wide mouth opening. ")
         + ("The person looks elderly: minimal mouth movement, smaller and slower gestures, very subtle head micro-movements." if elderly else "")
+    )
+    CAMERAS = {
+        "selfie": "handheld smartphone selfie camera, arm's length, slight natural shake, vertical 9:16, the person looks into the lens",
+        "tripod": "locked-off tripod medium shot at eye level, steady, vertical 9:16, the person talks to the lens",
+        "pov": "first-person phone POV filming what the person is doing, hands visible, vertical 9:16",
+        "cinematic": "cinematic shallow depth of field, soft key light, slow gentle camera movement, vertical 9:16",
+    }
+    camera = str(data.get("camera") or "")
+    if camera in CAMERAS:
+        ctx["camera_note"] = f"\nCAMERA: every scene is shot as {CAMERAS[camera]}. Keep the same camera style in all scenes."
+        ctx["delivery"] = (ctx.get("delivery") or "") + ctx["camera_note"]
+    if data.get("show_product"):
+        ctx["delivery"] = (ctx.get("delivery") or "") + "\nPRODUCT: the product is visible in the scene and the person holds it up to the camera at least once while talking about it."
+    ctx["delivery"] = (ctx.get("delivery") or "") + (
+        "\nCAPTIONS: add clean burned-in subtitles of the spoken words in the lower third of the frame, large white text with a dark outline."
+        if data.get("captions")
+        else "\nCAPTIONS: no subtitles, no captions and no text overlays anywhere in the video."
     )
     _check_script_rate(user_id)
     scenes = await stage_scenes(ctx)

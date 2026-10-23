@@ -30,6 +30,7 @@ const CTAS: Record<Lang3, string[]> = {
   en: ["Comment WANT and I will send you the link.", "Tap the link in my bio and see it now.", "Comment INFO and I will send you the details.", "Save this video and comment WANT."],
   es: ["Comenta QUIERO y te envío el enlace.", "Toca el enlace de mi bio y velo ahora.", "Comenta INFO y te mando los detalles.", "Guarda este video y comenta QUIERO."],
 };
+const LANG_NAMES: Record<string, string> = { "pt-BR": "Português", en: "English", es: "Español" };
 const LANG_CODE: Record<Lang3, string> = { pt: "pt-BR", en: "en", es: "es" };
 
 // Todo o texto segue o idioma escolhido pelo membro (PT/EN/ES).
@@ -43,6 +44,18 @@ const S = {
   newChat: ["Novo chat", "New chat", "Nuevo chat"],
   other: ["Outro", "Other", "Otro"],
   otherHint: ["Escreva o que você quer", "Write what you want", "Escribe lo que quieres"],
+  styleAsk: ["Como você quer os vídeos?", "How do you want the videos?", "¿Cómo quieres los videos?"],
+  styCaptions: ["Legenda no vídeo", "Subtitles", "Subtítulos"],
+  styVoice: ["Idioma da voz", "Voice language", "Idioma de la voz"],
+  styCamera: ["Tipo de câmera", "Camera", "Cámara"],
+  styProduct: ["Mostrar o produto", "Show the product", "Mostrar el producto"],
+  styYes: ["Com", "With", "Con"],
+  styNo: ["Sem", "Without", "Sin"],
+  styAuto: ["Automático", "Auto", "Automático"],
+  camSelfie: ["Selfie de celular", "Phone selfie", "Selfie de celular"],
+  camTripod: ["Tripé, de frente", "Tripod, front", "Trípode, de frente"],
+  camPov: ["POV (mãos)", "POV (hands)", "POV (manos)"],
+  camCinema: ["Cinematográfica", "Cinematic", "Cinematográfica"],
   seeMore: ["Ver mais", "See more", "Ver más"],
   navLib: ["Biblioteca", "Library", "Biblioteca"],
   navFolders: ["Pastas", "Folders", "Carpetas"],
@@ -176,6 +189,7 @@ export function InfluencerChat() {
   const [prompts, setPrompts] = useState<string[]>([]);
   const [summaries, setSummaries] = useState<string[]>([]);
   const [videoCount, setVideoCount] = useState(1);
+  const [style, setStyle] = useState<{ captions: boolean; voice: string; camera: string; product: boolean | null }>({ captions: false, voice: "", camera: "selfie", product: null });
   const [vary, setVary] = useState<{ hook: boolean; body: boolean; cta: boolean }>({ hook: true, body: false, cta: false });
   const [model, setModel] = useState<string>(FLOW_CHOICES[1].id);
   const [boards, setBoards] = useState<Board[]>([]);
@@ -363,11 +377,11 @@ export function InfluencerChat() {
         const response = await fetch("/api/multiplier/clone/influencer-storyboard", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            copy: copyText, scene_count: SCENES, persona: { ...persona, look: persona.look + (selModel?.voice ? `. Voice: ${selModel.voice}` : ""), extra: "" }, language: LANG_CODE[lang], cadence: "natural", energy: "calm",
+            copy: copyText, scene_count: SCENES, persona: { ...persona, look: persona.look + (selModel?.voice ? `. Voice: ${selModel.voice}` : ""), extra: "" }, language: style.voice || LANG_CODE[lang], camera: style.camera, captions: style.captions, cadence: "natural", energy: "calm",
             angle: videoCount > 1 && vary.hook ? ANGLES[i % ANGLES.length] : "",
             body_style: videoCount > 1 && vary.body ? BODIES[i % BODIES.length] : "",
             cta: videoCount > 1 && vary.cta ? CTAS[lang][i % CTAS[lang].length] : "",
-            product: "", product_look: productLook, show_product: Boolean(productLook || productLink),
+            product: "", product_look: productLook, show_product: style.product ?? Boolean(productLook || productLink),
           }),
         });
         if (!response.ok) { await fail(response); return null; }
@@ -396,7 +410,7 @@ export function InfluencerChat() {
     try { await navigator.clipboard.writeText(text); setSent(key); window.setTimeout(() => setSent(""), 1800); } catch { /* o texto continua na tela */ }
   }
 
-  const snapshot = (): Snap => ({ phase, prompt, skill, answers, persona, searches, copyText, pins, pin, prompts, summaries, videoCount, vary, model, boards, productLook, productLink, worked });
+  const snapshot = (): Snap => ({ style, phase, prompt, skill, answers, persona, searches, copyText, pins, pin, prompts, summaries, videoCount, vary, model, boards, productLook, productLink, worked });
   const snapKey = JSON.stringify(snapshot());
   useEffect(() => {
     if (!hydrated || chatId.current === null || phase === "home") return;
@@ -420,7 +434,7 @@ export function InfluencerChat() {
     if (unsettled && !(snap.persona as Persona)?.name) { chatId.current = null; return; }
     setAnswers(snap.answers ?? []); setPersona(snap.persona ?? { name: "", age: "", look: "", setting: "" }); setSearches(snap.searches ?? []); setCopyText((snap.copyText as string) ?? "");
     setPins(snap.pins ?? []); setPin(snap.pin ?? null); setPrompts(snap.prompts ?? []); setSummaries(snap.summaries ?? []); setVideoCount((snap.videoCount as number) ?? 1);
-    setVary(snap.vary ?? { hook: true, body: false, cta: false }); setModel((snap.model as string) ?? model); setBoards(snap.boards ?? []); setProductLook((snap.productLook as string) ?? ""); setProductLink((snap.productLink as string) ?? "");
+    setStyle((snap.style as typeof style) ?? { captions: false, voice: "", camera: "selfie", product: null }); setVary(snap.vary ?? { hook: true, body: false, cta: false }); setModel((snap.model as string) ?? model); setBoards(snap.boards ?? []); setProductLook((snap.productLook as string) ?? ""); setProductLink((snap.productLink as string) ?? "");
     lookRef.current = (snap.productLook as string) ?? ""; linkRef.current = (snap.productLink as string) ?? "";
     setWorked(snap.worked ?? {}); setProject(chat.project ?? "");
     setPhase(((snap.phase as Phase) === "ask" || (snap.phase as Phase) === "intake") ? "approve" : (snap.phase as Phase));
@@ -750,6 +764,25 @@ export function InfluencerChat() {
             </div>
           ))}
           {phase === "prompt" && <Button type="button" className="rounded-full" onClick={() => setPhase("count")}>{t("toVideos")} <ArrowRight className="size-4" /></Button>}
+        </Msg>
+      )}
+
+      {["count", "model", "cost", "board"].includes(phase) && (
+        <Msg testid="chat-style">
+          <p>{t("styleAsk")}</p>
+          {([
+            ["captions", t("styCaptions"), [[false, t("styNo")], [true, t("styYes")]]],
+            ["voice", t("styVoice"), [["", `${t("styAuto")} (${LANG_NAMES[LANG_CODE[lang]]})`], ["pt-BR", "Português (Brasil)"], ["pt-PT", "Português (Portugal)"], ["en", "English"], ["es", "Español"], ["fr", "Français"], ["de", "Deutsch"], ["it", "Italiano"]]],
+            ["camera", t("styCamera"), [["selfie", t("camSelfie")], ["tripod", t("camTripod")], ["pov", t("camPov")], ["cinematic", t("camCinema")]]],
+            ["product", t("styProduct"), [[true, t("styYes")], [false, t("styNo")]]],
+          ] as [keyof typeof style, string, [string | boolean, string][]][]).map(([key, label, opts]) => (
+            <div key={key} role="radiogroup" aria-label={label} className="flex flex-wrap items-center gap-2">
+              <span className="w-full text-xs text-muted-foreground sm:w-28">{label}</span>
+              {opts.map(([value, text]) => (
+                <Chip key={String(value)} role="radio" on={(key === "product" ? (style.product ?? Boolean(productLook || productLink)) : style[key]) === value} onClick={() => { if (phase === "count") setStyle((current) => ({ ...current, [key]: value })); }}>{text}</Chip>
+              ))}
+            </div>
+          ))}
         </Msg>
       )}
 

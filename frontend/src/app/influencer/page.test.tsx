@@ -95,6 +95,9 @@ describe("Criar influencer em chat", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Seguir sem foto" }));
     fireEvent.click(await screen.findByRole("button", { name: /Fazer os vídeos/ }));
     fireEvent.click(screen.getByRole("radio", { name: /^2 vídeos/ }));
+    fireEvent.click(within(screen.getByRole("radiogroup", { name: "Legenda no vídeo" })).getByRole("radio", { name: "Com" }));
+    fireEvent.click(within(screen.getByRole("radiogroup", { name: "Idioma da voz" })).getByRole("radio", { name: "Español" }));
+    fireEvent.click(within(screen.getByRole("radiogroup", { name: "Tipo de câmera" })).getByRole("radio", { name: /POV/ }));
     fireEvent.click(screen.getByRole("button", { name: /^Corpo/ }));
     fireEvent.click(screen.getByRole("button", { name: /^CTA/ }));
     fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
@@ -105,7 +108,9 @@ describe("Criar influencer em chat", () => {
     expect(screen.getByRole("button", { name: /Copiar pacote e abrir o Flow/ })).toBeInTheDocument();
     await waitFor(() => expect(bodies.filter((b) => "scene_count" in b).length).toBe(2));
     const boards = bodies.filter((b) => "scene_count" in b);
-    expect(boards[0].language).toBe("pt-BR");
+    expect(boards[0].language).toBe("es");
+    expect(boards[0].captions).toBe(true);
+    expect(boards[0].camera).toBe("pov");
     expect(boards[0].angle).toBe("curiosity");
     expect(boards[1].angle).toBe("problem");
     expect(boards[0].body_style).not.toBe(boards[1].body_style);
