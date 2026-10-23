@@ -499,8 +499,18 @@
       if (running) return;
       const got = (await chrome.storage.local.get(PENDING_KEY))[PENDING_KEY];
       if (!got || !got.raw || Date.now() - got.at > 30 * 60 * 1000) { if (got) await chrome.storage.local.remove(PENDING_KEY); return; }
-      await chrome.storage.local.remove(PENDING_KEY);
       el("pkg").value = got.raw;
+      if (!/\/project\//.test(location.pathname)) {
+        // Fora de um projeto: abre um novo sozinho e continua (o pacote fica guardado até começar).
+        setNow("Pacote recebido. Abrindo um novo projeto no Flow…");
+        const btn = await waitFor(() => $$("button, [role=button], a", document).find((b) => visible(b) && /^(\+\s*)?(novo projeto|new project)$/i.test(text(b).trim())), 10000);
+        if (!btn) { setNow("Pacote recebido. Abra um projeto do Flow e clique em Começar."); return; }
+        btn.click();
+        const inside = await waitFor(() => /\/project\//.test(location.pathname), 20000, 300);
+        if (!inside) { setNow("Pacote recebido. Abra um projeto do Flow e clique em Começar."); return; }
+        await sleep(3000);
+      }
+      await chrome.storage.local.remove(PENDING_KEY);
       setNow("Pacote recebido do ClipGringa. Começando…");
       start();
     } catch (_e) { /* sem acesso ao armazenamento */ }
