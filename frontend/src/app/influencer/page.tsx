@@ -79,6 +79,9 @@ export default function InfluencerPage() {
   const [board, setBoard] = useState<Board | null>(null);
   const [sent, setSent] = useState<string | null>(null);
   const [frames, setFrames] = useState(true);
+  const [cadence, setCadence] = useState<"natural" | "fast" | "faster">("natural");
+  const [energy, setEnergy] = useState<"calm" | "lively">("calm");
+  const wordsPerSecond = cadence === "natural" ? 2.5 : cadence === "fast" ? 2.75 : 3.1;
   useEffect(() => { setModel(readFlowCategory() ?? FLOW_MODELS[0].id); }, []);
   useEffect(() => {
     setCopy4((current) => current || ad);
@@ -88,7 +91,7 @@ export default function InfluencerPage() {
     try { window.localStorage.setItem("gv-influencer-v1", JSON.stringify({ ad, profile, searches, copy4 })); } catch { /* storage unavailable */ }
   }, [restored, ad, profile, searches, copy4]);
   const words = copy4.split(/\s+/).filter(Boolean).length;
-  useEffect(() => { if (words) setSceneCount(Math.max(1, Math.min(6, Math.round(words / 20)))); }, [words]);
+  useEffect(() => { if (words) setSceneCount(Math.max(1, Math.min(6, Math.round(words / (wordsPerSecond * 7))))); }, [words, wordsPerSecond]);
   const chosen = FLOW_MODELS.find((item) => item.id === model) ?? FLOW_MODELS[0];
   const perScene = isAdmin ? 0 : chosen.credits;
   useEffect(() => {
@@ -160,7 +163,7 @@ export default function InfluencerPage() {
     try {
       const response = await fetch("/api/multiplier/clone/influencer-storyboard", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ copy: copy4, scene_count: sceneCount, persona: profile, language: "pt-BR" }),
+        body: JSON.stringify({ copy: copy4, scene_count: sceneCount, persona: profile, language: "pt-BR", cadence, energy }),
       });
       if (!response.ok) { setError(await errorOf(response, "Não consegui montar o storyboard. Confira a fala e tente de novo.")); return; }
       setBoard(await response.json());
@@ -388,6 +391,26 @@ export default function InfluencerPage() {
                   {item.name} · {item.credits} créd./cena <span className="opacity-70">({item.note})</span>
                 </button>
               ))}
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2">
+              <p className="text-sm">Velocidade da fala</p>
+              <div role="radiogroup" aria-label="Velocidade da fala" className="flex flex-wrap gap-2">
+                {([["natural", "Natural"], ["fast", "Um pouco mais rápida"], ["faster", "Rápida"]] as const).map(([value, label]) => (
+                  <button key={value} type="button" role="radio" aria-checked={cadence === value} onClick={() => setCadence(value)}
+                    className={cn("rounded-full border px-3 py-1.5 text-sm", cadence === value ? "border-transparent bg-primary text-primary-foreground" : "border-border text-muted-foreground")}>{label}</button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <p className="text-sm">Jeito de falar</p>
+              <div role="radiogroup" aria-label="Jeito de falar" className="flex flex-wrap gap-2">
+                {([["calm", "Calmo, boca contida"], ["lively", "Animado, mais expressivo"]] as const).map(([value, label]) => (
+                  <button key={value} type="button" role="radio" aria-checked={energy === value} onClick={() => setEnergy(value)}
+                    className={cn("rounded-full border px-3 py-1.5 text-sm", energy === value ? "border-transparent bg-primary text-primary-foreground" : "border-border text-muted-foreground")}>{label}</button>
+                ))}
+              </div>
             </div>
           </div>
           <div className="space-y-2">

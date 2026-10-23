@@ -106,19 +106,22 @@ No text on screen.{PRODUCT_IMAGES if product else ""}
 def videos_system(n: int, product: bool = False, structured: bool = False) -> str:
     base = f"""You write image-to-video prompts for Google Flow / Veo, 9:16 vertical, 8 seconds each, one set per variation in the same order.
 The approved image of the scene is used as the first frame, so do not redescribe the person's appearance: describe the movement, the camera and the mood, and keep the same person and setting.
-Each set has exactly {n} prompt{"s" if n != 1 else ""} in English, one per scene, 250-500 characters each.
-Put the scene's spoken line in double quotes, in the language it is written in, word for word as given, said to camera. Never change, shorten or translate it. Say that the person speaks at a brisk natural pace and finishes the sentence about half a second before the clip ends, with no cut mid-word.{PRODUCT_VIDEOS if product else ""}
+Each set has exactly {n} prompt{"s" if n != 1 else ""} in English, one per scene, {"as long as the FORMAT below needs" if structured else "250-500 characters each"}.
+Put the scene's spoken line in double quotes, in the language it is written in, word for word as given, said to camera. Never change, shorten or translate it. Say that the person {"" if structured else "speaks at a brisk natural pace and "}finishes the sentence about half a second before the clip ends, with no cut mid-word.{PRODUCT_VIDEOS if product else ""}
 {SAFETY}"""
     return base + (STRUCTURED_VIDEO if structured else "")
 
 
 STRUCTURED_VIDEO = """
-Format of EACH prompt (replace the 250-500 characters limit: 700-1100 characters), four labelled parts on separate lines:
-Subject: who is on screen (keep her exact face and identity from the source image, same clothes) and the setting, in one or two sentences.
-Action: about 1.2s of silent lead-in with the mouth closed and still, then she says the line once, continuously, at a lively, natural pace, with small expressive micro-gestures; she finishes about 0.5s before the end with the mouth closing and no filler. The hand holding the phone stays out of frame.
-Camera: vertical 9:16 front phone-camera selfie framing with a subtle natural handheld micro-shake and slight organic drift, never tripod-stable; the background stays stable, only the camera moves.
-Style: authentic iPhone front-camera UGC look, realistic amateur quality, mild sensor grain, true-to-life skin with visible pores, no beauty filter, no smoothing, completely clean frame with zero text, captions or watermarks.
-The spoken line goes in the Action part, in double quotes, word for word."""
+FORMAT (Veo 3.1 talking-avatar blocks, from the avatar VSL method). Each prompt is ONE self-contained block of at most 2300 characters (aim for 900-1700) with exactly these five labelled parts on separate lines:
+Cinematography: framing and camera, 9:16 vertical. For phone selfie scenes: front phone-camera selfie framing with a constant subtle natural handheld micro-shake from the hand holding the phone, slight organic drift, never tripod-stable and never shaky-cam; the hand holding the phone stays out of frame; the background and furniture stay completely still, only the camera moves.
+Subject: "keep her/his exact identity from the source image" (same face, hair, clothes, accessories). Never add objects, clothes or accessories that are not in the image.
+Action: timeline in order: silent lead-in with the mouth fully closed and still (LEAD seconds, no lip movement, no speech yet), then the person says the line once, continuously, at the chosen pace, filling the window, then about 0.5 s of silence with the mouth settling closed, no filler. Put the spoken line in double quotes, word for word, then (no subtitles, no captions, no on-screen text). Anchor small gestures to key words. When the line mentions the liver, stomach, belly, abdomen, bloating or gut, add a small gesture of the free hand toward that area of the body, returning to the pose afterwards, adapted to the pose in the image.
+Context: the setting and the objects visible, stable and undistorted.
+Style & Ambiance: light, real skin texture with visible pores, no beauty filter, authentic phone UGC look; the pace is calm, even and unrushed; only the person's voice, no second voice, no interviewer, no off-screen voice, no "yeah", no "mm-hmm", no filler sounds (no hmm, no uh, no um); absolutely no text on screen: no subtitles, no captions, no titles, no overlays, no watermark, a completely clean frame; the line is spoken once only, no repetition, no looping. Veo has no negative field, so describe absences in positive form inside this part.
+SPEECH RULES: write numbers out in words in the language of the line (74% as the number spelled out plus percent). Respell hard foreign words, brand names and acronyms phonetically inside the quoted line (spell acronyms letter by letter with hyphens). Never start the clip with a brand name.
+LEAD is 1.2 seconds for the first scene (the first word must be fully voiced and clearly audible, no lip movement before 1.2 s) and about 0.5 seconds for the other scenes.
+"""
 
 
 class _Scene(BaseModel):
@@ -338,7 +341,7 @@ def _fail() -> HTTPException:
 async def stage_scenes(ctx: dict[str, Any], model: Any = None) -> list[dict[str, str]]:
     prompt = f"Reference transcript:\n{ctx['reference'] or '(not provided)'}\n\nNotes about the video:\n{ctx['notes'] or '(none)'}"
     n = ctx["scene_count"]
-    out = await _run(scenes_system(n, bool(ctx["product"] or ctx["product_info"] or ctx["product_look"])) + lang_note(ctx), _Scenes, prompt, model)
+    out = await _run(scenes_system(n, bool(ctx["product"] or ctx["product_info"] or ctx["product_look"])) + lang_note(ctx) + (ctx.get("scene_note") or ""), _Scenes, prompt, model)
     scenes = [{"what": _text(s.what, 240), "line": _text(s.line, 300)} for s in out.items if s.line.strip()]
     if len(scenes) < n:
         raise _fail()
@@ -418,7 +421,7 @@ async def _scene_prompts(system: str, scenes: list[dict[str, str]], variations: 
         raise _fail()
     sets: list[dict[str, list[str]]] = []
     for item in out.items[: len(variations)]:
-        prompts = [_text(p, 1200) for p in item.prompts if p.strip()][: len(scenes)]
+        prompts = [_text(p, 2400) for p in item.prompts if p.strip()][: len(scenes)]
         if len(prompts) < len(scenes):
             raise _fail()
         sets.append({"prompts": prompts})
@@ -432,7 +435,7 @@ async def stage_images(ctx: dict[str, Any], scenes: list[dict[str, str]], variat
 
 async def stage_videos(ctx: dict[str, Any], scenes: list[dict[str, str]], variations: list[dict[str, str]], lines: list[list[str]], model: Any = None):
     product = _product_block(ctx)
-    return await _scene_prompts(videos_system(len(scenes), bool(product), bool(ctx.get("structured"))) + lang_note(ctx), scenes, variations, lines, model, product)
+    return await _scene_prompts(videos_system(len(scenes), bool(product), bool(ctx.get("structured"))) + lang_note(ctx) + (ctx.get("delivery") or ""), scenes, variations, lines, model, product)
 
 
 @router.post("/generate")
@@ -776,6 +779,23 @@ async def influencer_storyboard(request: Request, db: AsyncSession = Depends(get
     }
     ctx = _context({**data, "reference": data.get("copy"), "keyword": data.get("keyword") or "X", "count": 1})
     ctx["structured"] = True
+    cadence = str(data.get("cadence") or "natural")
+    wps = {"natural": 2.5, "fast": 2.75, "faster": 3.1}.get(cadence, 2.5)
+    high = int(wps * 7)
+    ctx["scene_note"] = (
+        f"\nOVERRIDE for the line length: each line has {max(10, high - 3)} to {high} words (never more than {high}), so it is spoken at about {wps} words per second and ends about one second before the 8-second clip ends. "
+        "Never cut a sentence in the middle: end every line at the end of a sentence; merge short neighbouring sentences of the same idea to fill the window."
+    )
+    import re as _re
+
+    ages = [int(n) for n in _re.findall(r"\d{2}", str(persona.get("age") or ""))]
+    elderly = bool(ages) and max(ages) >= 60
+    energy = "lively" if data.get("energy") == "lively" else "calm"
+    ctx["delivery"] = (
+        f"\nDELIVERY: pace about {wps} words per second. "
+        + ("Lively, upbeat, energetic delivery with expressive but natural micro-gestures and small nods. " if energy == "lively" else "Calm, restrained delivery: subtle controlled mouth movement, minimal jaw, NOT exaggerated, no wide mouth opening. ")
+        + ("The person looks elderly: minimal mouth movement, smaller and slower gestures, very subtle head micro-movements." if elderly else "")
+    )
     _check_script_rate(user_id)
     scenes = await stage_scenes(ctx)
     images = await stage_images(ctx, scenes, [variation])
