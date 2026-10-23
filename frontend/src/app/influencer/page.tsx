@@ -675,6 +675,16 @@ export default function InfluencerPage() {
                   {sent === "all" ? <Check className="size-4 text-[#5BD69A]" /> : <ClipboardCopy className="size-4" />} Copiar só os prompts
                 </button>
               </div>
+              <div className="space-y-1" data-testid="next-steps">
+                <p className="text-sm text-muted-foreground">Sugestões de próximos passos</p>
+                {([
+                  ["Fazer mais vídeos com outra abertura", () => { setVideoCount(3); setBoards([]); document.getElementById("influencer-topo")?.scrollIntoView?.({ behavior: "smooth" }); }],
+                  ["Trocar a pessoa ou o nicho", () => { setBoards([]); setProfile(EMPTY); setPrompts([]); setStep(1); setMaxStep(1); }],
+                  ["Montar com legenda na Automação", () => { window.location.href = "/automacao"; }],
+                ] as [string, () => void][]).map(([label, action]) => (
+                  <button key={label} type="button" onClick={action} className="block w-full rounded-[12px] px-2 py-2 text-left text-sm hover:bg-muted">↳ {label}</button>
+                ))}
+              </div>
               <p className="text-xs text-muted-foreground">Com a extensão ClipGringa · Flow, cole o pacote nela e ela gera e baixa as cenas sozinha. Sem a extensão, use “Copiar só os prompts” e cole no Flow cena por cena. Depois suba os vídeos na Automação para montar com legenda. A extensão ainda não encadeia os frames sozinha: no modo por frames, use o botão “Subir o vídeo da cena” em cada cena para pegar o último frame.</p>
             </div>
           )}
