@@ -957,6 +957,18 @@ async def influencer_storyboard(request: Request, db: AsyncSession = Depends(get
     }
     if angle in ANGLES:
         ctx["scene_note"] += f"\nOPENING ANGLE: rewrite ONLY the first scene's line as {ANGLES[angle]}, keeping the same claim, mechanism and facts from the copy. Do not add new claims."
+    BODIES = {
+        "story": "tell the middle scenes as a short personal story, in first person, with one concrete moment",
+        "demo": "show the middle scenes as a demonstration: what she does with the product or method, step by step, in simple words",
+        "list": "give the middle scenes as two or three quick reasons or tips, each in one short sentence",
+        "proof": "use the middle scenes to explain how it works and why it is believable, using only facts already in the copy",
+    }
+    body_style = str(data.get("body_style") or "")
+    if body_style in BODIES:
+        ctx["scene_note"] += f"\nBODY STYLE: for the scenes between the first and the last, {BODIES[body_style]}. Keep every claim from the copy and add no new facts, numbers or results."
+    cta_text = _clip(str(data.get("cta") or ""), 160).strip()
+    if cta_text:
+        ctx["scene_note"] += f"\nCALL TO ACTION: end the LAST scene's line with exactly this sentence, spoken naturally: \"{cta_text}\". Do not add other calls to action."
     import re as _re
 
     ages = [int(n) for n in _re.findall(r"\d{2}", str(persona.get("age") or ""))]

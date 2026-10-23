@@ -79,13 +79,21 @@ describe("Criar influencer em chat", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Seguir sem foto" }));
     fireEvent.click(await screen.findByRole("button", { name: /Fazer os vídeos/ }));
     fireEvent.click(screen.getByRole("radio", { name: /^2 vídeos/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Corpo/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^CTA/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
     fireEvent.click(await screen.findByRole("radio", { name: /Lite · 10 créditos por cena/ }));
     expect(await screen.findByTestId("video-approval")).toHaveTextContent("80 créditos");
     fireEvent.click(screen.getByRole("button", { name: /^Aprovar/ }));
     expect(await screen.findByRole("tab", { name: "Vídeo 2" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Copiar pacote e abrir o Flow/ })).toBeInTheDocument();
     await waitFor(() => expect(bodies.filter((b) => "scene_count" in b).length).toBe(2));
-    expect(bodies.filter((b) => "scene_count" in b)[0].language).toBe("pt-BR");
+    const boards = bodies.filter((b) => "scene_count" in b);
+    expect(boards[0].language).toBe("pt-BR");
+    expect(boards[0].angle).toBe("curiosity");
+    expect(boards[1].angle).toBe("problem");
+    expect(boards[0].body_style).not.toBe(boards[1].body_style);
+    expect(boards[0].cta).not.toBe(boards[1].cta);
   });
 
   it("mostra erro simples quando a IA falha", async () => {

@@ -18,7 +18,13 @@ type Phase = "home" | "intake" | "ask" | "approve" | "photos" | "prompt" | "coun
 
 const FLOW_URL = "https://labs.google/fx/pt/tools/flow";
 const SCENES = 4;
-const ANGLES = ["curiosity", "problem", "proof", "question", "curiosity"];
+const ANGLES = ["curiosity", "problem", "proof", "question"];
+const BODIES = ["story", "demo", "list", "proof"];
+const CTAS: Record<Lang3, string[]> = {
+  pt: ["Comente QUERO para receber o link.", "Toque no link da bio e veja agora.", "Comente INFO e eu te mando os detalhes.", "Salve este vídeo e comente QUERO."],
+  en: ["Comment WANT and I will send you the link.", "Tap the link in my bio and see it now.", "Comment INFO and I will send you the details.", "Save this video and comment WANT."],
+  es: ["Comenta QUIERO y te envío el enlace.", "Toca el enlace de mi bio y velo ahora.", "Comenta INFO y te mando los detalles.", "Guarda este video y comenta QUIERO."],
+};
 const LANG_CODE: Record<Lang3, string> = { pt: "pt-BR", en: "en", es: "es" };
 
 // Todo o texto segue o idioma escolhido pelo membro (PT/EN/ES).
@@ -83,6 +89,11 @@ const S = {
   addLink: ["Adicionar", "Add", "Añadir"],
   reading: ["Lendo o produto…", "Reading the product…", "Leyendo el producto…"],
   productOk: ["Produto anexado e adicionado ao prompt.", "Product attached and added to the prompt.", "Producto adjuntado y añadido al prompt."],
+  vary: ["Quer variar? (opcional)", "Want variations? (optional)", "¿Quieres variar? (opcional)"],
+  vHook: ["Gancho", "Hook", "Gancho"],
+  vBody: ["Corpo", "Body", "Cuerpo"],
+  vCta: ["CTA", "CTA", "CTA"],
+  go: ["Continuar", "Continue", "Continuar"],
   preview: ["Pré-visualização", "Preview", "Vista previa"],
 } as const;
 
@@ -126,6 +137,7 @@ export function InfluencerChat() {
   const [prompts, setPrompts] = useState<string[]>([]);
   const [summaries, setSummaries] = useState<string[]>([]);
   const [videoCount, setVideoCount] = useState(1);
+  const [vary, setVary] = useState<{ hook: boolean; body: boolean; cta: boolean }>({ hook: true, body: false, cta: false });
   const [model, setModel] = useState<string>(FLOW_CHOICES[1].id);
   const [boards, setBoards] = useState<Board[]>([]);
   const [productLook, setProductLook] = useState("");
@@ -273,14 +285,25 @@ export function InfluencerChat() {
   async function buildBoards() {
     setBusy("board"); setError(""); setPhase("board");
     try {
-      const result: Board[] = [];
-      for (let i = 0; i < videoCount; i += 1) {
+      const make = async (i: number): Promise<Board | null> => {
         const response = await fetch("/api/multiplier/clone/influencer-storyboard", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ copy: copyText, scene_count: SCENES, persona: { ...persona, extra: "" }, language: LANG_CODE[lang], cadence: "natural", energy: "calm", angle: videoCount > 1 ? ANGLES[i] : "", product: "", product_look: productLook, show_product: Boolean(productLook || productLink) }),
+          body: JSON.stringify({
+            copy: copyText, scene_count: SCENES, persona: { ...persona, extra: "" }, language: LANG_CODE[lang], cadence: "natural", energy: "calm",
+            angle: videoCount > 1 && vary.hook ? ANGLES[i % ANGLES.length] : "",
+            body_style: videoCount > 1 && vary.body ? BODIES[i % BODIES.length] : "",
+            cta: videoCount > 1 && vary.cta ? CTAS[lang][i % CTAS[lang].length] : "",
+            product: "", product_look: productLook, show_product: Boolean(productLook || productLink),
+          }),
         });
-        if (!response.ok) { await fail(response); setPhase("cost"); return; }
-        result.push(await response.json());
+        if (!response.ok) { await fail(response); return null; }
+        return response.json();
+      };
+      const result: Board[] = [];
+      for (let start = 0; start < videoCount; start += 3) {
+        const batch = await Promise.all(Array.from({ length: Math.min(3, videoCount - start) }, (_, k) => make(start + k)));
+        if (batch.some((item) => !item)) { setPhase("cost"); return; }
+        result.push(...(batch as Board[]));
       }
       setBoards(result); setActive(0); mark("board");
     } catch { setError(t("error")); setPhase("cost"); } finally { setBusy(""); }
@@ -502,8 +525,19 @@ export function InfluencerChat() {
         <Msg testid="video-count">
           <p>{t("howMany")}</p>
           <div role="radiogroup" aria-label={t("howMany")} className="flex flex-wrap gap-2">
-            {[1, 2, 3, 5].map((n) => <Chip key={n} role="radio" on={videoCount === n} onClick={() => { if (phase === "count") { setVideoCount(n); setPhase("model"); } }}>{n} {n === 1 ? t("video") : t("videos")}</Chip>)}
+            {[1, 2, 3, 5, 10].map((n) => <Chip key={n} role="radio" on={videoCount === n} onClick={() => { if (phase === "count") setVideoCount(n); }}>{n} {n === 1 ? t("video") : t("videos")}</Chip>)}
           </div>
+          {videoCount > 1 && (
+            <div className="space-y-2">
+              <p className="text-muted-foreground">{t("vary")}</p>
+              <div role="group" aria-label={t("vary")} className="flex flex-wrap gap-2">
+                {([["hook", t("vHook")], ["body", t("vBody")], ["cta", t("vCta")]] as const).map(([key, label]) => (
+                  <Chip key={key} on={vary[key]} onClick={() => { if (phase === "count") setVary({ ...vary, [key]: !vary[key] }); }}>{vary[key] ? "✓ " : ""}{label}</Chip>
+                ))}
+              </div>
+            </div>
+          )}
+          {phase === "count" && <Button type="button" className="rounded-full" onClick={() => setPhase("model")}>{t("go")} <ArrowRight className="size-4" /></Button>}
         </Msg>
       )}
       {["model", "cost", "board"].includes(phase) && (
