@@ -69,6 +69,11 @@ const S = {
   fmt: ["Formato", "Format", "Formato"],
   video_n: ["Vídeo", "Video", "Video"],
   scene: ["Cena", "Scene", "Escena"],
+  chats: ["Chats", "Chats", "Chats"],
+  noChats: ["Seus chats aparecem aqui", "Your chats show up here", "Tus chats aparecen aquí"],
+  worked: ["Trabalhou por", "Worked for", "Trabajó durante"],
+  askFirst: ["Perguntar antes de gerar", "Ask before generating", "Preguntar antes de generar"],
+  preview: ["Pré-visualização", "Preview", "Vista previa"],
 } as const;
 
 const Avatar = () => <span aria-hidden className="mt-1 size-6 shrink-0 rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#A98BFF]" />;
@@ -118,6 +123,13 @@ export function InfluencerChat() {
   const [demo, setDemo] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  const t0 = useRef(0);
+  const [worked, setWorked] = useState<Record<string, number>>({});
+  const [chats, setChats] = useState<{ id: number; title: string }[]>([]);
+  useEffect(() => {
+    try { const saved = JSON.parse(window.localStorage.getItem("gv-influencer-chats") ?? "[]"); if (Array.isArray(saved)) setChats(saved.slice(0, 12)); } catch { /* sem armazenamento */ }
+  }, []);
+  const mark = (key: string) => setWorked((current) => (current[key] ? current : { ...current, [key]: Math.max(1, Math.round((Date.now() - t0.current) / 1000)) }));
 
   useEffect(() => { setModel(defaultFlowCategory(isAdmin)); }, [isAdmin]);
   useEffect(() => { endRef.current?.scrollIntoView?.({ behavior: "smooth", block: "end" }); }, [phase, qi, pins.length, prompts.length, boards.length]);
@@ -167,7 +179,11 @@ export function InfluencerChat() {
   }
 
   async function start() {
-    setError(""); setAnswers([]); setQi(0); setPicked(null); setQuestions([]);
+    setError(""); setAnswers([]); setQi(0); setPicked(null); setQuestions([]); setWorked({});
+    t0.current = Date.now();
+    const next = [{ id: Date.now(), title: prompt.slice(0, 60) }, ...chats.filter((c) => c.title !== prompt.slice(0, 60))].slice(0, 12);
+    setChats(next);
+    try { window.localStorage.setItem("gv-influencer-chats", JSON.stringify(next)); } catch { /* sem armazenamento */ }
     setPhase("ask"); setBusy("think");
     try {
       const data = await brief([]);
@@ -207,6 +223,7 @@ export function InfluencerChat() {
       if (!response.ok) { await fail(response); return; }
       const data = await response.json();
       setPrompts(Array.isArray(data.prompts) ? data.prompts : []);
+      mark("prompt");
       setSummaries(Array.isArray(data.summaries) ? data.summaries : []);
     } catch { setError(t("error")); } finally { setBusy(""); }
   }
@@ -223,7 +240,7 @@ export function InfluencerChat() {
         if (!response.ok) { await fail(response); setPhase("cost"); return; }
         result.push(await response.json());
       }
-      setBoards(result); setActive(0);
+      setBoards(result); setActive(0); mark("board");
     } catch { setError(t("error")); setPhase("cost"); } finally { setBusy(""); }
   }
 
@@ -246,7 +263,16 @@ export function InfluencerChat() {
   const started = phase !== "home";
 
   return (
-    <section className="mx-auto w-full max-w-3xl space-y-6" data-testid="influencer-chat">
+    <div className="grid gap-6 lg:grid-cols-[200px_minmax(0,1fr)] xl:grid-cols-[200px_minmax(0,1fr)_260px]">
+    <aside className="hidden space-y-2 lg:block" aria-label={t("chats")} data-testid="chat-sidebar">
+      <button type="button" onClick={reset} className="flex w-full items-center gap-2 rounded-[14px] bg-card px-3 py-2.5 text-sm font-medium hover:bg-muted"><Plus className="size-4" /> {t("newChat")}</button>
+      <p className="px-2 pt-3 text-xs text-muted-foreground">{t("chats")}</p>
+      {chats.length === 0 && <p className="px-2 text-xs text-muted-foreground">{t("noChats")}</p>}
+      {chats.map((chat) => (
+        <button key={chat.id} type="button" onClick={() => { reset(); setPrompt(chat.title); }} className="block w-full truncate rounded-[12px] px-3 py-2 text-left text-sm hover:bg-card">{chat.title}</button>
+      ))}
+    </aside>
+    <section className="mx-auto w-full max-w-3xl min-w-0 space-y-6" data-testid="influencer-chat">
       {started && (
         <div className="flex items-center justify-between gap-2">
           <p className="max-w-[80%] rounded-full border border-border bg-card px-5 py-2 text-xs font-semibold uppercase tracking-wide" data-testid="chat-user-bubble">{prompt}</p>
@@ -357,6 +383,7 @@ export function InfluencerChat() {
       {busy === "prompt" && <Working text={t("writing")} />}
       {["prompt", "count", "model", "cost", "board"].includes(phase) && prompts.length > 0 && (
         <Msg testid="chat-prompt">
+          {worked.prompt && <p className="text-xs text-muted-foreground" data-testid="worked">{t("worked")} {worked.prompt}s</p>}
           <p>{t("promptReady")}</p>
           {prompts.slice(0, 2).map((text, i) => (
             <div key={text} className="space-y-2 rounded-[16px] border border-border bg-card p-3">
@@ -408,6 +435,7 @@ export function InfluencerChat() {
 
       {phase === "board" && board && (
         <Msg testid="storyboard">
+          {worked.board && <p className="text-xs text-muted-foreground">{t("worked")} {worked.board}s</p>}
           <p>{t("ready")}</p>
           {boards.length > 1 && (
             <div role="tablist" aria-label={t("video_n")} className="flex flex-wrap gap-2">
@@ -457,6 +485,7 @@ export function InfluencerChat() {
                 </button>
               ))}
             </div>
+            <span className="hidden text-xs text-muted-foreground sm:inline">{t("askFirst")}</span>
             <button type="button" aria-label={t("send")} title={t("send")} onClick={() => void start()} disabled={started || prompt.trim().length < 8}
               className="flex size-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white disabled:opacity-40">
               {busy ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-5" />}
@@ -465,5 +494,18 @@ export function InfluencerChat() {
         </div>
       </div>
     </section>
+    <aside className="hidden xl:block" aria-label={t("preview")} data-testid="chat-preview">
+      {(pin || persona.name) && started && (
+        <div className="sticky top-6 space-y-3 rounded-[18px] border border-border bg-card p-3">
+          <p className="text-xs text-muted-foreground">{t("preview")}</p>
+          {pin && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={pin.full} alt="" referrerPolicy="no-referrer" className="w-full rounded-[14px] object-cover" />
+          )}
+          {persona.name && <p className="text-sm font-medium">{[persona.name, persona.age].filter(Boolean).join(", ")}</p>}
+        </div>
+      )}
+    </aside>
+    </div>
   );
 }
