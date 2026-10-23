@@ -121,3 +121,46 @@ describe("Criar influencer", () => {
     expect(await screen.findByText(/Não consegui ler o anúncio/)).toBeInTheDocument();
   });
 });
+
+describe("Chat de criação", () => {
+  it("pergunta, pede aprovação e leva à etapa da foto", async () => {
+    const bodies: Record<string, unknown>[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).includes("influencer-brief")) {
+        const body = JSON.parse(String(init?.body)); bodies.push(body);
+        if (!body.answers) return new Response(JSON.stringify({ questions: [{ question: "Qual estilo?", options: [{ label: "Casual" }, { label: "Chique" }, { label: "Esportivo" }] }] }), { status: 200 });
+        return new Response(JSON.stringify({ persona: { name: "Bia", age: "22 anos", look: "loira", setting: "quarto" }, searches: ["loira 22 anos"], copy: "Fala de teste longa o bastante para o vídeo." }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ pins: [] }), { status: 200 });
+    }));
+    render(<InfluencerPage />);
+    fireEvent.change(screen.getByLabelText("Descreva a influencer"), { target: { value: "Gere uma influencer de 22 anos loira vendendo roupas" } });
+    fireEvent.click(screen.getAllByRole("button", { name: /Shopee/ })[0]);
+    fireEvent.click(screen.getByRole("button", { name: /Criar a influencer/ }));
+    fireEvent.click(await screen.findByRole("radio", { name: /Casual/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Continuar/ }));
+    expect(await screen.findByTestId("chat-approval")).toHaveTextContent("Bia");
+    expect(bodies[0].skill).toBe("shopee");
+    expect(bodies[0].language).toBe("pt");
+    fireEvent.click(screen.getByRole("button", { name: /Aprovar e continuar/ }));
+    expect(await screen.findByRole("button", { name: /Avançar sem foto/ })).toBeInTheDocument();
+  });
+
+  it("gera vários vídeos, um storyboard para cada", async () => {
+    let boardCalls = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (String(url).includes("influencer-profile")) return new Response(JSON.stringify({ name: "M", age: "50", look: "l", setting: "c", searches: ["x"] }), { status: 200 });
+      if (String(url).includes("influencer-storyboard")) { boardCalls += 1; return new Response(JSON.stringify({ scenes: [{ line: `v${boardCalls}`, what: "w" }], imagePrompts: ["i"], videoPrompts: ["v"] }), { status: 200 }); }
+      return new Response(JSON.stringify({ pins: [] }), { status: 200 });
+    }));
+    render(<InfluencerPage />);
+    fireEvent.change(screen.getByLabelText("Anúncio ou descrição da pessoa"), { target: { value: "Mulher loira de 50 anos na cozinha mostrando o produto" } });
+    fireEvent.click(screen.getByRole("button", { name: /Descobrir a pessoa/ }));
+    await toVideoStep();
+    fireEvent.change(await screen.findByLabelText("Fala do vídeo"), { target: { value: "Esta fala tem mais de vinte caracteres para liberar o botão." } });
+    fireEvent.click(screen.getByRole("radio", { name: /^2 vídeos/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Montar 2 storyboards/ }));
+    expect(await screen.findByRole("tab", { name: "Vídeo 2" })).toBeInTheDocument();
+    expect(boardCalls).toBe(2);
+  });
+});

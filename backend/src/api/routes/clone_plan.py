@@ -571,7 +571,8 @@ PHOTOREAL_SYSTEM = (
     "hair strands, eye and lip micro-detail, clothing fabric texture. For phone-filmed creator videos prefer a handheld "
     "smartphone selfie look (26mm equivalent, slight wide-angle distortion, mild handheld shake, subtle compression artifacts). "
     "If a reference photo is attached, keep that person's face, age, hair and skin tone, and only change the scene described. "
-    "Return exactly 3 different prompts (vary composition, light or mood), no explanations."
+    "Return exactly 3 different prompts (vary composition, light or mood), no explanations. For each prompt also return "
+    "a one-sentence summary in Brazilian Portuguese (what the picture shows), in the same order."
 )
 
 
@@ -585,6 +586,7 @@ class _InfluencerProfile(BaseModel):
 
 class _PhotorealPrompts(BaseModel):
     prompts: list[str] = Field(description="3 English photorealistic image prompts")
+    summaries: list[str] = Field(default_factory=list, description="One-sentence Portuguese summary of each prompt, same order")
 
 
 @router.post("/influencer-profile")
@@ -612,6 +614,102 @@ async def influencer_profile(request: Request, db: AsyncSession = Depends(get_db
         "look": _clip(out.look, 300),
         "setting": _clip(out.setting, 200),
         "searches": [_clip(item, 80) for item in out.searches if item.strip()][:3],
+    }
+
+
+SKILL_NOTES = {
+    "nutra": (
+        "NICHE SKILL: nutra (supplements, health and wellness). The persona is usually 45 to 65, warm and credible, talking about her own routine. "
+        "Stay compliant: never promise a cure, never name a disease as treated, no guaranteed results, no before/after claims, no fake doctors or "
+        "medical coats, no invented studies. Use personal experience wording ('na minha rotina', 'eu notei'), curiosity and relatable everyday problems."
+    ),
+    "dropshipping": (
+        "NICHE SKILL: dropshipping (gadgets and problem-solving products). The persona is relatable and curious, shows the product working in a "
+        "real home or street scene, problem then solution, one clear benefit per video. No fake scarcity, no invented specs or reviews."
+    ),
+    "mercado-livre": (
+        "NICHE SKILL: Mercado Livre. The persona is a trustworthy everyday buyer reviewing a product she actually holds: honest specs, what comes in "
+        "the box, price and delivery as a benefit, calm and clear tone. No exaggerated claims; the product must look like the real listing."
+    ),
+    "shopee": (
+        "NICHE SKILL: Shopee. The persona is young, energetic and fast, doing a haul or unboxing: coupons, free shipping, small price, 'achadinho' "
+        "style, quick cuts. Keep claims modest and never invent discounts."
+    ),
+}
+
+
+class _BriefOption(BaseModel):
+    label: str = Field(description="Short option, in the requested language")
+    detail: str = Field(default="", description="One short line explaining the option, in the requested language")
+
+
+class _BriefQuestion(BaseModel):
+    question: str = Field(description="One short question, in the requested language")
+    options: list[_BriefOption] = Field(description="Exactly 3 options")
+
+
+class _InfluencerBrief(BaseModel):
+    questions: list[_BriefQuestion] = Field(default_factory=list, description="0 to 3 questions")
+    name: str = Field(description="First name")
+    age: str = Field(description="Age or range")
+    look: str = Field(description="Short physical look and clothes")
+    setting: str = Field(description="Where she/he films")
+    searches: list[str] = Field(description="3 Pinterest search phrases")
+    copy: str = Field(default="", description="Spoken script in the requested language, 60 to 90 words")
+
+
+INFLUENCER_BRIEF_SYSTEM = (
+    "You help a Brazilian member create an AI influencer for short vertical video ads, from one short request. Write everything in "
+    "{LANG}. Return the persona (first name, age or range, short physical look and clothes, where she/he films), 3 Pinterest "
+    "search phrases (Portuguese, 3 to 8 words, no brand names) that find real-looking photos of that exact person, and a spoken script of 60 to 90 "
+    "words in the first person, conversational, with a hook in the first sentence, that sells or presents what the request says. "
+    "If the answers list is empty and the request is truly ambiguous about something that changes the video (what is sold, image or video, tone), "
+    "ask at most 3 short questions, each with exactly 3 options; otherwise return no questions. If answers are given, never ask again: use them. "
+    "Never invent prices, discounts, studies, medical or income claims."
+)
+
+
+@router.post("/influencer-brief")
+async def influencer_brief(request: Request, db: AsyncSession = Depends(get_db)):
+    """Chat-style start: one short request (+ optional niche skill) becomes questions, then persona, searches and a script."""
+    user_id = await _user_id(request, db)
+    from ...integrations import load_user_keys
+    from ...usage import get_balance, set_server_blocked, set_usage_user
+
+    await load_user_keys(db, user_id)
+    set_usage_user(user_id)
+    set_server_blocked((await get_balance(db, user_id))["exhausted"])
+    try:
+        data = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=400, detail="JSON object expected")
+    request_text = _clip(str(data.get("prompt") or ""), 600)
+    if len(request_text) < 8:
+        raise HTTPException(status_code=400, detail="Describe the influencer in one sentence")
+    skill = str(data.get("skill") or "")
+    answers = [
+        f"{_clip(str(item.get('question') or ''), 160)} -> {_clip(str(item.get('answer') or ''), 160)}"
+        for item in (data.get("answers") or [])[:3]
+        if isinstance(item, dict) and str(item.get("answer") or "").strip()
+    ]
+    _check_script_rate(user_id)
+    language = {"pt": "Brazilian Portuguese", "en": "English", "es": "Spanish"}.get(str(data.get("language") or "pt"), "Brazilian Portuguese")
+    system = INFLUENCER_BRIEF_SYSTEM.replace("{LANG}", language) + (" " + SKILL_NOTES[skill] if skill in SKILL_NOTES else "")
+    prompt = f"Request: {request_text}\nAnswers: " + (" | ".join(answers) if answers else "(none yet)")
+    out = await _run(system, _InfluencerBrief, prompt)
+    questions = []
+    if not answers:
+        for item in out.questions[:3]:
+            options = [{"label": _clip(o.label, 60), "detail": _clip(o.detail, 120)} for o in item.options if o.label.strip()][:3]
+            if item.question.strip() and len(options) >= 2:
+                questions.append({"question": _clip(item.question, 160), "options": options})
+    return {
+        "questions": questions,
+        "persona": {"name": _clip(out.name, 40), "age": _clip(out.age, 40), "look": _clip(out.look, 300), "setting": _clip(out.setting, 200)},
+        "searches": [_clip(item, 80) for item in out.searches if item.strip()][:3],
+        "copy": _clip(out.copy, 900),
     }
 
 
@@ -662,7 +760,8 @@ async def influencer_prompt(request: Request, db: AsyncSession = Depends(get_db)
         prompts.append(f"{value}. {SKIN_ENDING}")
     if not prompts:
         raise HTTPException(status_code=502, detail="Could not write the prompts. Try again.")
-    return {"prompts": prompts[:3]}
+    summaries = [_clip(str(item), 220) for item in out.summaries][:3]
+    return {"prompts": prompts[:3], "summaries": summaries}
 
 
 PIN_HOSTS = ("i.pinimg.com",)

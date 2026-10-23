@@ -10,6 +10,7 @@ import { FLOW_CHOICES, defaultFlowCategory, saveFlowCategory } from "@/lib/flow-
 import { TypedText } from "@/components/app/typed-text";
 import { LastFrame } from "@/components/app/last-frame";
 import { PageHeader } from "@/components/app/page-header";
+import { InfluencerChat, type Brief } from "@/components/app/influencer-chat";
 import { cn } from "@/lib/utils";
 
 type Pin = { id: string; thumb: string; full: string; link: string };
@@ -167,7 +168,10 @@ export default function InfluencerPage() {
   const [copy4, setCopy4] = useState("");
   const [model, setModel] = useState<string>(FLOW_CHOICES[1].id);
   const [sceneCount, setSceneCount] = useState(4);
-  const [board, setBoard] = useState<Board | null>(null);
+  const [boards, setBoards] = useState<Board[]>([]);
+  const [activeVideo, setActiveVideo] = useState(0);
+  const [videoCount, setVideoCount] = useState(1);
+  const board: Board | null = boards[activeVideo] ?? null;
   const [sent, setSent] = useState<string | null>(null);
   const [frames, setFrames] = useState(true);
   const [author, setAuthor] = useState("");
@@ -244,6 +248,16 @@ export default function InfluencerPage() {
     } finally { setBusy(null); }
   }
 
+  async function fromChat(brief: Brief) {
+    setProfile({ ...EMPTY, ...brief.persona });
+    setSearches(brief.searches);
+    if (brief.copy) { setAd(brief.copy); setCopy4(brief.copy); }
+    setPins([]);
+    setPickedPin(null);
+    go(2);
+    if (brief.searches.length) await findPins(brief.searches);
+  }
+
   async function findPins(list: string[] = searches) {
     setError(null);
     setPinsFailed(false);
@@ -281,12 +295,18 @@ export default function InfluencerPage() {
     setError(null);
     setBusy("board");
     try {
-      const response = await fetch("/api/multiplier/clone/influencer-storyboard", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ copy: copy4, scene_count: sceneCount, persona: profile, language, cadence, energy, angle, product: productName.trim(), product_look: productLook.trim(), show_product: Boolean(productLook.trim() || productName.trim()) }),
-      });
-      if (!response.ok) { setError(await errorOf(response, "Não consegui montar o storyboard. Confira a fala e tente de novo.")); return; }
-      setBoard(await response.json());
+      const angles = ["curiosity", "problem", "proof", "question", "curiosity"];
+      const result: Board[] = [];
+      for (let i = 0; i < videoCount; i += 1) {
+        const response = await fetch("/api/multiplier/clone/influencer-storyboard", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ copy: copy4, scene_count: sceneCount, persona: profile, language, cadence, energy, angle: angle || (videoCount > 1 ? angles[i] : ""), product: productName.trim(), product_look: productLook.trim(), show_product: Boolean(productLook.trim() || productName.trim()) }),
+        });
+        if (!response.ok) { setError(await errorOf(response, "Não consegui montar o storyboard. Confira a fala e tente de novo.")); return; }
+        result.push(await response.json());
+      }
+      setBoards(result);
+      setActiveVideo(0);
       award(4, XP_FINAL, `Tudo pronto! +${XP_FINAL} XP 🏆`);
     } catch {
       setError("Sem conexão. Tente de novo.");
@@ -299,13 +319,13 @@ export default function InfluencerPage() {
     flowModel: chosen.needle,
     lowerPriority: lower,
     mode: frames ? "frames" : "scenes",
-    videos: [{
-      title: profile.name || "Influencer",
-      scenes: (board?.scenes ?? []).map((_, index) => ({
-        imagePrompt: board?.imagePrompts[index] ?? "", videoPrompt: board?.videoPrompts[index] ?? "",
-        file: `Video01_Cena${String(index + 1).padStart(2, "0")}.mp4`,
+    videos: boards.map((item, v) => ({
+      title: `${profile.name || "Influencer"} ${v + 1}`,
+      scenes: item.scenes.map((_, index) => ({
+        imagePrompt: item.imagePrompts[index] ?? "", videoPrompt: item.videoPrompts[index] ?? "",
+        file: `Video${String(v + 1).padStart(2, "0")}_Cena${String(index + 1).padStart(2, "0")}.mp4`,
       })),
-    }],
+    })),
   }, null, 2);
 
   async function copyText(key: string, text: string) {
@@ -345,7 +365,7 @@ export default function InfluencerPage() {
       <span className="inline-block rounded-full border border-[#A98BFF]/40 px-2.5 py-0.5 text-[11px] font-semibold tracking-wider text-[#A98BFF]">BETA</span>
 
       <div id="influencer-topo" />
-      <Stepper step={step} maxStep={maxStep} onGo={go} finished={Boolean(board)} xp={xp} />
+      <Stepper step={step} maxStep={maxStep} onGo={go} finished={boards.length > 0} xp={xp} />
       {cheer && (
         <div role="status" aria-live="polite" data-testid="cheer" className="gt-pop rounded-[14px] border border-[#5BD69A]/40 bg-[#5BD69A]/10 px-4 py-3 text-sm font-semibold text-[#5BD69A]">
           {cheer}
@@ -361,7 +381,9 @@ export default function InfluencerPage() {
       )}
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
 
-      {step === 1 && <Step n={1} title="Cole o anúncio (ou descreva a pessoa)">
+      {step === 1 && <InfluencerChat onReady={(brief) => void fromChat(brief)} busy={busy !== null} />}
+
+      {step === 1 && <Step n={1} title="Ou cole um anúncio pronto (opcional)">
         <textarea value={ad} onChange={(event) => setAd(event.target.value)} rows={6} maxLength={4000} aria-label="Anúncio ou descrição da pessoa" className={inputClass}
           placeholder={"Ex.: Avatar: Mulher branca, loira, de +50 anos, gravando na cozinha da sua casa usando a câmera do celular.\nH1: ..."} />
         <Button type="button" onClick={() => void analyse()} disabled={busy !== null || ad.trim().length < 10} className="rounded-full">
@@ -608,12 +630,30 @@ export default function InfluencerPage() {
             <button type="button" aria-label="Mais uma cena" className="size-8 rounded-full border border-border" onClick={() => setSceneCount((n) => Math.min(6, n + 1))}>+</button>
             <span className="text-muted-foreground">≈ {sceneCount * 8}s · gasto estimado: <b className="text-foreground">{perScene * sceneCount} créditos</b> do seu Flow</span>
           </div>
+          <div className="space-y-2" data-testid="video-count">
+            <p className="text-sm">Quantos vídeos você quer gerar?</p>
+            <div role="radiogroup" aria-label="Quantidade de vídeos" className="flex flex-wrap gap-2">
+              {[1, 2, 3, 5].map((n) => (
+                <button key={n} type="button" role="radio" aria-checked={videoCount === n} onClick={() => setVideoCount(n)}
+                  className={cn("rounded-full border px-4 py-1.5 text-sm", videoCount === n ? "border-transparent bg-primary text-primary-foreground" : "border-border text-muted-foreground")}>{n} {n === 1 ? "vídeo" : "vídeos"}</button>
+              ))}
+            </div>
+            {videoCount > 1 && <p className="text-xs text-muted-foreground">Cada vídeo usa uma abertura diferente (curiosidade, problema, prova, pergunta). Gasto estimado: <b className="text-foreground">{perScene * sceneCount * videoCount} créditos</b> do seu Flow.</p>}
+          </div>
           <Button type="button" onClick={() => void buildBoard()} disabled={busy !== null || copy4.trim().length < 20} className="rounded-full">
-            {busy === "board" ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />} {busy === "board" ? "Montando o storyboard…" : "Montar o storyboard"}
+            {busy === "board" ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />} {busy === "board" ? "Montando o storyboard…" : videoCount > 1 ? `Montar ${videoCount} storyboards` : "Montar o storyboard"}
           </Button>
 
           {board && (
             <div className="space-y-3" data-testid="storyboard">
+              {boards.length > 1 && (
+                <div role="tablist" aria-label="Vídeos" className="flex flex-wrap gap-2">
+                  {boards.map((_, v) => (
+                    <button key={v} type="button" role="tab" aria-selected={activeVideo === v} onClick={() => setActiveVideo(v)}
+                      className={cn("rounded-full border px-3 py-1 text-xs", activeVideo === v ? "border-transparent bg-primary text-primary-foreground" : "border-border text-muted-foreground")}>Vídeo {v + 1}</button>
+                  ))}
+                </div>
+              )}
               <ol className="space-y-2">
                 {board.scenes.map((scene, index) => (
                   <li key={`${index}-${scene.line}`} className="rounded-[14px] border border-border bg-background p-3 text-sm">
