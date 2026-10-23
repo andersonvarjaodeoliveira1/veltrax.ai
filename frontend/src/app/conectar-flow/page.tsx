@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Check, Download, ExternalLink, Film, Link2 } from "lucide-react";
 import { useSession } from "@/lib/auth-client";
 import { useFlowConnection } from "@/hooks/use-flow-connection";
-import { FLOW_MODELS, readFlowCategory, saveFlowCategory } from "@/lib/flow-models";
+import { FLOW_CHOICES, defaultFlowCategory, saveFlowCategory } from "@/lib/flow-models";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/app/page-header";
 
@@ -20,8 +20,8 @@ export default function ConnectFlowPage() {
   const { data: session } = useSession();
   const isAdmin = Boolean((session?.user as { is_admin?: boolean } | undefined)?.is_admin);
   const { state: flowState, account } = useFlowConnection(true, false);
-  const [category, setCategory] = useState<string>(FLOW_MODELS[0].id);
-  useEffect(() => { setCategory(readFlowCategory() ?? FLOW_MODELS[0].id); }, []);
+  const [category, setCategory] = useState<string>(FLOW_CHOICES[1].id);
+  useEffect(() => { setCategory(defaultFlowCategory(isAdmin)); }, [isAdmin]);
   const chooseCategory = (id: string) => { setCategory(id); saveFlowCategory(id); };
 
   useEffect(() => {
@@ -64,22 +64,16 @@ export default function ConnectFlowPage() {
 
       <section className="space-y-3 rounded-[18px] border border-border bg-card p-5" data-testid="step-category">
         <p className="font-medium">Sua categoria no Flow</p>
-        {isAdmin ? (
-          <p className="text-xs text-muted-foreground" data-testid="category-admin">Conta administradora: gera em <b>Veo 3.1 - Lite [Lower Priority]</b>, sem gastar créditos.</p>
-        ) : (
-          <>
-            <p className="text-xs text-muted-foreground">Escolha o modelo que você quer usar. Ele vira o padrão em todos os seus vídeos e cada cena gasta créditos da sua conta do Flow.</p>
-            <div className="flex flex-wrap gap-2">
-              {FLOW_MODELS.map((m) => (
-                <button key={m.id} type="button" aria-pressed={m.id === category} onClick={() => chooseCategory(m.id)}
-                  className={cn("rounded-[12px] border px-3 py-2 text-left text-xs", m.id === category ? "border-[#7B3FE4] bg-[#7B3FE4]/20" : "border-border text-muted-foreground")}>
-                  <span className="block font-medium text-foreground">{m.name}</span>
-                  <span className="block">{m.credits} créditos por cena · {m.note}</span>
-                </button>
-              ))}
-            </div>
-          </>
-        )}
+        <p className="text-xs text-muted-foreground">Escolha o modelo que você quer usar. Ele vira o padrão em todos os seus vídeos. Quem tem o plano com <b>Lower Priority</b> no Flow escolhe a primeira opção e não gasta créditos; nas demais, cada cena gasta créditos da sua conta do Flow.</p>
+        <div className="flex flex-wrap gap-2">
+          {FLOW_CHOICES.map((m) => (
+            <button key={m.id} type="button" aria-pressed={m.id === category} onClick={() => chooseCategory(m.id)}
+              className={cn("rounded-[12px] border px-3 py-2 text-left text-xs", m.id === category ? "border-[#7B3FE4] bg-[#7B3FE4]/20" : "border-border text-muted-foreground")}>
+              <span className="block font-medium text-foreground">{m.name}</span>
+              <span className="block">{m.credits === 0 ? "0 créditos" : `${m.credits} créditos por cena`} · {m.note}</span>
+            </button>
+          ))}
+        </div>
       </section>
 
       <section className="space-y-3 rounded-[18px] border border-border bg-card p-5" data-testid="step-flow">

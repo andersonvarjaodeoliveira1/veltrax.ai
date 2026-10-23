@@ -22,7 +22,7 @@ it("lets the member pick the Flow category and remembers it", async () => {
   window.localStorage.clear();
   const user = userEvent.setup();
   render(<ConnectFlowPage />);
-  expect(screen.getByRole("button", { name: /Veo 3.1 - Lite/ })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: /^Veo 3\.1 - Lite(?! \[)/ })).toHaveAttribute("aria-pressed", "true");
   await user.click(screen.getByRole("button", { name: /Veo 3.1 - Fast/ }));
   expect(screen.getByRole("button", { name: /Veo 3.1 - Fast/ })).toHaveAttribute("aria-pressed", "true");
   expect(window.localStorage.getItem("gv-flow-model")).toBe("fast");
@@ -38,4 +38,15 @@ it("shows the connected account when the extension answers, and warns when it is
 it("says the extension was not found when nobody answers", async () => {
   render(<ConnectFlowPage />);
   expect(await screen.findByText("Extensão do Flow não encontrada", {}, { timeout: 4000 })).toBeInTheDocument();
+});
+
+it("shows Lower Priority to everyone but only preselects it when the member picks it", async () => {
+  window.localStorage.clear();
+  const user = userEvent.setup();
+  render(<ConnectFlowPage />);
+  const lower = screen.getByRole("button", { name: /Lower Priority\]/ });
+  expect(lower).toHaveAttribute("aria-pressed", "false");
+  await user.click(lower);
+  expect(lower).toHaveAttribute("aria-pressed", "true");
+  expect(window.localStorage.getItem("gv-flow-model")).toBe("lower");
 });

@@ -484,7 +484,7 @@ it("members use their saved category: no Lower Priority question, credits per vi
   expect(screen.queryByText(/tem o modelo Lower Priority/)).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /Sim, tenho/ })).not.toBeInTheDocument();
   await waitFor(() => expect(screen.getByTestId("flow-credits")).toHaveTextContent("60 créditos"));
-  await user.click(screen.getByRole("button", { name: /Veo 3.1 - Lite/ }));
+  await user.click(screen.getByRole("button", { name: /^Veo 3\.1 - Lite(?! \[)/ }));
   expect(screen.getByTestId("flow-credits")).toHaveTextContent("30 créditos");
   expect(window.localStorage.getItem("gv-flow-model")).toBe("lite");
 });

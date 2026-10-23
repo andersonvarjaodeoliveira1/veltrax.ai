@@ -6,7 +6,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useSession } from "@/lib/auth-client";
-import { FLOW_MODELS, readFlowCategory, saveFlowCategory } from "@/lib/flow-models";
+import { FLOW_CHOICES, defaultFlowCategory, saveFlowCategory } from "@/lib/flow-models";
 import { TypedText } from "@/components/app/typed-text";
 import { LastFrame } from "@/components/app/last-frame";
 import { PageHeader } from "@/components/app/page-header";
@@ -126,7 +126,7 @@ export default function InfluencerPage() {
   const { data: session } = useSession();
   const isAdmin = Boolean((session?.user as { is_admin?: boolean } | undefined)?.is_admin);
   const [copy4, setCopy4] = useState("");
-  const [model, setModel] = useState<string>(FLOW_MODELS[0].id);
+  const [model, setModel] = useState<string>(FLOW_CHOICES[1].id);
   const [sceneCount, setSceneCount] = useState(4);
   const [board, setBoard] = useState<Board | null>(null);
   const [sent, setSent] = useState<string | null>(null);
@@ -141,7 +141,7 @@ export default function InfluencerPage() {
   const [cadence, setCadence] = useState<"natural" | "fast" | "faster">("natural");
   const [energy, setEnergy] = useState<"calm" | "lively">("calm");
   const wordsPerSecond = cadence === "natural" ? 2.5 : cadence === "fast" ? 2.75 : 3.1;
-  useEffect(() => { setModel(readFlowCategory() ?? FLOW_MODELS[0].id); }, []);
+  useEffect(() => { setModel(defaultFlowCategory(isAdmin)); }, [isAdmin]);
   useEffect(() => {
     setCopy4((current) => current || ad);
   }, [ad]);
@@ -151,8 +151,9 @@ export default function InfluencerPage() {
   }, [restored, ad, profile, searches, copy4]);
   const words = copy4.split(/\s+/).filter(Boolean).length;
   useEffect(() => { if (words) setSceneCount(Math.max(1, Math.min(6, Math.round(words / (wordsPerSecond * 7))))); }, [words, wordsPerSecond]);
-  const chosen = FLOW_MODELS.find((item) => item.id === model) ?? FLOW_MODELS[0];
-  const perScene = isAdmin ? 0 : chosen.credits;
+  const chosen = FLOW_CHOICES.find((item) => item.id === model) ?? FLOW_CHOICES[1];
+  const lower = chosen.id === "lower";
+  const perScene = chosen.credits;
   useEffect(() => {
     try { setFlowConnected(Boolean(JSON.parse(window.localStorage.getItem("gv-conectar-flow-v1") ?? "{}").flow)); } catch { /* storage unavailable */ }
   }, []);
@@ -254,9 +255,9 @@ export default function InfluencerPage() {
 
   const flowPackage = () => JSON.stringify({
     app: "clipgringa-flow", version: 1, sceneCount: board?.scenes.length ?? 0,
-    model: isAdmin ? "Veo 3.1 - Lite [Lower Priority]" : chosen.name,
-    flowModel: isAdmin ? "[Lower Priority]" : chosen.needle,
-    lowerPriority: isAdmin,
+    model: chosen.name,
+    flowModel: chosen.needle,
+    lowerPriority: lower,
     mode: frames ? "frames" : "scenes",
     videos: [{
       title: profile.name || "Influencer",
@@ -472,12 +473,10 @@ export default function InfluencerPage() {
           <div className="space-y-2">
             <p className="text-sm">Qual modelo do Flow?</p>
             <div role="radiogroup" aria-label="Modelo do Flow" className="flex flex-wrap gap-2">
-              {isAdmin ? (
-                <span className="rounded-full border border-transparent bg-primary px-4 py-1.5 text-sm text-primary-foreground">Lower Priority · 0 créditos</span>
-              ) : FLOW_MODELS.map((item) => (
+              {FLOW_CHOICES.map((item) => (
                 <button key={item.id} type="button" role="radio" aria-checked={model === item.id} onClick={() => { setModel(item.id); saveFlowCategory(item.id); }}
                   className={cn("rounded-full border px-4 py-1.5 text-sm", model === item.id ? "border-transparent bg-primary text-primary-foreground" : "border-border text-muted-foreground")}>
-                  {item.name} · {item.credits} créd./cena <span className="opacity-70">({item.note})</span>
+                  {item.id === "lower" ? "Lower Priority" : item.name} · {item.credits === 0 ? "0 créditos" : `${item.credits} créd./cena`} <span className="opacity-70">({item.note})</span>
                 </button>
               ))}
             </div>

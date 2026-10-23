@@ -5,7 +5,7 @@ import { Check, ClipboardCopy, Download, ExternalLink, Loader2, Lock, Plus, Refr
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
-import { FLOW_MODELS, readFlowCategory, saveFlowCategory } from "@/lib/flow-models";
+import { FLOW_CHOICES, FLOW_MODELS, defaultFlowCategory, saveFlowCategory } from "@/lib/flow-models";
 import { ReferenceSummary } from "@/components/app/reference-summary";
 import { useSession } from "@/lib/auth-client";
 import { ADMIN_WHATSAPP_URL } from "@/lib/token-balance";
@@ -928,11 +928,11 @@ export function CloneWizard() {
   const [refFile, setRefFile] = useState<File | null>(null);
   const { data: authSession } = useSession();
   const isAdminUser = Boolean((authSession?.user as { is_admin?: boolean } | undefined)?.is_admin);
-  const lowPriority = isAdminUser;
+  const lowPriority = p.flowModel === "lower";
   useEffect(() => {
-    const saved = readFlowCategory();
-    if (saved) setP((cur) => (cur.flowModel === saved ? cur : { ...cur, flowModel: saved }));
-  }, []);
+    const saved = defaultFlowCategory(isAdminUser);
+    setP((cur) => (cur.flowModel === saved ? cur : { ...cur, flowModel: saved }));
+  }, [isAdminUser]);
   const chooseModel = (id: string) => {
     saveFlowCategory(id);
     patch({ flowModel: id });
@@ -947,8 +947,8 @@ export function CloneWizard() {
     language: p.language,
     product: p.product || p.productInfo || p.productLook ? { name: p.product, info: p.productInfo, look: p.productLook } : undefined,
     sceneCount: p.sceneCount,
-    model: lowPriority ? "Veo 3.1 - Lite [Lower Priority]" : (FLOW_MODELS.find((m) => m.id === p.flowModel) ?? FLOW_MODELS[0]).name,
-    flowModel: lowPriority ? "[Lower Priority]" : (FLOW_MODELS.find((m) => m.id === p.flowModel) ?? FLOW_MODELS[0]).needle,
+    model: (FLOW_CHOICES.find((m) => m.id === p.flowModel) ?? FLOW_MODELS[0]).name,
+    flowModel: (FLOW_CHOICES.find((m) => m.id === p.flowModel) ?? FLOW_MODELS[0]).needle,
     lowerPriority: lowPriority,
     videos: p.variations.map((variation, vi) => ({
       title: variation.title,
@@ -963,25 +963,23 @@ export function CloneWizard() {
   // Só quem NÃO tem Lower Priority escolhe o modelo, vendo quantos créditos cada vídeo gasta.
   const modelChooser = () => {
     const low = lowPriority;
-    const model = FLOW_MODELS.find((m) => m.id === p.flowModel) ?? FLOW_MODELS[0];
+    const model = FLOW_CHOICES.find((m) => m.id === p.flowModel) ?? FLOW_MODELS[0];
     const perVideo = model.credits * p.sceneCount;
     return (
       <div className="space-y-2" data-testid="flow-model-chooser">
-        {!low && (
-          <div className="space-y-2 rounded-[12px] border border-[#F5B454]/40 bg-[#F5B454]/10 p-3">
-            <p className="text-xs">Cada cena gasta créditos do seu Flow. Escolha o modelo (ele fica salvo como a sua categoria):</p>
+        <div className="space-y-2 rounded-[12px] border border-[#F5B454]/40 bg-[#F5B454]/10 p-3">
+            <p className="text-xs">{low ? "Lower Priority: não gasta créditos do seu Flow. Se não for o seu caso, escolha outro modelo (ele fica salvo como a sua categoria):" : "Cada cena gasta créditos do seu Flow. Escolha o modelo (ele fica salvo como a sua categoria):"}</p>
             <div className="flex flex-wrap gap-2">
-              {FLOW_MODELS.map((m) => (
+              {FLOW_CHOICES.map((m) => (
                 <button key={m.id} type="button" aria-pressed={m.id === model.id} onClick={() => chooseModel(m.id)} className={cn("rounded-[12px] border px-3 py-2 text-left text-xs", m.id === model.id ? "border-[#7B3FE4] bg-[#7B3FE4]/20" : "border-border text-muted-foreground")}>
                   <span className="block font-medium text-foreground">{m.name}</span>
-                  <span className="block">{m.credits} créditos por cena · {m.note}</span>
+                  <span className="block">{m.credits === 0 ? "0 créditos" : `${m.credits} créditos por cena`} · {m.note}</span>
                 </button>
               ))}
             </div>
-            <p className="text-sm font-medium" data-testid="flow-credits">Cada vídeo de {p.sceneCount} {p.sceneCount === 1 ? "cena" : "cenas"} gasta cerca de {perVideo} créditos ({p.variations.length} {p.variations.length === 1 ? "vídeo" : "vídeos"}: {perVideo * p.variations.length} créditos).</p>
-            <p className="text-xs text-muted-foreground">Mais as imagens e qualquer cena que você refizer. Valores do Flow podem mudar: confira em Configurações, no topo do campo de prompt.</p>
+            {!low && <><p className="text-sm font-medium" data-testid="flow-credits">Cada vídeo de {p.sceneCount} {p.sceneCount === 1 ? "cena" : "cenas"} gasta cerca de {perVideo} créditos ({p.variations.length} {p.variations.length === 1 ? "vídeo" : "vídeos"}: {perVideo * p.variations.length} créditos).</p>
+            <p className="text-xs text-muted-foreground">Mais as imagens e qualquer cena que você refizer. Valores do Flow podem mudar: confira em Configurações, no topo do campo de prompt.</p></>}
           </div>
-        )}
       </div>
     );
   };
@@ -1262,7 +1260,7 @@ export function CloneWizard() {
               <div className="mt-3 rounded-[12px] border border-border bg-card p-3">{modelChooser()}</div>
               <ol className="mt-3 list-decimal space-y-1 pl-5 text-muted-foreground">
                 <li>Abra o <a href="https://labs.google/fx/pt/tools/flow" target="_blank" rel="noopener noreferrer" className="text-[#A98BFF] underline">Flow</a> e, para cada cena, cole o <b>prompt da imagem</b> (Nano Banana, 9:16, x1).</li>
-                <li>Depois anime a imagem: modelo {lowPriority ? <><b>Veo 3.1 - Lite [Lower Priority]</b> (o Flow mostra “A geração vai usar 0 créditos”)</> : <b>{(FLOW_MODELS.find((m) => m.id === p.flowModel) ?? FLOW_MODELS[0]).name}</b>}, 8s, x1, e cole o <b>prompt da animação</b>.</li>
+                <li>Depois anime a imagem: modelo {lowPriority ? <><b>Veo 3.1 - Lite [Lower Priority]</b> (o Flow mostra “A geração vai usar 0 créditos”)</> : <b>{(FLOW_CHOICES.find((m) => m.id === p.flowModel) ?? FLOW_MODELS[0]).name}</b>}, 8s, x1, e cole o <b>prompt da animação</b>.</li>
                 <li>Baixe com o nome indicado (Video01_Cena01.mp4…) e envie todos aqui embaixo.</li>
               </ol>
               <div className="mt-4 rounded-[12px] border border-border bg-card p-3" data-testid="flow-extension">
