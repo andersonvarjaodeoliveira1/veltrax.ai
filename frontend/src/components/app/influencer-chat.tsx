@@ -14,7 +14,7 @@ type Question = { question: string; options: Option[] };
 type Persona = { name: string; age: string; look: string; setting: string };
 type Pin = { id: string; thumb: string; full: string };
 type Board = { scenes: { line: string; what: string }[]; imagePrompts: string[]; videoPrompts: string[] };
-type Phase = "home" | "ask" | "approve" | "photos" | "prompt" | "count" | "model" | "cost" | "board";
+type Phase = "home" | "intake" | "ask" | "approve" | "photos" | "prompt" | "count" | "model" | "cost" | "board";
 
 const FLOW_URL = "https://labs.google/fx/pt/tools/flow";
 const SCENES = 4;
@@ -73,6 +73,16 @@ const S = {
   noChats: ["Seus chats aparecem aqui", "Your chats show up here", "Tus chats aparecen aquí"],
   worked: ["Trabalhou por", "Worked for", "Trabajó durante"],
   askFirst: ["Perguntar antes de gerar", "Ask before generating", "Preguntar antes de generar"],
+  whichNiche: ["Qual é o nicho?", "Which niche?", "¿Cuál es el nicho?"],
+  otherNiche: ["Outro", "Other", "Otro"],
+  hasProduct: ["Você tem foto do produto ou o link dele?", "Do you have a product photo or its link?", "¿Tienes foto del producto o su enlace?"],
+  attachPhoto: ["Anexar foto do produto", "Attach product photo", "Adjuntar foto del producto"],
+  pasteLink: ["Colar o link", "Paste the link", "Pegar el enlace"],
+  noProduct: ["Não tenho", "I don't have one", "No tengo"],
+  linkPh: ["https://…", "https://…", "https://…"],
+  addLink: ["Adicionar", "Add", "Añadir"],
+  reading: ["Lendo o produto…", "Reading the product…", "Leyendo el producto…"],
+  productOk: ["Produto anexado e adicionado ao prompt.", "Product attached and added to the prompt.", "Producto adjuntado y añadido al prompt."],
   preview: ["Pré-visualização", "Preview", "Vista previa"],
 } as const;
 
@@ -118,6 +128,12 @@ export function InfluencerChat() {
   const [videoCount, setVideoCount] = useState(1);
   const [model, setModel] = useState<string>(FLOW_CHOICES[1].id);
   const [boards, setBoards] = useState<Board[]>([]);
+  const [productLook, setProductLook] = useState("");
+  const [productLink, setProductLink] = useState("");
+  const [linkOpen, setLinkOpen] = useState(false);
+  const productRef = useRef<HTMLInputElement>(null);
+  const lookRef = useRef("");
+  const linkRef = useRef("");
   const [active, setActive] = useState(0);
   const [sent, setSent] = useState("");
   const [demo, setDemo] = useState("");
@@ -159,13 +175,15 @@ export function InfluencerChat() {
   function reset() {
     setPhase("home"); setPrompt(""); setSkill(""); setBusy(""); setError(""); setQuestions([]); setQi(0); setPicked(null); setAnswers([]);
     setPersona({ name: "", age: "", look: "", setting: "" }); setSearches([]); setCopyText(""); setPins([]); setPin(null); setPhoto(null);
-    setPrompts([]); setSummaries([]); setVideoCount(1); setBoards([]); setActive(0);
+    setPrompts([]); setSummaries([]); setVideoCount(1); setBoards([]); setActive(0); setProductLook(""); setProductLink(""); setLinkOpen(false);
   }
+
+  const fullPrompt = () => [prompt, lookRef.current && `Produto: ${lookRef.current}`, linkRef.current && `Link do produto: ${linkRef.current}`].filter(Boolean).join("\n");
 
   async function brief(withAnswers: { question: string; answer: string }[]) {
     const response = await fetch("/api/multiplier/clone/influencer-brief", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, skill: skill || undefined, language: lang, answers: withAnswers.length ? withAnswers : undefined }),
+      body: JSON.stringify({ prompt: fullPrompt(), skill: skill && (skill as string) !== "other" ? skill : undefined, language: lang, answers: withAnswers.length ? withAnswers : undefined }),
     });
     if (!response.ok) { await fail(response); return null; }
     return response.json();
@@ -178,12 +196,33 @@ export function InfluencerChat() {
     setPhase("approve");
   }
 
-  async function start() {
-    setError(""); setAnswers([]); setQi(0); setPicked(null); setQuestions([]); setWorked({});
+  function start() {
+    setError(""); setWorked({});
     t0.current = Date.now();
     const next = [{ id: Date.now(), title: prompt.slice(0, 60) }, ...chats.filter((c) => c.title !== prompt.slice(0, 60))].slice(0, 12);
     setChats(next);
     try { window.localStorage.setItem("gv-influencer-chats", JSON.stringify(next)); } catch { /* sem armazenamento */ }
+    setPhase("intake");
+  }
+
+  async function readProduct(files: FileList) {
+    setBusy("think"); setError("");
+    try {
+      const form = new FormData();
+      Array.from(files).slice(0, 3).forEach((file) => form.append("images", file));
+      const response = await fetch("/api/multiplier/clone/product-look", { method: "POST", body: form });
+      if (!response.ok) { await fail(response); setBusy(""); return; }
+      const data = await response.json();
+      setProductLook(typeof data.look === "string" ? data.look : "");
+      setBusy("");
+      void runBrief(typeof data.look === "string" ? data.look : "", "");
+    } catch { setError(t("error")); setBusy(""); }
+  }
+
+  async function runBrief(look = productLook, link = productLink) {
+    setProductLook(look); setProductLink(link);
+    lookRef.current = look; linkRef.current = link;
+    setError(""); setAnswers([]); setQi(0); setPicked(null); setQuestions([]);
     setPhase("ask"); setBusy("think");
     try {
       const data = await brief([]);
@@ -235,7 +274,7 @@ export function InfluencerChat() {
       for (let i = 0; i < videoCount; i += 1) {
         const response = await fetch("/api/multiplier/clone/influencer-storyboard", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ copy: copyText, scene_count: SCENES, persona: { ...persona, extra: "" }, language: LANG_CODE[lang], cadence: "natural", energy: "calm", angle: videoCount > 1 ? ANGLES[i] : "", product: "", product_look: "", show_product: false }),
+          body: JSON.stringify({ copy: copyText, scene_count: SCENES, persona: { ...persona, extra: "" }, language: LANG_CODE[lang], cadence: "natural", energy: "calm", angle: videoCount > 1 ? ANGLES[i] : "", product: "", product_look: productLook, show_product: Boolean(productLook || productLink) }),
         });
         if (!response.ok) { await fail(response); setPhase("cost"); return; }
         result.push(await response.json());
@@ -309,7 +348,35 @@ export function InfluencerChat() {
         </>
       )}
 
-      {busy === "think" && <Working text={t("think")} />}
+      {phase === "intake" && !skill && (
+        <Msg testid="chat-niche">
+          <p>{t("whichNiche")}</p>
+          <div className="flex flex-wrap gap-2">
+            {SKILLS.map((item) => <Chip key={item.id} onClick={() => setSkill(item.id)}>{item.emoji} {item.name[lang]}</Chip>)}
+            <Chip onClick={() => setSkill("other" as SkillId)}>{t("otherNiche")}</Chip>
+          </div>
+        </Msg>
+      )}
+      {phase === "intake" && skill && (
+        <Msg testid="chat-product">
+          <p>{t("hasProduct")}</p>
+          <input ref={productRef} type="file" multiple accept="image/png,image/jpeg,image/webp" className="sr-only" aria-label={t("attachPhoto")}
+            onChange={(event) => { if (event.target.files?.length) void readProduct(event.target.files); event.target.value = ""; }} />
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => productRef.current?.click()} disabled={busy !== ""}><ImagePlus className="size-4" /> {t("attachPhoto")}</Button>
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => setLinkOpen(true)} disabled={busy !== ""}>{t("pasteLink")}</Button>
+            <Button type="button" variant="ghost" className="rounded-full" onClick={() => void runBrief("", "")} disabled={busy !== ""}>{t("noProduct")}</Button>
+          </div>
+          {linkOpen && (
+            <div className="flex gap-2">
+              <input value={productLink} onChange={(event) => setProductLink(event.target.value)} maxLength={300} aria-label={t("pasteLink")} placeholder={t("linkPh")} className="min-w-0 flex-1 rounded-full border border-border bg-background px-4 py-2 text-sm" />
+              <Button type="button" className="rounded-full" disabled={!/^https?:\/\//i.test(productLink.trim())} onClick={() => void runBrief("", productLink.trim())}>{t("addLink")}</Button>
+            </div>
+          )}
+        </Msg>
+      )}
+      {busy === "think" && phase === "intake" && <Working text={t("reading")} />}
+      {busy === "think" && phase !== "intake" && <Working text={t("think")} />}
       {error && <p role="alert" className="rounded-[14px] border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm">{error}</p>}
 
       {answers.length > 0 && <div className="flex flex-wrap justify-center gap-2">{answers.map((a) => <span key={a.question} className="rounded-full bg-muted/50 px-3 py-1 text-xs text-muted-foreground">✓ {a.answer}</span>)}</div>}
@@ -486,7 +553,7 @@ export function InfluencerChat() {
               ))}
             </div>
             <span className="hidden text-xs text-muted-foreground sm:inline">{t("askFirst")}</span>
-            <button type="button" aria-label={t("send")} title={t("send")} onClick={() => void start()} disabled={started || prompt.trim().length < 8}
+            <button type="button" aria-label={t("send")} title={t("send")} onClick={start} disabled={started || prompt.trim().length < 8}
               className="flex size-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white disabled:opacity-40">
               {busy ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-5" />}
             </button>

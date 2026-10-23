@@ -24,6 +24,10 @@ function mockApi(extra: Record<string, (body: unknown) => Response> = {}, bodies
   }));
 }
 
+async function noProduct() {
+  fireEvent.click(await screen.findByRole("button", { name: "Não tenho" }));
+}
+
 async function sendPrompt(text = "Gere uma influencer de 22 anos loira vendendo roupas") {
   fireEvent.change(screen.getByLabelText("Descreva a influencer"), { target: { value: text } });
   fireEvent.click(screen.getByRole("button", { name: "Criar a influencer" }));
@@ -52,6 +56,7 @@ describe("Criar influencer em chat", () => {
     render(<InfluencerPage />);
     fireEvent.click(within(screen.getByRole("group", { name: "Nicho (opcional)" })).getByRole("button", { name: /Shopee/ }));
     await sendPrompt();
+    await noProduct();
     fireEvent.click(await screen.findByRole("radio", { name: /Casual/ }));
     fireEvent.click(screen.getByRole("button", { name: /Continuar/ }));
     expect(await screen.findByTestId("chat-approval")).toHaveTextContent("Bia");
@@ -68,6 +73,8 @@ describe("Criar influencer em chat", () => {
     mockApi({}, bodies);
     render(<InfluencerPage />);
     await sendPrompt();
+    fireEvent.click(within(await screen.findByTestId("chat-niche")).getByRole("button", { name: /Nutra/ }));
+    await noProduct();
     fireEvent.click(await screen.findByRole("button", { name: /^Aprovar/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Seguir sem foto" }));
     fireEvent.click(await screen.findByRole("button", { name: /Fazer os vídeos/ }));
@@ -85,6 +92,24 @@ describe("Criar influencer em chat", () => {
     vi.stubGlobal("fetch", vi.fn(async () => json({ detail: "x" }, 502)));
     render(<InfluencerPage />);
     await sendPrompt();
+    fireEvent.click(within(await screen.findByTestId("chat-niche")).getByRole("button", { name: /Nutra/ }));
+    await noProduct();
     expect(await screen.findByRole("alert")).toHaveTextContent(/Algo deu errado/);
+  });
+
+  it("pergunta o nicho e a foto ou o link do produto, e coloca no prompt", async () => {
+    const bodies: Record<string, unknown>[] = [];
+    mockApi({}, bodies);
+    render(<InfluencerPage />);
+    await sendPrompt();
+    expect(await screen.findByTestId("chat-niche")).toBeInTheDocument();
+    fireEvent.click(within(screen.getByTestId("chat-niche")).getByRole("button", { name: /Dropshipping/ }));
+    expect(await screen.findByTestId("chat-product")).toHaveTextContent(/foto do produto ou o link/);
+    fireEvent.click(screen.getByRole("button", { name: "Colar o link" }));
+    fireEvent.change(screen.getByLabelText("Colar o link", { selector: "input" }), { target: { value: "https://loja.com/produto" } });
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar" }));
+    expect(await screen.findByTestId("chat-approval")).toBeInTheDocument();
+    expect(String(bodies[0].prompt)).toContain("https://loja.com/produto");
+    expect(bodies[0].skill).toBe("dropshipping");
   });
 });
