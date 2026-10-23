@@ -165,4 +165,44 @@ describe("Criar influencer em chat", () => {
     expect(within(screen.getByRole("group", { name: "Nicho (opcional)" })).getByRole("button", { name: /Shopee/ })).toHaveAttribute("aria-pressed", "true");
     window.history.pushState({}, "", "/");
   });
+
+  it("trabalha em cima do modelo do membro: rosto como referência e voz nas cenas", async () => {
+    const bodies: Record<string, unknown>[] = [];
+    const forms: FormData[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      const u = String(url);
+      if (u.includes("influencer-prompt")) { forms.push(init?.body as FormData); return json({ prompts: ["p. visible pores"], summaries: ["Resumo"] }); }
+      const body = typeof init?.body === "string" ? JSON.parse(init.body) : init?.body;
+      if (u.includes("influencer-brief")) { bodies.push(body as Record<string, unknown>); return json(BRIEF); }
+      if (u.includes("influencer-storyboard")) { bodies.push(body as Record<string, unknown>); return json({ scenes: [{ line: "x", what: "y" }], imagePrompts: ["i"], videoPrompts: ["v"] }); }
+      return json({});
+    }));
+    window.localStorage.setItem("gv-influencer-models", JSON.stringify([{ id: "m1", name: "Carol", persona: { name: "Carol", age: "30 anos", look: "morena, cabelo liso", setting: "sala" }, faces: ["data:image/jpeg;base64,AAAA"], voice: "feminina, calma" }]));
+    render(<InfluencerPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Carol" }));
+    await sendPrompt("Faça um vídeo vendendo um suplemento natural");
+    fireEvent.click(await screen.findByRole("button", { name: /^Aprovar/ }));
+    await waitFor(() => expect(forms.length).toBe(1));
+    expect(forms[0].get("image")).toBeInstanceOf(File);
+    expect(forms[0].get("look")).toBe("morena, cabelo liso");
+    expect(String(bodies[0].prompt)).toContain("Carol");
+    fireEvent.click(await screen.findByRole("button", { name: /Fazer os vídeos/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    fireEvent.click(await screen.findByRole("radio", { name: /Lite/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /^Aprovar/ }));
+    expect(await screen.findByRole("link", { name: /Baixar o rosto/ })).toBeInTheDocument();
+    const board = bodies.find((b) => "scene_count" in b) as { persona: { look: string } };
+    expect(board.persona.look).toContain("Voice: feminina, calma");
+  });
+
+  it("salva um novo modelo com nome e voz", async () => {
+    mockApi();
+    render(<InfluencerPage />);
+    fireEvent.click(screen.getByRole("button", { name: /Novo modelo/ }));
+    fireEvent.change(screen.getByLabelText("Nome do modelo"), { target: { value: "Duda" } });
+    fireEvent.change(screen.getByLabelText(/^Voz/), { target: { value: "alegre" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar modelo" }));
+    expect(await screen.findByRole("button", { name: "Duda" })).toHaveAttribute("aria-pressed", "true");
+    expect(window.localStorage.getItem("gv-influencer-models")).toContain("alegre");
+  });
 });

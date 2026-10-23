@@ -10,6 +10,7 @@ import { EXAMPLES, SKILLS, type Lang3, type SkillId } from "@/lib/influencer-exa
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { loadMySkills, saveMySkills } from "@/lib/influencer-skills";
+import { dataUrlToFile, fileToDataUrl, loadModels, saveModels, type MyModel } from "@/lib/influencer-models";
 
 type Option = { label: string; detail?: string };
 type Question = { question: string; options: Option[] };
@@ -108,6 +109,18 @@ const S = {
   saved: ["Skill salva", "Skill saved", "Skill guardada"],
   remove: ["Apagar chat", "Delete chat", "Borrar chat"],
   modelLabel: ["Modelo do Flow", "Flow model", "Modelo de Flow"],
+  myModel: ["Meu modelo", "My model", "Mi modelo"],
+  noModel: ["Nenhum, criar do zero", "None, create from scratch", "Ninguno, crear desde cero"],
+  newModel: ["Novo modelo", "New model", "Nuevo modelo"],
+  modelName: ["Nome do modelo", "Model name", "Nombre del modelo"],
+  modelLook: ["Como ela é (idade, cabelo, estilo)", "What she looks like (age, hair, style)", "Cómo es (edad, pelo, estilo)"],
+  modelFace: ["Anexar rosto (1 a 3 fotos)", "Attach face (1 to 3 photos)", "Adjuntar rostro (1 a 3 fotos)"],
+  modelVoice: ["Voz (ex.: feminina, calma, 30 anos, sotaque paulista)", "Voice (e.g. female, calm, 30s, neutral accent)", "Voz (ej.: femenina, calma, 30 años, acento neutro)"],
+  saveModel: ["Salvar modelo", "Save model", "Guardar modelo"],
+  modelNote: ["O rosto vira a foto de referência e a voz entra em todas as cenas. O Flow não clona a voz de um áudio: a voz é descrita no prompt.", "The face becomes the reference photo and the voice goes into every scene. Flow does not clone a voice from audio: the voice is described in the prompt.", "El rostro es la foto de referencia y la voz entra en todas las escenas. Flow no clona la voz desde un audio: la voz se describe en el prompt."],
+  usingModel: ["Trabalhando em cima do modelo", "Working on model", "Trabajando sobre el modelo"],
+  downloadFace: ["Baixar o rosto para anexar no Flow (Ingredientes)", "Download the face to attach in Flow (Ingredients)", "Descargar el rostro para adjuntar en Flow (Ingredientes)"],
+  deleteModel: ["Apagar modelo", "Delete model", "Borrar modelo"],
   preview: ["Pré-visualização", "Preview", "Vista previa"],
 } as const;
 
@@ -175,6 +188,15 @@ export function InfluencerChat() {
   const [filter2, setFilter2] = useState("");
   const [newProject, setNewProject] = useState("");
   const [modelChosen, setModelChosen] = useState(false);
+  const [models, setModels] = useState<MyModel[]>([]);
+  const [selModelId, setSelModelId] = useState("");
+  const [modelForm, setModelForm] = useState(false);
+  const [mName, setMName] = useState("");
+  const [mLook, setMLook] = useState("");
+  const [mVoice, setMVoice] = useState("");
+  const [mFaces, setMFaces] = useState<string[]>([]);
+  const faceRef = useRef<HTMLInputElement>(null);
+  const selModel = models.find((m) => m.id === selModelId) ?? null;
   const [skillSaved, setSkillSaved] = useState(false);
   const chatId = useRef<number | null>(null);
   const [hydrated, setHydrated] = useState(false);
@@ -186,6 +208,7 @@ export function InfluencerChat() {
       const incoming = params.get("prompt");
       if (incoming) { setPrompt(incoming.slice(0, 600)); const sk = params.get("skill"); if (sk && SKILLS.some((item) => item.id === sk)) setSkill(sk as SkillId); }
     } catch { /* sem URL */ }
+    setModels(loadModels());
     setHydrated(true);
   }, []);
   const persistChats = (list: ChatItem[]) => { setChats(list); try { window.localStorage.setItem("gv-influencer-chats", JSON.stringify(list)); } catch { /* sem armazenamento */ } };
@@ -224,7 +247,7 @@ export function InfluencerChat() {
     setPrompts([]); setSummaries([]); setVideoCount(1); setBoards([]); setActive(0); setProductLook(""); setProductLink(""); setLinkOpen(false); setAttached([]);
   }
 
-  const fullPrompt = () => [prompt, lookRef.current && `Produto: ${lookRef.current}`, linkRef.current && `Link do produto: ${linkRef.current}`].filter(Boolean).join("\n");
+  const fullPrompt = () => [prompt, selModel && `Persona fixa (já existe, não mude): ${selModel.persona.name}, ${selModel.persona.age}, ${selModel.persona.look}, ${selModel.persona.setting}`, lookRef.current && `Produto: ${lookRef.current}`, linkRef.current && `Link do produto: ${linkRef.current}`].filter(Boolean).join("\n");
 
   async function brief(withAnswers: { question: string; answer: string }[]) {
     const response = await fetch("/api/multiplier/clone/influencer-brief", {
@@ -236,7 +259,7 @@ export function InfluencerChat() {
   }
 
   function takeBrief(data: { persona?: Persona; searches?: string[]; copy?: string }) {
-    setPersona(data.persona ?? { name: "", age: "", look: "", setting: "" });
+    setPersona(selModel ? selModel.persona : data.persona ?? { name: "", age: "", look: "", setting: "" });
     setSearches(Array.isArray(data.searches) ? data.searches : []);
     setCopyText(data.copy || prompt);
     setPhase("approve");
@@ -247,6 +270,7 @@ export function InfluencerChat() {
     t0.current = Date.now();
     chatId.current = Date.now();
     persistChats([{ id: chatId.current, title: prompt.slice(0, 60), project }, ...chats].slice(0, 30));
+    if (selModel) { void runBrief("", ""); return; }
     if (attached.length && skill) { setPhase("intake"); void readProduct(attached); return; }
     setPhase("intake");
   }
@@ -288,6 +312,12 @@ export function InfluencerChat() {
   }
 
   async function approve() {
+    if (selModel?.faces[0]) {
+      setPin({ id: "model", thumb: selModel.faces[0], full: selModel.faces[0] });
+      const file = await dataUrlToFile(selModel.faces[0]);
+      void writePrompt(file, null, true);
+      return;
+    }
     setPhase("photos"); setBusy("pins"); setError("");
     try {
       const response = await fetch("/api/multiplier/clone/influencer-pins", {
@@ -297,8 +327,8 @@ export function InfluencerChat() {
     } catch { /* sem fotos: o membro envia a sua ou segue sem foto */ } finally { setBusy(""); }
   }
 
-  async function writePrompt(file: File | null, chosenPin: Pin | null) {
-    setPhoto(file); setPin(chosenPin);
+  async function writePrompt(file: File | null, chosenPin: Pin | null, keepPin = false) {
+    setPhoto(file); if (!keepPin) setPin(chosenPin);
     setPhase("prompt"); setBusy("prompt"); setError("");
     try {
       const form = new FormData();
@@ -320,7 +350,7 @@ export function InfluencerChat() {
         const response = await fetch("/api/multiplier/clone/influencer-storyboard", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            copy: copyText, scene_count: SCENES, persona: { ...persona, extra: "" }, language: LANG_CODE[lang], cadence: "natural", energy: "calm",
+            copy: copyText, scene_count: SCENES, persona: { ...persona, look: persona.look + (selModel?.voice ? `. Voice: ${selModel.voice}` : ""), extra: "" }, language: LANG_CODE[lang], cadence: "natural", energy: "calm",
             angle: videoCount > 1 && vary.hook ? ANGLES[i % ANGLES.length] : "",
             body_style: videoCount > 1 && vary.body ? BODIES[i % BODIES.length] : "",
             cta: videoCount > 1 && vary.cta ? CTAS[lang][i % CTAS[lang].length] : "",
@@ -382,6 +412,21 @@ export function InfluencerChat() {
     setWorked(snap.worked ?? {}); setProject(chat.project ?? "");
     setPhase(((snap.phase as Phase) === "ask" || (snap.phase as Phase) === "intake") ? "approve" : (snap.phase as Phase));
   }
+
+  async function addFaces(files: FileList | null) {
+    if (!files?.length) return;
+    const urls = await Promise.all(Array.from(files).slice(0, 3).map((file) => fileToDataUrl(file)));
+    setMFaces(urls);
+  }
+  function saveModel() {
+    const nameClean = mName.trim().slice(0, 40);
+    if (!nameClean) return;
+    const item: MyModel = { id: String(Date.now()), name: nameClean, persona: { name: nameClean, age: "", look: mLook.trim().slice(0, 300), setting: "" }, faces: mFaces, voice: mVoice.trim().slice(0, 200) };
+    const next = [item, ...models];
+    if (!saveModels(next)) { setError(t("error")); return; }
+    setModels(next); setSelModelId(item.id); setModelForm(false); setMName(""); setMLook(""); setMVoice(""); setMFaces([]);
+  }
+  function deleteModel(id: string) { const next = models.filter((m) => m.id !== id); setModels(next); saveModels(next); if (selModelId === id) setSelModelId(""); }
 
   function deleteChat(id: number) { persistChats(chats.filter((c) => c.id !== id)); if (chatId.current === id) reset(); }
   function addProject() {
@@ -478,6 +523,36 @@ export function InfluencerChat() {
         <>
           <h1 className="pt-4 text-center text-3xl font-semibold tracking-tight">{t("home")}</h1>
           {composer}
+          <div className="space-y-3" data-testid="my-models">
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <span className="text-xs text-muted-foreground">{t("myModel")}:</span>
+              <Chip on={selModelId === ""} onClick={() => setSelModelId("")}>{t("noModel")}</Chip>
+              {models.map((m) => (
+                <span key={m.id} className="inline-flex items-center gap-1">
+                  <Chip on={selModelId === m.id} onClick={() => setSelModelId(m.id)}>{m.name}</Chip>
+                  <button type="button" aria-label={`${t("deleteModel")}: ${m.name}`} onClick={() => deleteModel(m.id)} className="text-muted-foreground hover:text-foreground"><X className="size-3.5" /></button>
+                </span>
+              ))}
+              <Chip onClick={() => setModelForm((open) => !open)}>+ {t("newModel")}</Chip>
+            </div>
+            {modelForm && (
+              <div className="space-y-3 rounded-[18px] border border-border bg-card p-4" data-testid="model-form">
+                <input value={mName} onChange={(event) => setMName(event.target.value)} maxLength={40} aria-label={t("modelName")} placeholder={t("modelName")} className="w-full rounded-full border border-border bg-background px-4 py-2 text-sm" />
+                <input value={mLook} onChange={(event) => setMLook(event.target.value)} maxLength={300} aria-label={t("modelLook")} placeholder={t("modelLook")} className="w-full rounded-full border border-border bg-background px-4 py-2 text-sm" />
+                <input value={mVoice} onChange={(event) => setMVoice(event.target.value)} maxLength={200} aria-label={t("modelVoice")} placeholder={t("modelVoice")} className="w-full rounded-full border border-border bg-background px-4 py-2 text-sm" />
+                <input ref={faceRef} type="file" multiple accept="image/png,image/jpeg,image/webp" className="sr-only" aria-label={t("modelFace")} onChange={(event) => { void addFaces(event.target.files); event.target.value = ""; }} />
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button type="button" variant="outline" className="rounded-full" onClick={() => faceRef.current?.click()}><ImagePlus className="size-4" /> {t("modelFace")}</Button>
+                  {mFaces.map((src, n) => (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img key={n} src={src} alt="" className="h-12 rounded-md" />
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">{t("modelNote")}</p>
+                <Button type="button" className="rounded-full" disabled={mName.trim().length < 2} onClick={saveModel}>{t("saveModel")}</Button>
+              </div>
+            )}
+          </div>
           <div className="space-y-4" data-testid="influencer-examples">
             <div role="group" aria-label={t("all")} className="flex flex-wrap justify-center gap-2">
               {([["all", t("all")], ...SKILLS.map((s) => [s.id, `${s.emoji} ${s.name[lang]}`])] as [SkillId | "all", string][]).map(([id, label]) => (
@@ -694,6 +769,9 @@ export function InfluencerChat() {
               {sent === "all" ? <Check className="size-4 text-[#5BD69A]" /> : <ClipboardCopy className="size-4" />} {t("onlyPrompts")}
             </button>
           </div>
+          {selModel?.faces[0] && (
+            <a href={selModel.faces[0]} download={`${selModel.name}.jpg`} className="inline-block rounded-full border border-border px-4 py-2 text-sm hover:text-foreground">⬇ {t("downloadFace")}</a>
+          )}
           <div className="space-y-1" data-testid="next-steps">
             <p className="text-muted-foreground">{t("nextSteps")}</p>
             <button type="button" onClick={saveAsSkill} disabled={skillSaved} className="block w-full rounded-[12px] px-2 py-2 text-left hover:bg-muted disabled:opacity-60">↳ {skillSaved ? `✓ ${t("saved")}` : t("saveSkill")}</button>
