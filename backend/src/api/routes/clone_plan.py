@@ -103,12 +103,22 @@ Every prompt must restate the variation's look in the same words, so the same pe
 No text on screen.{PRODUCT_IMAGES if product else ""}
 {SAFETY}"""
 
-def videos_system(n: int, product: bool = False) -> str:
-    return f"""You write image-to-video prompts for Google Flow / Veo, 9:16 vertical, 8 seconds each, one set per variation in the same order.
+def videos_system(n: int, product: bool = False, structured: bool = False) -> str:
+    base = f"""You write image-to-video prompts for Google Flow / Veo, 9:16 vertical, 8 seconds each, one set per variation in the same order.
 The approved image of the scene is used as the first frame, so do not redescribe the person's appearance: describe the movement, the camera and the mood, and keep the same person and setting.
 Each set has exactly {n} prompt{"s" if n != 1 else ""} in English, one per scene, 250-500 characters each.
 Put the scene's spoken line in double quotes, in the language it is written in, word for word as given, said to camera. Never change, shorten or translate it. Say that the person speaks at a brisk natural pace and finishes the sentence about half a second before the clip ends, with no cut mid-word.{PRODUCT_VIDEOS if product else ""}
 {SAFETY}"""
+    return base + (STRUCTURED_VIDEO if structured else "")
+
+
+STRUCTURED_VIDEO = """
+Format of EACH prompt (replace the 250-500 characters limit: 700-1100 characters), four labelled parts on separate lines:
+Subject: who is on screen (keep her exact face and identity from the source image, same clothes) and the setting, in one or two sentences.
+Action: about 1.2s of silent lead-in with the mouth closed and still, then she says the line once, continuously, at a lively, natural pace, with small expressive micro-gestures; she finishes about 0.5s before the end with the mouth closing and no filler. The hand holding the phone stays out of frame.
+Camera: vertical 9:16 front phone-camera selfie framing with a subtle natural handheld micro-shake and slight organic drift, never tripod-stable; the background stays stable, only the camera moves.
+Style: authentic iPhone front-camera UGC look, realistic amateur quality, mild sensor grain, true-to-life skin with visible pores, no beauty filter, no smoothing, completely clean frame with zero text, captions or watermarks.
+The spoken line goes in the Action part, in double quotes, word for word."""
 
 
 class _Scene(BaseModel):
@@ -408,7 +418,7 @@ async def _scene_prompts(system: str, scenes: list[dict[str, str]], variations: 
         raise _fail()
     sets: list[dict[str, list[str]]] = []
     for item in out.items[: len(variations)]:
-        prompts = [_text(p, 900) for p in item.prompts if p.strip()][: len(scenes)]
+        prompts = [_text(p, 1200) for p in item.prompts if p.strip()][: len(scenes)]
         if len(prompts) < len(scenes):
             raise _fail()
         sets.append({"prompts": prompts})
@@ -422,7 +432,7 @@ async def stage_images(ctx: dict[str, Any], scenes: list[dict[str, str]], variat
 
 async def stage_videos(ctx: dict[str, Any], scenes: list[dict[str, str]], variations: list[dict[str, str]], lines: list[list[str]], model: Any = None):
     product = _product_block(ctx)
-    return await _scene_prompts(videos_system(len(scenes), bool(product)) + lang_note(ctx), scenes, variations, lines, model, product)
+    return await _scene_prompts(videos_system(len(scenes), bool(product), bool(ctx.get("structured"))) + lang_note(ctx), scenes, variations, lines, model, product)
 
 
 @router.post("/generate")
@@ -765,6 +775,7 @@ async def influencer_storyboard(request: Request, db: AsyncSession = Depends(get
         "setting": _clip(str(persona.get("setting") or ""), 200),
     }
     ctx = _context({**data, "reference": data.get("copy"), "keyword": data.get("keyword") or "X", "count": 1})
+    ctx["structured"] = True
     _check_script_rate(user_id)
     scenes = await stage_scenes(ctx)
     images = await stage_images(ctx, scenes, [variation])
