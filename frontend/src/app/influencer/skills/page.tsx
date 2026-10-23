@@ -16,6 +16,11 @@ const S = {
   recreate: ["Recriar", "Recreate", "Recrear"],
   back: ["Voltar ao chat", "Back to chat", "Volver al chat"],
   none: ["Você ainda não salvou skills. Depois de criar um vídeo no chat, toque em “Salvar como skill”.", "You have no saved skills yet. After making a video in the chat, tap “Save as skill”.", "Aún no guardaste skills. Después de crear un video en el chat, toca “Guardar como skill”."],
+  newSkill: ["Criar a minha skill", "Create my skill", "Crear mi skill"],
+  nameLabel: ["Nome da skill", "Skill name", "Nombre de la skill"],
+  promptLabel: ["Descreva a influencer e o vídeo", "Describe the influencer and the video", "Describe a la influencer y el video"],
+  nichePick: ["Nicho (opcional)", "Niche (optional)", "Nicho (opcional)"],
+  add: ["Adicionar skill", "Add skill", "Añadir skill"],
   remove: ["Apagar", "Delete", "Borrar"],
 } as const;
 
@@ -26,6 +31,9 @@ export default function InfluencerSkillsPage() {
   const [tab, setTab] = useState<"explore" | "mine">("explore");
   const [category, setCategory] = useState<SkillCategory | "all">("all");
   const [mine, setMine] = useState<MySkill[]>([]);
+  const [name, setName] = useState("");
+  const [text, setText] = useState("");
+  const [niche, setNiche] = useState("");
   useEffect(() => { setMine(loadMySkills()); }, []);
 
   const href = (prompt: string, skill: string) => `/influencer?prompt=${encodeURIComponent(prompt)}${skill ? `&skill=${skill}` : ""}`;
@@ -73,6 +81,22 @@ export default function InfluencerSkillsPage() {
 
       {tab === "mine" && (
         <div className="space-y-3">
+          <form className="space-y-3 rounded-[18px] border border-border bg-card p-4" onSubmit={(event) => {
+            event.preventDefault();
+            const next = [{ id: String(Date.now()), title: name.trim().slice(0, 60), prompt: text.trim().slice(0, 600), skill: niche }, ...mine];
+            setMine(next); saveMySkills(next); setName(""); setText(""); setNiche("");
+          }}>
+            <p className="font-medium">{S.newSkill[i]}</p>
+            <input value={name} onChange={(event) => setName(event.target.value)} maxLength={60} aria-label={S.nameLabel[i]} placeholder={S.nameLabel[i]} className="w-full rounded-full border border-border bg-background px-4 py-2 text-sm" />
+            <textarea value={text} onChange={(event) => setText(event.target.value)} rows={3} maxLength={600} aria-label={S.promptLabel[i]} placeholder={S.promptLabel[i]} className="w-full rounded-[14px] border border-border bg-background px-4 py-2 text-sm" />
+            <div role="group" aria-label={S.nichePick[i]} className="flex flex-wrap gap-2">
+              {SKILLS.map((item) => (
+                <button key={item.id} type="button" aria-pressed={niche === item.id} onClick={() => setNiche(niche === item.id ? "" : item.id)}
+                  className={cn("rounded-full border px-3 py-1 text-xs", niche === item.id ? "border-transparent bg-primary text-primary-foreground" : "border-border text-muted-foreground")}>{item.emoji} {item.name[lang]}</button>
+              ))}
+            </div>
+            <button type="submit" disabled={name.trim().length < 2 || text.trim().length < 8} className="rounded-full bg-[#7B3FE4] px-5 py-2 text-sm font-medium text-white disabled:opacity-40">{S.add[i]}</button>
+          </form>
           {mine.length === 0 && <p className="text-sm text-muted-foreground">{S.none[i]}</p>}
           {mine.map((item) => (
             <div key={item.id} className="flex items-center gap-3 rounded-[18px] border border-border bg-card p-4" data-testid="my-skill">

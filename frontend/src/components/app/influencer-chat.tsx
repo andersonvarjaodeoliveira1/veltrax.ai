@@ -392,7 +392,7 @@ export function InfluencerChat() {
   }
   function saveAsSkill() {
     const list = loadMySkills();
-    saveMySkills([{ id: String(Date.now()), title: prompt.slice(0, 60), prompt, skill: skill && (skill as string) !== "other" ? skill : "" }, ...list].slice(0, 30));
+    saveMySkills([{ id: String(Date.now()), title: prompt.slice(0, 60), prompt, skill: skill && (skill as string) !== "other" ? skill : "" }, ...list]);
     setSkillSaved(true);
   }
 

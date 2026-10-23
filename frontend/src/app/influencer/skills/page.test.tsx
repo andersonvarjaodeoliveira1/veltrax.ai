@@ -25,4 +25,16 @@ describe("Skills do Criar influencer", () => {
     expect(screen.queryByTestId("my-skill")).toBeNull();
     expect(window.localStorage.getItem("gv-influencer-myskills")).toBe("[]");
   });
+
+  it("deixa o membro inserir quantas skills quiser", () => {
+    render(<InfluencerSkillsPage />);
+    fireEvent.click(screen.getByRole("tab", { name: "Minhas skills" }));
+    for (let n = 1; n <= 35; n += 1) {
+      fireEvent.change(screen.getByLabelText("Nome da skill"), { target: { value: `Skill ${n}` } });
+      fireEvent.change(screen.getByLabelText("Descreva a influencer e o vídeo"), { target: { value: "Influencer de 25 anos mostrando o produto" } });
+      fireEvent.click(screen.getByRole("button", { name: "Adicionar skill" }));
+    }
+    expect(screen.getAllByTestId("my-skill")).toHaveLength(35);
+    expect(JSON.parse(window.localStorage.getItem("gv-influencer-myskills") ?? "[]")).toHaveLength(35);
+  });
 });
