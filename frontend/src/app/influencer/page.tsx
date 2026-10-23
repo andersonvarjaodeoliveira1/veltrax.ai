@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useSession } from "@/lib/auth-client";
 import { FLOW_MODELS, readFlowCategory, saveFlowCategory } from "@/lib/flow-models";
+import { TypedText } from "@/components/app/typed-text";
 import { LastFrame } from "@/components/app/last-frame";
 import { PageHeader } from "@/components/app/page-header";
 import { cn } from "@/lib/utils";
@@ -367,7 +368,7 @@ export default function InfluencerPage() {
                       {copied === index ? <Check className="size-3.5 text-[#5BD69A]" /> : <ClipboardCopy className="size-3.5" />} {copied === index ? "Copiado" : "Copiar"}
                     </button>
                   </div>
-                  <p className="whitespace-pre-line font-mono text-xs leading-relaxed">{prompt}</p>
+                  <TypedText text={prompt} className="whitespace-pre-line font-mono text-xs leading-relaxed" />
                 </div>
               ))}
               <div className="space-y-3 rounded-[14px] border border-[#A98BFF]/40 bg-[#7B3FE4]/10 p-4" data-testid="flow-generate">
@@ -435,6 +436,9 @@ export default function InfluencerPage() {
               </label>
             )}
           </div>
+          <details className="rounded-[14px] border border-border p-3" data-testid="more-options">
+            <summary className="cursor-pointer text-sm font-medium">Mais ajustes (opcional) <span className="font-normal text-muted-foreground">· já vem tudo no padrão recomendado</span></summary>
+            <div className="mt-3 space-y-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-2">
               <p className="text-sm">Abertura (opcional)</p>
@@ -487,6 +491,8 @@ export default function InfluencerPage() {
               ? "No Flow, escolha Vídeo > Frames. A cena 1 começa na imagem da pessoa; cada cena seguinte começa no último quadro da anterior. A pessoa e o cenário não mudam, e custa o mesmo por cena."
               : "Cada cena começa do zero a partir do prompt. É mais rápido, mas o rosto pode variar entre as cenas."}</p>
           </div>
+            </div>
+          </details>
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <span>Cenas:</span>
             <button type="button" aria-label="Menos uma cena" className="size-8 rounded-full border border-border" onClick={() => setSceneCount((n) => Math.max(1, n - 1))}>−</button>

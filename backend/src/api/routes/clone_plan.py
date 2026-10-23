@@ -720,10 +720,18 @@ async def influencer_pins(request: Request, db: AsyncSession = Depends(get_db)):
         seen: set[str] = set()
         jobs: list[tuple[str, dict[str, Any]]] = [(q, {"search": q, "getDetails": False, "maxItems": 8, "endPage": 1}) for q in queries]
         if author:
-            jobs = [(f"@{author}", {"startUrls": [{"url": f"https://www.pinterest.com/{author}/"}], "getDetails": False, "maxItems": 16, "endPage": 1})] + jobs
+            jobs = [(f"@{author}", {"startUrls": [f"https://www.pinterest.com/{author}/"], "getDetails": False, "maxItems": 16, "endPage": 1})] + jobs
         for query, run_input in jobs:
             call = client.actor(PIN_ACTOR).call(run_input=run_input, timeout_secs=90)
-            for item in client.dataset(call["defaultDatasetId"]).iterate_items():
+            items = list(client.dataset(call["defaultDatasetId"]).iterate_items())
+            if items and items[0].get("type") == "user":
+                # A profile only lists pin links: fetch the first ones to get their pictures.
+                links = [str(link) for link in (items[0].get("pins") or []) if str(link).startswith("https://www.pinterest.com/pin/")][:12]
+                if not links:
+                    continue
+                call = client.actor(PIN_ACTOR).call(run_input={"startUrls": links, "getDetails": True, "maxItems": 12}, timeout_secs=120)
+                items = list(client.dataset(call["defaultDatasetId"]).iterate_items())
+            for item in items:
                 images = item.get("images") or {}
                 small = (images.get("474x") or {}).get("url")
                 big = (images.get("736x") or {}).get("url") or small

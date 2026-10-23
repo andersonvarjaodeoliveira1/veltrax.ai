@@ -87,6 +87,7 @@ describe("Criar influencer", () => {
     await screen.findByTestId("product-block");
     fireEvent.change(screen.getByLabelText("Fotos do produto"), { target: { files: [new File(["x"], "p.png", { type: "image/png" })] } });
     expect(await screen.findByDisplayValue(/dark blue jar/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText(/Mais ajustes/));
     fireEvent.click(screen.getByRole("radio", { name: "Pergunta" }));
     fireEvent.click(screen.getByRole("radio", { name: "Inglês" }));
     fireEvent.click(screen.getByRole("button", { name: /Montar o storyboard/ }));

@@ -236,3 +236,40 @@ input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus-visibl
   box-shadow: 0 0 0 3px rgba(123, 63, 228, 0.25);
   outline: none;
 }
+
+/* Caixa de texto viva: brilho roxo que "respira" enquanto a pessoa escreve (versão Gringatools) */
+@keyframes gt-glow {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(123, 63, 228, 0.22), 0 0 14px rgba(123, 63, 228, 0.18); }
+  50% { box-shadow: 0 0 0 4px rgba(169, 139, 255, 0.34), 0 0 26px rgba(123, 63, 228, 0.38); }
+}
+textarea:focus-visible { animation: gt-glow 2.4s ease-in-out infinite; caret-color: #a98bff; }
+
+/* Toque nos botões roxos: ondas concêntricas, como no envio do prompt */
+@keyframes gt-ripple {
+  0% { opacity: 0.85; transform: translate(-50%, -50%) scale(0.2); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
+}
+button[class*="to-[#7B3FE4]"], a[class*="to-[#7B3FE4]"] { position: relative; }
+button[class*="to-[#7B3FE4]"]:active::after, button[class*="to-[#7B3FE4]"]:active::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 150%;
+  aspect-ratio: 1;
+  border-radius: 9999px;
+  border: 2px solid rgba(169, 139, 255, 0.9);
+  pointer-events: none;
+  animation: gt-ripple 0.7s ease-out;
+}
+button[class*="to-[#7B3FE4]"]:active::before { animation-delay: 0.12s; border-color: rgba(123, 63, 228, 0.8); }
+
+/* Texto que aparece "digitando" (resultado da IA) */
+@keyframes gt-caret { 50% { opacity: 0; } }
+.gt-typing::after { content: ""; display: inline-block; width: 2px; height: 1em; margin-left: 2px; vertical-align: -0.12em; background: #a98bff; animation: gt-caret 0.9s steps(1) infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  textarea:focus-visible { animation: none; }
+  button[class*="to-[#7B3FE4]"]:active::after, button[class*="to-[#7B3FE4]"]:active::before { animation: none; display: none; }
+  .gt-typing::after { animation: none; }
+}
