@@ -468,10 +468,10 @@ export function InfluencerChat() {
   );
 
   const composer = (
-    <div className="rounded-[24px] bg-[#1a191d] p-4 ring-1 ring-white/5 focus-within:ring-[#A98BFF]/50" data-testid="chat-composer">
+    <div className="rounded-[26px] bg-[#1a191d] p-5 ring-1 ring-white/10 shadow-[0_20px_60px_-30px_#000] focus-within:ring-[#A98BFF]/50" data-testid="chat-composer">
       <textarea value={started ? "" : prompt} onChange={(event) => setPrompt(event.target.value)} rows={3} maxLength={600} disabled={started} aria-label={lang === "en" ? "Describe the influencer" : lang === "es" ? "Describe a la influencer" : "Descreva a influencer"}
         placeholder={phase === "home" ? (demo ? `${demo}▍` : t("ph")) : t("follow")}
-        className="min-h-[84px] w-full resize-none bg-transparent px-1 py-1 text-base outline-none placeholder:text-muted-foreground/70 disabled:opacity-60" />
+        className="min-h-[96px] w-full resize-none bg-transparent px-1 py-1 text-lg outline-none placeholder:text-muted-foreground/70 disabled:opacity-60" />
       <div className="mt-2 flex items-center gap-2">
         <input ref={attachRef} type="file" multiple accept="image/png,image/jpeg,image/webp" className="sr-only" aria-label={t("attachPhoto")}
           onChange={(event) => { const files = Array.from(event.target.files ?? []).slice(0, 3); if (files.length) setAttached(files); event.target.value = ""; }} />
@@ -483,7 +483,7 @@ export function InfluencerChat() {
         {attached.length > 0 && !started && <button type="button" aria-label={t("stop")} onClick={() => setAttached([])} className="text-muted-foreground hover:text-foreground"><X className="size-3.5" /></button>}
         <select aria-label={t("modelLabel")} value={model} onChange={(event) => { setModel(event.target.value); saveFlowCategory(event.target.value); setModelChosen(true); }} disabled={started}
           className="max-w-[10rem] truncate rounded-full bg-white/5 px-3 py-1.5 text-xs font-medium disabled:opacity-60">
-          {FLOW_CHOICES.map((item) => <option key={item.id} value={item.id}>{item.id === "lower" ? "Lower Priority" : item.name}</option>)}
+          {FLOW_CHOICES.map((item) => <option key={item.id} value={item.id}>{item.id === "lower" ? "Lower Priority · 0 créditos" : item.name}</option>)}
         </select>
         {projects.length > 0 && (
           <select aria-label={t("projects")} value={project} onChange={(event) => setProject(event.target.value)} disabled={started}
@@ -492,9 +492,9 @@ export function InfluencerChat() {
             {projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select>
         )}
-        <span className="ml-auto hidden items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground lg:inline-flex">✋ {t("askFirst")}</span>
+        <span className="ml-auto inline-flex items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">✋ {t("askFirst")}</span>
         <button type="button" aria-label={t("send")} title={t("send")} onClick={start} disabled={started || prompt.trim().length < 8}
-          className="ml-auto flex size-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#A98BFF] to-[#7B3FE4] text-white disabled:opacity-40 lg:ml-0">
+          className="flex size-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#A98BFF] to-[#7B3FE4] text-white disabled:opacity-40">
           {busy ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-5" />}
         </button>
       </div>
@@ -550,9 +550,9 @@ export function InfluencerChat() {
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-8 sm:px-8">
       {phase === "home" && (
         <>
-          <div className="flex items-center justify-center gap-3 pt-6">
-            <span aria-hidden className="grid size-11 place-items-center rounded-[14px] bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white shadow-[0_10px_28px_-10px_#7B3FE4]"><Sparkles className="size-6" /></span>
-            <h1 className="text-3xl font-bold uppercase tracking-tight sm:text-4xl">{session?.user?.name && <span aria-hidden>{session.user.name.split(" ")[0]}, </span>}{t("home")}</h1>
+          <div className="flex items-center justify-center gap-3 pb-2 pt-10">
+            <span aria-hidden className="grid size-10 shrink-0 place-items-center rounded-[12px] bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white shadow-[0_10px_28px_-10px_#7B3FE4]"><Sparkles className="size-5" /></span>
+            <h1 className="text-2xl font-extrabold uppercase tracking-tight sm:text-3xl">{session?.user?.name && <span aria-hidden>{session.user.name.split(" ")[0]}, </span>}{t("home")}</h1>
           </div>
           {composer}
           {nicheRow}
@@ -593,19 +593,18 @@ export function InfluencerChat() {
                   className={cn("rounded-[10px] px-3.5 py-1.5 text-xs font-medium", filter === id ? "bg-white/10 text-foreground" : "text-muted-foreground hover:bg-white/5")}>{label}</button>
               ))}
             </div>
-            <div className="grid gap-x-4 gap-y-6 sm:grid-cols-2 2xl:grid-cols-3">
+            <div className="grid gap-x-4 gap-y-6 sm:grid-cols-2">
               {shown.map((item) => (
                 <button key={item.id} type="button" onClick={() => { setPrompt(item.prompt[lang]); setSkill(item.skill); }} className="group text-left">
-                  <div className="relative aspect-[4/3] overflow-hidden rounded-[16px] ring-1 ring-white/10" style={{ background: `linear-gradient(135deg, ${item.from}, ${item.to})` }} aria-hidden>
+                  <div className="relative aspect-[16/10] overflow-hidden rounded-[20px] ring-1 ring-white/10" style={{ background: `linear-gradient(135deg, ${item.from}, ${item.to})` }} aria-hidden>
                     <span className="absolute inset-0 grid place-items-center text-6xl transition group-hover:scale-110">{item.emoji}</span>
                     <span className="absolute left-3 top-3 rounded-full bg-black/40 px-2 py-0.5 text-[10px] font-medium text-white">{SKILLS.find((x) => x.id === item.skill)?.name[lang]}</span>
                   </div>
-                  <span className="mt-2 flex items-center gap-2">
+                  <span className="mt-3 flex items-center gap-3">
                     <span aria-hidden className="grid size-7 shrink-0 place-items-center rounded-[9px] bg-white/10 text-sm">{item.emoji}</span>
                     <span className="min-w-0 flex-1 truncate text-sm font-medium">{item.title[lang]}</span>
                     <span className="rounded-full bg-[#7B3FE4] px-3 py-1 text-xs font-medium text-white opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100">{t("recreate")}</span>
                   </span>
-                  <span className="mt-1 line-clamp-2 block text-xs text-muted-foreground">{item.format[lang]}</span>
                 </button>
               ))}
             </div>
