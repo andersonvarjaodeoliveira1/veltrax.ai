@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CloneWizard } from "./clone-wizard";
 
@@ -456,7 +456,7 @@ describe("idle project", () => {
     open(11);
     render(<CloneWizard />);
     expect(await screen.findByText(/foi apagado\. Este é um projeto novo/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Escolher o vídeo que quero clonar/ })).toBeInTheDocument();
+    expect(screen.getByTestId("start-quest")).toBeInTheDocument();
     expect(JSON.parse(window.localStorage.getItem("gv-clonagem-v2") ?? "{}").reference).toBe("");
   });
 
@@ -497,4 +497,18 @@ it("when the tokens run out it says so and links the administrator's WhatsApp", 
   await user.click(screen.getByRole("button", { name: "Separar em cenas" }));
   expect(await screen.findByText(/Seus tokens acabaram/)).toBeInTheDocument();
   expect(screen.getByRole("link", { name: /Chamar o administrador no WhatsApp/ })).toHaveAttribute("href", expect.stringContaining("wa.me/5511913142143"));
+});
+
+describe("Missões do começo", () => {
+  it("guia em 4 passos até escolher o vídeo", async () => {
+    window.localStorage.clear();
+    render(<CloneWizard />);
+    const quest = await screen.findByTestId("start-quest");
+    expect(quest).toHaveTextContent("Missão 1 de 4");
+    fireEvent.click(screen.getByRole("button", { name: "Avançar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Avançar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Avançar" }));
+    expect(screen.getByTestId("quest-xp")).toHaveTextContent("30 XP");
+    expect(screen.getByRole("button", { name: /Escolher o vídeo que quero clonar/ })).toBeInTheDocument();
+  });
 });

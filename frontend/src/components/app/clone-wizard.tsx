@@ -364,6 +364,7 @@ export function CloneWizard() {
   const [mode, setMode] = useState<"free" | "auto">("free");
   const [simple, setSimple] = useState(true);
   const [askProduct, setAskProduct] = useState(false);
+  const [qStep, setQStep] = useState(1);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [productPhotos, setProductPhotos] = useState<{ url: string; name: string }[]>([]);
   const [lookState, setLookState] = useState<"idle" | "reading" | "done" | "failed">("idle");
@@ -1175,18 +1176,8 @@ export function CloneWizard() {
                   <Button type="button" size="lg" variant="outline" className="rounded-full" onClick={() => fileRef.current?.click()}>Escolher outro vídeo</Button>
                 </div>
               </>
-            ) : (
-              <>
-                <Button type="button" size="lg" className="w-full rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] py-7 text-base text-white" onClick={() => fileRef.current?.click()}>
-                  <Upload className="size-5" /> Escolher o vídeo que quero clonar
-                </Button>
-                <ol className="space-y-1 text-sm text-muted-foreground">
-                  <li>1. Você escolhe o vídeo.</li>
-                  <li>2. O ClipGringa lê, separa em cenas e escreve tudo sozinho.</li>
-                  <li>3. Você clica em “Enviar para o Flow” e gera.</li>
-                </ol>
-              </>
-            )}
+            ) : null}
+            {hasReference ? (
             <section className="space-y-4 rounded-[18px] border border-border bg-card p-5">
               <p className="font-medium">Como o vídeo termina</p>
               <Group label="Idioma da fala" hint="A voz e os textos do vídeo saem neste idioma.">
@@ -1203,6 +1194,54 @@ export function CloneWizard() {
                 No final o vídeo diz: <span className="text-foreground">“{p.cta.replace("{KEYWORD}", p.keyword.trim() || "PALAVRA")}”</span>
               </p>
             </section>
+            ) : (
+              <div className="space-y-4" data-testid="start-quest">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs font-semibold">
+                    <span className="text-[#A98BFF]">Missão {qStep} de 4</span>
+                    <span data-testid="quest-xp">⭐ {(qStep - 1) * 10} XP</span>
+                  </div>
+                  <div role="progressbar" aria-label="Missões" aria-valuemin={0} aria-valuemax={4} aria-valuenow={qStep - 1} className="h-2.5 overflow-hidden rounded-full bg-border">
+                    <div className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A98BFF] transition-[width] duration-500" style={{ width: `${((qStep - 1) / 4) * 100}%` }} />
+                  </div>
+                </div>
+                {qStep === 1 && (<div className="gt-pop space-y-3"><p className="font-medium">Em que idioma o vídeo fala?</p>
+              <Group label="Idioma da fala" hint="A voz e os textos do vídeo saem neste idioma.">
+                <Chips label="Idioma da fala" value={p.language} onPick={chooseLanguage} options={LANGUAGES.map((l) => ({ value: l.value, text: l.text }))} />
+              </Group>
+                </div>)}
+                {qStep === 2 && (<div className="gt-pop space-y-3"><p className="font-medium">O que a pessoa comenta?</p>
+              <Group label="Palavra-chave da CTA (o que a pessoa comenta)">
+                <KeywordPicker keyword={p.keyword} keepCase={p.keepCase} placeholder="Ou escreva outra palavra" onChange={(keyword) => patch({ keyword })} onKeepCase={(keepCase) => patch({ keepCase, keyword: keepCase ? p.keyword : p.keyword.toUpperCase() })} />
+              </Group>
+                </div>)}
+                {qStep === 3 && (<div className="gt-pop space-y-3"><p className="font-medium">Como o vídeo termina?</p>
+              <Group label="Frase final (o que a pessoa ouve no fim)" hint="Escolha uma pronta ou escreva a sua. Use {KEYWORD} onde vai a palavra-chave.">
+                <Chips label="Frases prontas" value={p.cta} onPick={(cta) => patch({ cta })} options={(CTA_BY_LANG[p.language] ?? CTA_PRESETS).map((c) => ({ value: c, text: c.replace("{KEYWORD}", "…") }))} />
+                <input value={p.cta} onChange={(event) => patch({ cta: event.target.value })} maxLength={200} aria-label="Escreva a sua frase final" placeholder="Ou escreva a sua frase, ex.: Comente {KEYWORD} e receba o guia" className={inputClass} />
+              </Group>
+                  <p className="rounded-[12px] bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                    No final o vídeo diz: <span className="text-foreground">“{p.cta.replace("{KEYWORD}", p.keyword.trim() || "PALAVRA")}”</span>
+                  </p>
+                </div>)}
+                {qStep === 4 && (
+                  <div className="gt-pop space-y-3">
+                    <Button type="button" size="lg" className="gt-btn3d w-full rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] py-7 text-base text-white" onClick={() => fileRef.current?.click()}>
+                      <Upload className="size-5" /> Escolher o vídeo que quero clonar
+                    </Button>
+                    <ol className="space-y-1 text-sm text-muted-foreground">
+                      <li>1. Você escolhe o vídeo.</li>
+                      <li>2. O ClipGringa lê, separa em cenas e escreve tudo sozinho.</li>
+                      <li>3. Você clica em “Enviar para o Flow” e gera.</li>
+                    </ol>
+                  </div>
+                )}
+                <div className="flex justify-between gap-2">
+                  <Button type="button" variant="ghost" className="rounded-full" onClick={() => setQStep((n) => Math.max(1, n - 1))} disabled={qStep === 1}>Voltar</Button>
+                  {qStep < 4 && <Button type="button" className="gt-btn3d rounded-full" onClick={() => setQStep((n) => Math.min(4, n + 1))}>Avançar</Button>}
+                </div>
+              </div>
+            )}
             <details className="rounded-[14px] border border-border p-3 text-sm">
               <summary className="cursor-pointer font-medium">Falar sobre o meu produto (opcional)</summary>
               <div className="mt-3">{productFields}</div>
