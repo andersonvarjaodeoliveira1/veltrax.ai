@@ -31,12 +31,12 @@ export function AffiliateReviewActions({ affiliateId, status, appStoreCodeAdded 
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || "Failed to update application");
+        throw new Error(data.error || "Não foi possível atualizar o pedido");
       }
       setConfirming(null);
       router.refresh();
     } catch (reviewError) {
-      setError(reviewError instanceof Error ? reviewError.message : "Failed to update application");
+      setError(reviewError instanceof Error ? reviewError.message : "Não foi possível atualizar o pedido");
     } finally {
       setPending(null);
     }
@@ -48,20 +48,20 @@ export function AffiliateReviewActions({ affiliateId, status, appStoreCodeAdded 
         <Input
           value={reason}
           onChange={(event) => setReason(event.target.value)}
-          placeholder={confirming === "decline" ? "Reason, sent to the applicant (optional)" : "Internal note (optional)"}
+          placeholder={confirming === "decline" ? "Motivo, enviado ao criador (opcional)" : "Nota interna (opcional)"}
           maxLength={1000}
           className="h-8 w-64 text-xs"
         />
         <div className="flex gap-2">
           <Button variant="ghost" size="sm" onClick={() => setConfirming(null)} disabled={pending !== null}>
-            Cancel
+            Cancelar
           </Button>
           <Button variant="destructive" size="sm" onClick={() => review(confirming)} disabled={pending !== null}>
-            {pending ? "Saving..." : confirming === "decline" ? "Decline" : "Revoke"}
+            {pending ? "Salvando..." : confirming === "decline" ? "Recusar" : "Revogar"}
           </Button>
         </div>
         {confirming === "revoke" && appStoreCodeAdded && (
-          <span className="text-xs text-muted-foreground">Also deactivate their code in App Store Connect.</span>
+          <span className="text-xs text-muted-foreground">Desative também o código dele no App Store Connect.</span>
         )}
         {error && <span className="text-xs text-red-600">{error}</span>}
       </div>
@@ -73,24 +73,24 @@ export function AffiliateReviewActions({ affiliateId, status, appStoreCodeAdded 
       {status === "pending" && (
         <>
           <Button variant="outline" size="sm" onClick={() => setConfirming("decline")} disabled={pending !== null}>
-            Decline
+            Recusar
           </Button>
           <Button size="sm" onClick={() => review("approve")} disabled={pending !== null}>
-            {pending === "approve" ? "Approving..." : "Approve"}
+            {pending === "approve" ? "Aprovando..." : "Aprovar"}
           </Button>
         </>
       )}
       {status === "approved" &&
         (appStoreCodeAdded ? (
-          <span className="text-xs text-muted-foreground">App Store code added</span>
+          <span className="text-xs text-muted-foreground">Código da App Store adicionado</span>
         ) : (
           <Button variant="outline" size="sm" onClick={() => review("app_store_code_added")} disabled={pending !== null}>
-            {pending === "app_store_code_added" ? "Saving..." : "Mark App Store code added"}
+            {pending === "app_store_code_added" ? "Salvando..." : "Marcar código da App Store adicionado"}
           </Button>
         ))}
       {status === "approved" && (
         <Button variant="outline" size="sm" onClick={() => setConfirming("revoke")} disabled={pending !== null}>
-          Revoke
+          Revogar
         </Button>
       )}
       {error && <span className="text-xs text-red-600">{error}</span>}

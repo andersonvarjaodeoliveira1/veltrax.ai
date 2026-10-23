@@ -26,12 +26,12 @@ type RuntimeSettingsFormProps = {
 
 function sourceBadge(setting: RuntimeSetting) {
   if (setting.source === "environment") {
-    return <Badge className="bg-foreground text-background">Environment</Badge>;
+    return <Badge className="bg-foreground text-background">Ambiente</Badge>;
   }
   if (setting.source === "admin") {
-    return <Badge className="bg-brand-soft text-brand">Admin setting</Badge>;
+    return <Badge className="bg-brand-soft text-brand">Definido no painel</Badge>;
   }
-  return <Badge variant="outline">Unset</Badge>;
+  return <Badge variant="outline">Não definido</Badge>;
 }
 
 export function RuntimeSettingsForm({ settings }: RuntimeSettingsFormProps) {
@@ -98,14 +98,14 @@ export function RuntimeSettingsForm({ settings }: RuntimeSettingsFormProps) {
           detail?: string;
           error?: string;
         } | null;
-        setError(payload?.detail || payload?.error || "Failed to save settings");
+        setError(payload?.detail || payload?.error || "Não foi possível salvar");
         return;
       }
 
       setValues({});
       setDeleteKeys({});
       setPriorityOverrides({});
-      setMessage("Settings saved.");
+      setMessage("Configurações salvas.");
       startTransition(() => router.refresh());
     } finally {
       setIsSaving(false);
@@ -139,7 +139,7 @@ export function RuntimeSettingsForm({ settings }: RuntimeSettingsFormProps) {
                   }))
                 }
                 placeholder={
-                  setting.configured ? "Configured value is hidden" : "Add value"
+                  setting.configured ? "Valor salvo (oculto)" : "Adicionar valor"
                 }
                 className="h-9 w-full rounded-lg border bg-background px-3 text-sm outline-none transition-shadow placeholder:text-muted-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
                 autoComplete="off"
@@ -147,7 +147,7 @@ export function RuntimeSettingsForm({ settings }: RuntimeSettingsFormProps) {
               <p className="mt-1 text-xs text-muted-foreground">{setting.description}</p>
               {setting.overridden_by_env && (
                 <p className="mt-1 text-xs text-amber-700">
-                  The saved admin value is present but ignored while the env var is set.
+                  O valor salvo aqui existe, mas é ignorado enquanto a variável de ambiente estiver definida.
                 </p>
               )}
             </div>
@@ -167,7 +167,7 @@ export function RuntimeSettingsForm({ settings }: RuntimeSettingsFormProps) {
                 }
                 className="h-4 w-4 rounded border-border accent-foreground"
               />
-              Prefer saved
+              Priorizar o salvo
             </label>
 
             <label className="flex items-center gap-2 text-sm text-muted-foreground lg:justify-end">
@@ -184,7 +184,7 @@ export function RuntimeSettingsForm({ settings }: RuntimeSettingsFormProps) {
                 className="h-4 w-4 rounded border-border accent-foreground"
               />
               <Trash2 className="h-4 w-4" aria-hidden="true" />
-              Clear saved
+              Apagar o salvo
             </label>
           </div>
         ))}
@@ -201,7 +201,7 @@ export function RuntimeSettingsForm({ settings }: RuntimeSettingsFormProps) {
           className="inline-flex h-9 items-center gap-2 rounded-lg bg-foreground px-4 text-sm font-medium text-background transition-colors hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Save className="h-4 w-4" aria-hidden="true" />
-          {isPending || isSaving ? "Saving" : "Save settings"}
+          {isPending || isSaving ? "Salvando" : "Salvar configurações"}
         </button>
       </div>
     </form>

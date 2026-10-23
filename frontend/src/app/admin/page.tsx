@@ -38,7 +38,7 @@ function Panel({ title, description, action, children }: { title: string; descri
 function TaskCell({ id, title }: { id: string; title?: string | null }) {
   return (
     <td className={td}>
-      <Link href={`/tasks/${id}`} className="block max-w-[420px] truncate font-medium hover:underline">{title || "Untitled source"}</Link>
+      <Link href={`/tasks/${id}`} className="block max-w-[420px] truncate font-medium hover:underline">{title || "Origem sem título"}</Link>
       <span className="font-mono text-[11px] text-muted-foreground">{id.slice(0, 8)}</span>
     </td>
   );
@@ -63,8 +63,8 @@ export default async function AdminPage({
 
   if (!session?.user) {
     return (
-      <Gate message="You need to sign in to view this page.">
-        <Link href="/sign-in" className="mt-6 inline-block text-sm font-medium underline underline-offset-4">Go to sign in</Link>
+      <Gate message="Entre na sua conta para ver esta página.">
+        <Link href="/sign-in" className="mt-6 inline-block text-sm font-medium underline underline-offset-4">Ir para o login</Link>
       </Gate>
     );
   }
@@ -72,7 +72,7 @@ export default async function AdminPage({
   const isAdmin = Boolean((session.user as { is_admin?: boolean }).is_admin);
 
   if (!isAdmin) {
-    return <Gate message="You are signed in, but your account is not an admin." />;
+    return <Gate message="Você está logado, mas esta conta não é de administrador." />;
   }
 
   const { user: selectedUserId } = await searchParams;
@@ -89,7 +89,7 @@ export default async function AdminPage({
         cache: "no-store",
       });
       if (!response.ok) {
-        return { settings: [], error: "Unable to load runtime settings." };
+        return { settings: [], error: "Não foi possível carregar as configurações." };
       }
       const payload = (await response.json()) as { settings?: RuntimeSetting[] };
       return { settings: payload.settings ?? [], error: null };
@@ -240,19 +240,19 @@ export default async function AdminPage({
   const generationCountByUser = new Map(tasksByUser.map((item) => [item.user_id, item._count._all]));
 
   const stats = [
-    { label: "Total users", value: totalUsers },
-    { label: "Admins", value: adminUsers },
-    { label: "Total tasks", value: totalTasks },
-    { label: "Completed tasks", value: completedTasks },
-    { label: "Currently processing", value: activeTasks, live: activeTasks > 0 },
+    { label: "Total de usuários", value: totalUsers },
+    { label: "Administradores", value: adminUsers },
+    { label: "Total de tarefas", value: totalTasks },
+    { label: "Tarefas concluídas", value: completedTasks },
+    { label: "Em processamento", value: activeTasks, live: activeTasks > 0 },
   ];
 
   return (
     <main className="mx-auto w-full max-w-7xl space-y-6 px-4 py-8 sm:px-8 md:py-10">
       <div>
-        <h1 className="font-display text-3xl font-bold tracking-tight">Admin Dashboard</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Manage users and monitor overall platform activity.</p>
-        <Link href="/admin/announcements" className="mt-3 inline-block text-sm font-medium text-brand underline-offset-4 hover:underline">Manage announcements</Link>
+        <h1 className="font-display text-3xl font-bold tracking-tight">Painel do administrador</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Gerencie os usuários e acompanhe a atividade da plataforma.</p>
+        <Link href="/admin/announcements" className="mt-3 inline-block text-sm font-medium text-brand underline-offset-4 hover:underline">Gerenciar avisos</Link>
       </div>
 
       <MemberAccessPanel />
@@ -270,30 +270,30 @@ export default async function AdminPage({
 
       <div id="affiliates" className="scroll-mt-6">
         <Panel
-          title="Creator Program"
-          description={`${pendingAffiliates} pending application${pendingAffiliates === 1 ? "" : "s"}. Approving creates the Stripe code and gives the creator Pro.`}
+          title="Programa de criadores"
+          description={`${pendingAffiliates} ${pendingAffiliates === 1 ? "pedido pendente" : "pedidos pendentes"}. Aprovar cria o código no Stripe e libera o Pro para o criador.`}
         >
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y">
-              <thead className="bg-muted/40"><tr><th className={th}>Creator</th><th className={th}>Code</th><th className={th}>Channel</th><th className={th}>Pitch</th><th className={cn(th, "text-right")}>Action</th></tr></thead>
+              <thead className="bg-muted/40"><tr><th className={th}>Criador</th><th className={th}>Código</th><th className={th}>Canal</th><th className={th}>Proposta</th><th className={cn(th, "text-right")}>Ação</th></tr></thead>
               <tbody className="divide-y">
                 {sortedAffiliates.length === 0 ? (
-                  <tr><td className={cn(td, "text-muted-foreground")} colSpan={5}>No applications yet.</td></tr>
+                  <tr><td className={cn(td, "text-muted-foreground")} colSpan={5}>Nenhum pedido ainda.</td></tr>
                 ) : sortedAffiliates.map((affiliate) => (
                   <tr key={affiliate.id} className="align-top hover:bg-muted/30">
                     <td className={td}>
                       <p className="flex items-center gap-2 font-medium">
-                        {affiliate.user.name || "Unnamed user"}
+                        {affiliate.user.name || "Usuário sem nome"}
                         <Badge variant={affiliate.status === "pending" ? "default" : "outline"} className="capitalize">{affiliate.status}</Badge>
                       </p>
-                      <p className="text-xs text-muted-foreground">{affiliate.user.email} · applied {affiliate.created_at.toLocaleDateString()}</p>
+                      <p className="text-xs text-muted-foreground">{affiliate.user.email} · pediu em {affiliate.created_at.toLocaleDateString()}</p>
                     </td>
                     <td className={cn(td, "font-mono")}>{affiliate.slug?.toUpperCase()}</td>
                     <td className={td}>
                       <a href={affiliate.profile_url} target="_blank" rel="noopener noreferrer" className="font-medium capitalize underline-offset-4 hover:underline">{affiliate.platform}</a>
-                      <p className="text-xs text-muted-foreground">{affiliate.audience_size} followers</p>
+                      <p className="text-xs text-muted-foreground">{affiliate.audience_size} seguidores</p>
                       {affiliate.video_url && (
-                        <a href={affiliate.video_url} target="_blank" rel="noopener noreferrer" className="text-xs underline-offset-4 hover:underline">ClipGringa video</a>
+                        <a href={affiliate.video_url} target="_blank" rel="noopener noreferrer" className="text-xs underline-offset-4 hover:underline">Vídeo do ClipGringa</a>
                       )}
                     </td>
                     <td className={cn(td, "max-w-xs text-xs text-muted-foreground")}>{affiliate.promotion_plan || "—"}</td>
@@ -312,13 +312,13 @@ export default async function AdminPage({
         <div className="px-5 py-4 text-sm"><Link href="/admin/uso" className="underline underline-offset-4">Abrir o painel de uso</Link></div>
       </Panel>
 
-      <Panel title="Currently Processing Tasks" description="Live queue across all users.">
+      <Panel title="Em processamento agora" description="Fila ao vivo de todos os usuários.">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y">
-            <thead className="bg-muted/40"><tr><th className={th}>Task</th><th className={th}>User</th><th className={th}>Status</th><th className={th}>Updated</th></tr></thead>
+            <thead className="bg-muted/40"><tr><th className={th}>Tarefa</th><th className={th}>Usuário</th><th className={th}>Status</th><th className={th}>Atualizado</th></tr></thead>
             <tbody className="divide-y">
               {processingNow.length === 0 ? (
-                <tr><td className={cn(td, "text-muted-foreground")} colSpan={4}>No tasks are currently processing.</td></tr>
+                <tr><td className={cn(td, "text-muted-foreground")} colSpan={4}>Nenhuma tarefa em processamento.</td></tr>
               ) : processingNow.map((task) => (
                 <tr key={task.id} className="hover:bg-muted/30">
                   <TaskCell id={task.id} title={task.source?.title} />
@@ -333,16 +333,16 @@ export default async function AdminPage({
       </Panel>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <Panel title="Users" description="Most recent users. Toggle admin access and inspect user tasks.">
+        <Panel title="Usuários" description="Usuários mais recentes. Dê ou tire o acesso de administrador e veja as tarefas de cada um.">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y">
-              <thead className="bg-muted/40"><tr><th className={th}>User</th><th className={th}>Plan</th><th className={th}>Tasks</th><th className={cn(th, "text-right")}>Action</th></tr></thead>
+              <thead className="bg-muted/40"><tr><th className={th}>Usuário</th><th className={th}>Plano</th><th className={th}>Tarefas</th><th className={cn(th, "text-right")}>Ação</th></tr></thead>
               <tbody className="divide-y">
                 {recentUsers.map((user) => (
                   <tr key={user.id} className={cn("hover:bg-muted/30", user.id === selectedUserId && "bg-brand-soft/60")}>
                     <td className={td}>
                       <p className="flex items-center gap-2 font-medium">
-                        {user.name || "Unnamed user"}
+                        {user.name || "Usuário sem nome"}
                         {user.is_admin && <Badge className="bg-foreground text-background">Admin</Badge>}
                       </p>
                       <p className="text-xs text-muted-foreground">{user.email} · joined {user.createdAt.toLocaleDateString()}</p>
@@ -364,19 +364,19 @@ export default async function AdminPage({
         </Panel>
 
         <Panel
-          title="User Task Explorer"
-          description={selectedUser ? `Viewing ${selectedUser.name || selectedUser.email} (${selectedUser.email})` : "Inspect generations for a specific user."}
-          action={selectedUserId ? <Link href="/admin" className="text-xs font-medium underline-offset-4 hover:underline">Clear filter</Link> : undefined}
+          title="Tarefas por usuário"
+          description={selectedUser ? `Vendo ${selectedUser.name || selectedUser.email} (${selectedUser.email})` : "Veja as gerações de um usuário específico."}
+          action={selectedUserId ? <Link href="/admin" className="text-xs font-medium underline-offset-4 hover:underline">Limpar filtro</Link> : undefined}
         >
           {!selectedUser ? (
-            <p className="px-5 py-10 text-center text-sm text-muted-foreground">Select a user&apos;s task count to view their tasks.</p>
+            <p className="px-5 py-10 text-center text-sm text-muted-foreground">Toque no número de tarefas de um usuário para ver as tarefas dele.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y">
-                <thead className="bg-muted/40"><tr><th className={th}>Task</th><th className={th}>Status</th><th className={th}>Clips</th><th className={th}>Created</th></tr></thead>
+                <thead className="bg-muted/40"><tr><th className={th}>Tarefa</th><th className={th}>Status</th><th className={th}>Cortes</th><th className={th}>Criado</th></tr></thead>
                 <tbody className="divide-y">
                   {selectedUserTasks.length === 0 ? (
-                    <tr><td className={cn(td, "text-muted-foreground")} colSpan={4}>No tasks found for this user.</td></tr>
+                    <tr><td className={cn(td, "text-muted-foreground")} colSpan={4}>Nenhuma tarefa deste usuário.</td></tr>
                   ) : selectedUserTasks.map((task) => (
                     <tr key={task.id} className="hover:bg-muted/30">
                       <TaskCell id={task.id} title={task.source?.title} />
@@ -392,10 +392,10 @@ export default async function AdminPage({
         </Panel>
       </div>
 
-      <Panel title="Recent Generations" description="Latest task activity across the platform.">
+      <Panel title="Gerações recentes" description="Últimas atividades de todas as tarefas da plataforma.">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y">
-            <thead className="bg-muted/40"><tr><th className={th}>Task</th><th className={th}>User</th><th className={th}>Status</th><th className={th}>Clips</th><th className={th}>Created</th></tr></thead>
+            <thead className="bg-muted/40"><tr><th className={th}>Tarefa</th><th className={th}>Usuário</th><th className={th}>Status</th><th className={th}>Cortes</th><th className={th}>Criado</th></tr></thead>
             <tbody className="divide-y">
               {recentGenerations.map((task) => (
                 <tr key={task.id} className="hover:bg-muted/30">
@@ -411,7 +411,7 @@ export default async function AdminPage({
         </div>
       </Panel>
 
-      <Panel title="Runtime Settings" description="Configure provider keys and model settings without editing env files.">
+      <Panel title="Configurações do sistema" description="Configure as chaves dos provedores e os modelos sem mexer em arquivos.">
         {runtimeSettings.error ? (
           <div className="px-5 py-5 text-sm text-red-700">{runtimeSettings.error}</div>
         ) : (

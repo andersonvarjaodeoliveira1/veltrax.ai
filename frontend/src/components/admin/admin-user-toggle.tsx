@@ -34,12 +34,12 @@ export function AdminUserToggle({ userId, isAdmin, isCurrentUser }: AdminUserTog
 
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || "Failed to update user");
+        throw new Error(data.error || "Não foi possível atualizar o usuário");
       }
 
       router.refresh();
     } catch (toggleError) {
-      setError(toggleError instanceof Error ? toggleError.message : "Failed to update user");
+      setError(toggleError instanceof Error ? toggleError.message : "Não foi possível atualizar o usuário");
     } finally {
       setIsLoading(false);
     }
@@ -53,7 +53,7 @@ export function AdminUserToggle({ userId, isAdmin, isCurrentUser }: AdminUserTog
         onClick={handleToggle}
         disabled={isLoading || (isCurrentUser && isAdmin)}
       >
-        {isLoading ? "Saving..." : isAdmin ? "Remove Admin" : "Make Admin"}
+        {isLoading ? "Salvando..." : isAdmin ? "Remover admin" : "Tornar admin"}
       </Button>
       {error && <span className="text-xs text-red-600">{error}</span>}
     </div>

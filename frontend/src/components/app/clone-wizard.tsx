@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import { FLOW_MODELS, readFlowCategory, saveFlowCategory } from "@/lib/flow-models";
+import { ReferenceSummary } from "@/components/app/reference-summary";
 import { useSession } from "@/lib/auth-client";
 import { ADMIN_WHATSAPP_URL } from "@/lib/token-balance";
 import { announceTokens, readTokenBalance } from "@/lib/token-alert";
@@ -501,6 +502,7 @@ export function CloneWizard() {
   async function readReference(file: File) {
     if (!file.type.startsWith("video/")) { setError("Envie um arquivo de vídeo (mp4, mov ou webm)."); return; }
     setError(null);
+    setRefFile(file);
     setBusy("upload");
     const taskId = startTask("Transcrevendo o vídeo de referência");
     try {
@@ -922,6 +924,8 @@ export function CloneWizard() {
 
   // Só a conta administradora usa o Lower Priority. Os membros usam a categoria (modelo) que escolheram em
   // "Conectar ao Flow"; ela vira o padrão aqui e pode ser trocada neste projeto.
+  // O vídeo anexado fica só nesta sessão (para mostrar os quadros); a copy dele já fica no projeto.
+  const [refFile, setRefFile] = useState<File | null>(null);
   const { data: authSession } = useSession();
   const isAdminUser = Boolean((authSession?.user as { is_admin?: boolean } | undefined)?.is_admin);
   const lowPriority = isAdminUser;
@@ -1138,6 +1142,8 @@ export function CloneWizard() {
             </p>
           </div>
         )}
+
+        {!ready && (refFile || p.reference.trim()) && <ReferenceSummary file={refFile} transcript={p.reference} />}
 
         {!ready && !working && askProduct && (
           <section aria-label="Produto" className="space-y-4 rounded-[18px] border border-[#A98BFF]/40 bg-card p-5">
@@ -1416,6 +1422,7 @@ export function CloneWizard() {
                 {busy === "upload" ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
                 {busy === "upload" ? "Transcrevendo o vídeo…" : "Escolher vídeo"}
               </Button>
+              {(refFile || p.reference.trim()) && <ReferenceSummary file={refFile} transcript={p.reference} />}
               <Field label="Transcrição do vídeo (ou descreva o que acontece)" hint="Preenchida sozinha ao escolher o vídeo. Você pode editar ou colar o texto direto.">
                 <textarea value={p.reference} onChange={(event) => patch({ reference: event.target.value })} rows={5} maxLength={4000} className={inputClass} />
               </Field>
