@@ -65,6 +65,10 @@ const S = {
   toneYoung: ["Jovem", "Young", "Joven"],
   toneMature: ["Madura", "Mature", "Madura"],
   creditsWord: ["créditos", "credits", "créditos"],
+  quota: ["A IA está no limite de uso agora. Espere alguns minutos e tente de novo.", "The AI is at its usage limit right now. Wait a few minutes and try again.", "La IA está en su límite de uso ahora. Espera unos minutos e inténtalo de nuevo."],
+  hint1: ["Isso pode levar até 1 minuto", "This can take up to 1 minute", "Esto puede tardar hasta 1 minuto"],
+  hint2: ["Pode deixar esta aba aberta, eu aviso quando terminar", "Keep this tab open, I will tell you when it is done", "Deja esta pestaña abierta, te aviso al terminar"],
+  hint3: ["Quase lá…", "Almost there…", "Casi listo…"],
   estimate: ["Estimativa de gasto", "Estimated cost", "Gasto estimado"],
   estFree: ["Sem custo no Lower Priority. Se a sua conta não tiver, usa o Lite (~40 créditos por vídeo).", "Free with Lower Priority. If your account has none, it uses Lite (~40 credits per video).", "Sin costo con Lower Priority. Si tu cuenta no lo tiene, usa Lite (~40 créditos por video)."],
   seeMore: ["Ver mais", "See more", "Ver más"],
@@ -166,9 +170,18 @@ const Chip = ({ on, onClick, children, role }: { on?: boolean; onClick: () => vo
   <button type="button" role={role} aria-checked={role ? Boolean(on) : undefined} aria-pressed={role ? undefined : on} onClick={onClick}
     className={cn("rounded-full border px-4 py-1.5 text-sm", on ? "border-transparent bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:text-foreground")}>{children}</button>
 );
-const Working = ({ text }: { text: string }) => (
-  <div role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin text-[#A98BFF]" /> {text}</div>
-);
+function Working({ text, hints }: { text: string; hints?: string[] }) {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => { const timer = window.setInterval(() => setSeconds((n) => n + 1), 1000); return () => window.clearInterval(timer); }, []);
+  const hint = hints && hints.length ? hints[Math.floor(seconds / 5) % hints.length] : "";
+  return (
+    <div role="status" className="space-y-2 rounded-[16px] border border-white/10 bg-white/[0.03] px-4 py-3 text-sm">
+      <div className="flex items-center gap-2 text-foreground"><Loader2 className="size-4 animate-spin text-[#A98BFF]" /> <span>{text}</span><span className="ml-auto text-xs tabular-nums text-muted-foreground">{seconds}s</span></div>
+      <div className="h-1 overflow-hidden rounded-full bg-white/10"><span className="block h-full w-1/3 animate-[progress-sheen_1.6s_ease-in-out_infinite] rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A98BFF]" /></div>
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+    </div>
+  );
+}
 
 export function InfluencerChat() {
   const { lang: rawLang } = useI18n();
@@ -274,7 +287,7 @@ export function InfluencerChat() {
   const lower = chosen.id === "lower";
 
   async function fail(response: Response) {
-    try { const data = await response.json(); setError(data?.detail === "TOKENS_EXHAUSTED" ? t("tokens") : t("error")); } catch { setError(t("error")); }
+    try { const data = await response.json(); setError(data?.detail === "TOKENS_EXHAUSTED" ? t("tokens") : data?.detail === "AI_QUOTA" ? t("quota") : t("error")); } catch { setError(t("error")); }
   }
 
   function reset() {
@@ -502,10 +515,10 @@ export function InfluencerChat() {
     <div className="relative">
       {/* luz roxa girando em volta da caixa */}
       <span aria-hidden className="pointer-events-none absolute -inset-1 overflow-hidden rounded-[30px] opacity-70 blur-lg">
-        <span className="absolute left-1/2 top-1/2 aspect-square w-[160%] -translate-x-1/2 -translate-y-1/2 animate-spin bg-[conic-gradient(from_0deg,transparent_0deg,#7B3FE4_70deg,#A98BFF_120deg,transparent_200deg,transparent_360deg)] [animation-duration:5s] motion-reduce:animate-none" />
+        <span className="absolute left-1/2 top-1/2 aspect-square w-[160%] -translate-x-1/2 -translate-y-1/2 animate-spin bg-[conic-gradient(from_0deg,transparent_0deg,#7B3FE4_70deg,#A98BFF_120deg,transparent_200deg,transparent_360deg)] [animation-duration:5s] " />
       </span>
       <span aria-hidden className="pointer-events-none absolute -inset-px overflow-hidden rounded-[27px]">
-        <span className="absolute left-1/2 top-1/2 aspect-square w-[160%] -translate-x-1/2 -translate-y-1/2 animate-spin bg-[conic-gradient(from_0deg,transparent_0deg,#7B3FE4_70deg,#C9BBFA_120deg,transparent_200deg,transparent_360deg)] [animation-duration:5s] motion-reduce:animate-none" />
+        <span className="absolute left-1/2 top-1/2 aspect-square w-[160%] -translate-x-1/2 -translate-y-1/2 animate-spin bg-[conic-gradient(from_0deg,transparent_0deg,#7B3FE4_70deg,#C9BBFA_120deg,transparent_200deg,transparent_360deg)] [animation-duration:4s]" />
       </span>
     <div className="relative rounded-[26px] bg-[#1a191d] p-5 ring-1 ring-white/10 shadow-[0_20px_60px_-30px_#000]" data-testid="chat-composer">
       <textarea value={started ? "" : prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); if (!started && !busy && prompt.trim().length >= 8) start(); } }} rows={3} maxLength={600} disabled={started} aria-label={lang === "en" ? "Describe the influencer" : lang === "es" ? "Describe a la influencer" : "Descreva a influencer"}
@@ -639,13 +652,13 @@ export function InfluencerChat() {
             <div className="grid gap-x-4 gap-y-6 sm:grid-cols-2">
               {shown.map((item) => (
                 <button key={item.id} type="button" onClick={() => { setPrompt(item.prompt[lang]); setSkill(item.skill); }} className="group text-left">
-                  <div className="relative aspect-[16/10] overflow-hidden rounded-[20px] ring-1 ring-white/10" style={{ background: `linear-gradient(135deg, ${item.from}, ${item.to})` }} aria-hidden>
-                    <span className="absolute inset-0 grid place-items-center text-6xl transition group-hover:scale-110">{item.emoji}</span>
-                    <span className="absolute left-3 top-3 rounded-full bg-black/40 px-2 py-0.5 text-[10px] font-medium text-white">{SKILLS.find((x) => x.id === item.skill)?.name[lang]}</span>
+                  <div className="relative aspect-[16/10] overflow-hidden rounded-[20px] ring-1 ring-white/10" style={{ background: `radial-gradient(120% 90% at 20% 0%, ${item.from}66, transparent 60%), radial-gradient(100% 90% at 100% 100%, ${item.to}55, transparent 60%), #17161b` }} aria-hidden>
+                    <span className="absolute left-1/2 top-1/2 size-28 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/[0.06] blur-sm transition group-hover:scale-110" />
+                    <span className="absolute inset-0 grid place-items-center text-5xl transition group-hover:scale-110">{item.emoji}</span>
+                    <span className="absolute bottom-3 left-3 rounded-full bg-black/45 px-2.5 py-0.5 text-[10px] font-medium text-white/90">{SKILLS.find((x) => x.id === item.skill)?.name[lang]}</span>
                   </div>
                   <span className="mt-3 flex items-center gap-3">
-                    <span aria-hidden className="grid size-7 shrink-0 place-items-center rounded-[9px] bg-white/10 text-sm">{item.emoji}</span>
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{item.title[lang]}</span>
+                    <span className="min-w-0 flex-1 line-clamp-2 text-sm font-medium leading-snug">{item.title[lang]}</span>
                     <span className="rounded-full bg-[#7B3FE4] px-3 py-1 text-xs font-medium text-white opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100">{t("recreate")}</span>
                   </span>
                 </button>
@@ -682,8 +695,8 @@ export function InfluencerChat() {
           )}
         </Msg>
       )}
-      {busy === "think" && phase === "intake" && <Working text={t("reading")} />}
-      {busy === "think" && phase !== "intake" && <Working text={t("think")} />}
+      {busy === "think" && phase === "intake" && <Working hints={[t("hint1"), t("hint2"), t("hint3")]} text={t("reading")} />}
+      {busy === "think" && phase !== "intake" && <Working hints={[t("hint1"), t("hint2"), t("hint3")]} text={t("think")} />}
       {error && <p role="alert" className="rounded-[14px] border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm">{error}</p>}
 
       {answers.length > 0 && <div className="flex flex-wrap justify-center gap-2">{answers.map((a) => <span key={a.question} className="rounded-full bg-muted/50 px-3 py-1 text-xs text-muted-foreground">✓ {a.answer}</span>)}</div>}
@@ -715,7 +728,7 @@ export function InfluencerChat() {
           </div>
         </Msg>
       )}
-      {busy === "build" && <Working text={t("build")} />}
+      {busy === "build" && <Working hints={[t("hint1"), t("hint2"), t("hint3")]} text={t("build")} />}
 
       {phase === "approve" && (
         <div className="space-y-3 rounded-[20px] border border-[#A98BFF]/40 bg-card p-4" data-testid="chat-approval">
@@ -763,7 +776,7 @@ export function InfluencerChat() {
         </Msg>
       )}
 
-      {busy === "prompt" && <Working text={t("writing")} />}
+      {busy === "prompt" && <Working hints={[t("hint1"), t("hint2"), t("hint3")]} text={t("writing")} />}
       {["prompt", "count", "model", "cost", "board"].includes(phase) && prompts.length > 0 && (
         <Msg testid="chat-prompt">
           {worked.prompt && <p className="flex items-center gap-3 text-xs text-muted-foreground" data-testid="worked"><span>{t("worked")} {worked.prompt}s</span><span aria-hidden className="h-px flex-1 bg-white/10" /></p>}
@@ -847,7 +860,7 @@ export function InfluencerChat() {
           )}
         </div>
       )}
-      {busy === "board" && <Working text={t("making")} />}
+      {busy === "board" && <Working hints={[t("hint1"), t("hint2"), t("hint3")]} text={t("making")} />}
 
       {phase === "board" && board && (
         <Msg testid="storyboard">

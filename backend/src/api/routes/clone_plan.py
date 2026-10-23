@@ -328,8 +328,12 @@ async def _run(system: str, output_type: type[BaseModel], prompt: str, model: An
                 logger.warning("clone plan: quota reached on %s, trying the next model", candidate)
                 continue
             logger.exception("clone plan stage failed")
+            if _is_quota_error(exc):
+                raise HTTPException(status_code=503, detail="AI_QUOTA")
             raise HTTPException(status_code=502, detail="Could not generate this step. Try again.")
     logger.error("clone plan: every model failed: %s", last_error)
+    if last_error is not None and _is_quota_error(last_error):
+        raise HTTPException(status_code=503, detail="AI_QUOTA")
     raise HTTPException(status_code=502, detail="Could not generate this step. Try again.")
 
 
