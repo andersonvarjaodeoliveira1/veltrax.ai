@@ -512,14 +512,7 @@ export function InfluencerChat() {
   );
 
   const composer = (
-    <div className="relative">
-      {/* luz roxa girando em volta da caixa */}
-      <span aria-hidden className="pointer-events-none absolute -inset-1 overflow-hidden rounded-[30px] opacity-70 blur-lg">
-        <span className="absolute left-1/2 top-1/2 aspect-square w-[160%] -translate-x-1/2 -translate-y-1/2 animate-spin bg-[conic-gradient(from_0deg,transparent_0deg,#7B3FE4_70deg,#A98BFF_120deg,transparent_200deg,transparent_360deg)] [animation-duration:5s] " />
-      </span>
-      <span aria-hidden className="pointer-events-none absolute -inset-px overflow-hidden rounded-[27px]">
-        <span className="absolute left-1/2 top-1/2 aspect-square w-[160%] -translate-x-1/2 -translate-y-1/2 animate-spin bg-[conic-gradient(from_0deg,transparent_0deg,#7B3FE4_70deg,#C9BBFA_120deg,transparent_200deg,transparent_360deg)] [animation-duration:4s]" />
-      </span>
+    <div className="cg-orbit relative">
     <div className="relative rounded-[26px] bg-[#1a191d] p-5 ring-1 ring-white/10 shadow-[0_20px_60px_-30px_#000]" data-testid="chat-composer">
       <textarea value={started ? "" : prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); if (!started && !busy && prompt.trim().length >= 8) start(); } }} rows={3} maxLength={600} disabled={started} aria-label={lang === "en" ? "Describe the influencer" : lang === "es" ? "Describe a la influencer" : "Descreva a influencer"}
         placeholder={phase === "home" ? (demo ? `${demo}▍` : t("ph")) : t("follow")}

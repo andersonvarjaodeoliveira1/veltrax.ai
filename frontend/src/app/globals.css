@@ -288,3 +288,21 @@ button[class*="to-[#7B3FE4]"]:active::before { animation-delay: 0.12s; border-co
   .gt-confetti { display: none; }
   .gt-btn3d, .gt-btn3d:hover:not(:disabled), .gt-btn3d:active:not(:disabled) { transform: none; }
 }
+
+/* Luz que corre em volta da caixa de escrever */
+@property --cg-angle { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
+@keyframes cg-orbit { to { --cg-angle: 360deg; } }
+.cg-orbit::before, .cg-orbit::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: 28px;
+  padding: 2px;
+  pointer-events: none;
+  background: conic-gradient(from var(--cg-angle), transparent 0 62%, #5a1baa 74%, #a98bff 88%, #ffffff 98%, transparent 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  animation: cg-orbit 3.2s linear infinite;
+}
+.cg-orbit::after { filter: blur(10px); inset: -4px; padding: 5px; opacity: .9; }
