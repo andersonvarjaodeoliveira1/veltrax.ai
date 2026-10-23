@@ -60,6 +60,17 @@ export default function InfluencerPage() {
   const [copied, setCopied] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [flowConnected, setFlowConnected] = useState(false);
+  const [restored, setRestored] = useState(false);
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem("gv-influencer-v1") ?? "{}");
+      if (typeof saved.ad === "string") setAd(saved.ad);
+      if (saved.profile && typeof saved.profile === "object") setProfile({ ...EMPTY, ...saved.profile });
+      if (Array.isArray(saved.searches)) setSearches(saved.searches);
+      if (typeof saved.copy4 === "string") setCopy4(saved.copy4);
+    } catch { /* storage unavailable */ }
+    setRestored(true);
+  }, []);
   const { data: session } = useSession();
   const isAdmin = Boolean((session?.user as { is_admin?: boolean } | undefined)?.is_admin);
   const [copy4, setCopy4] = useState("");
@@ -72,6 +83,10 @@ export default function InfluencerPage() {
   useEffect(() => {
     setCopy4((current) => current || ad);
   }, [ad]);
+  useEffect(() => {
+    if (!restored) return;
+    try { window.localStorage.setItem("gv-influencer-v1", JSON.stringify({ ad, profile, searches, copy4 })); } catch { /* storage unavailable */ }
+  }, [restored, ad, profile, searches, copy4]);
   const words = copy4.split(/\s+/).filter(Boolean).length;
   useEffect(() => { if (words) setSceneCount(Math.max(1, Math.min(6, Math.round(words / 20)))); }, [words]);
   const chosen = FLOW_MODELS.find((item) => item.id === model) ?? FLOW_MODELS[0];
@@ -109,19 +124,25 @@ export default function InfluencerPage() {
       if (!response.ok) { setError(await errorOf(response, "Não consegui ler o anúncio. Confira o texto e tente de novo.")); return; }
       const data = await response.json();
       setProfile({ name: data.name ?? "", age: data.age ?? "", look: data.look ?? "", setting: data.setting ?? "", extra: "" });
-      setSearches(Array.isArray(data.searches) ? data.searches : []);
+      const found: string[] = Array.isArray(data.searches) ? data.searches : [];
+      setSearches(found);
+      setPins([]);
+      setPickedPin(null);
+      setBusy(null);
+      if (found.length) await findPins(found);
+      return;
     } catch {
       setError("Sem conexão. Tente de novo.");
     } finally { setBusy(null); }
   }
 
-  async function findPins() {
+  async function findPins(list: string[] = searches) {
     setError(null);
     setPinsFailed(false);
     setBusy("pins");
     try {
       const response = await fetch("/api/multiplier/clone/influencer-pins", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ queries: searches }),
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ queries: list }),
       });
       if (!response.ok) { setPinsFailed(true); return; }
       const data = await response.json();
@@ -199,6 +220,12 @@ export default function InfluencerPage() {
       <PageHeader icon={UserRound} title="Criar influencer" description="Do anúncio até a pessoa: achamos o rosto no Pinterest e escrevemos o prompt realista para gerar a imagem em qualquer IA." />
       <span className="inline-block rounded-full border border-[#A98BFF]/40 px-2.5 py-0.5 text-[11px] font-semibold tracking-wider text-[#A98BFF]">BETA</span>
 
+      {busy && (
+        <div role="status" className="flex items-center gap-3 rounded-[14px] border border-[#A98BFF]/40 bg-[#7B3FE4]/10 px-4 py-3 text-sm">
+          <Loader2 className="size-4 animate-spin text-[#A98BFF]" />
+          {busy === "profile" ? "Lendo o anúncio e descobrindo a pessoa…" : busy === "pins" ? "Buscando fotos no Pinterest…" : busy === "prompt" ? "Escrevendo os prompts realistas…" : "Montando o storyboard e os prompts de cada cena…"}
+        </div>
+      )}
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
 
       <Step n={1} title="Cole o anúncio (ou descreva a pessoa)">
