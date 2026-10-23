@@ -27,78 +27,23 @@ const AIS = [
   { name: "Claude", href: "https://claude.ai/new" },
 ];
 
-const STEPS = ["Anúncio", "Pessoa e foto", "Prompt", "Vídeo"];
-const MISSIONS = [
-  "Cole o anúncio e toque em “Descobrir a pessoa”",
-  "Toque na foto que mais parece com a sua influencer",
-  "Gere o prompt e copie a opção que você mais gostou",
-  "Monte o storyboard e mande para o Flow",
-];
-const XP_STEP = 10;
-const XP_FINAL = 30;
-const CONFETTI = ["#8B5CF6", "#A98BFF", "#5BD69A", "#F5B454", "#F0466B", "#3A9BBB"];
-
-function Confetti() {
-  return (
-    <div className="gt-confetti" aria-hidden="true">
-      {Array.from({ length: 24 }, (_, i) => (
-        <i key={i} style={{ left: `${(i * 4.2 + 2) % 100}%`, background: CONFETTI[i % CONFETTI.length], animationDelay: `${(i % 8) * 0.07}s` }} />
-      ))}
-    </div>
-  );
-}
-
-function Stepper({ step, maxStep, onGo, finished, xp }: { step: number; maxStep: number; onGo: (n: number) => void; finished: boolean; xp: number }) {
-  const percent = finished ? 100 : Math.round(((step - 1) / STEPS.length) * 100);
-  const left = STEPS.length - (step - 1);
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between text-xs">
-        <span className="font-medium text-foreground">{finished ? "Tudo pronto! 🎉" : `Etapa ${step} de ${STEPS.length} · ${STEPS[step - 1]}`}</span>
-        <span className="flex items-center gap-3 text-muted-foreground">
-          <b data-testid="xp" className="rounded-full bg-[#F5B454]/15 px-2.5 py-0.5 text-[#F5B454]">⭐ {xp} XP</b>
-          {finished ? "100%" : left === 1 ? "Falta só a última" : `Faltam ${left} etapas`}
-        </span>
-      </div>
-      <div role="progressbar" aria-label="Progresso" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} className="h-3 w-full overflow-hidden rounded-full bg-[#7B3FE4]/15">
-        <div className="progress-sheen relative h-full overflow-hidden rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A98BFF] transition-[width] duration-700 ease-out" style={{ width: `${Math.max(percent, 6)}%` }} />
-      </div>
-    <nav aria-label="Etapas" className="flex flex-wrap items-center gap-2">
-      {STEPS.map((label, index) => {
-        const n = index + 1;
-        const done = n < maxStep || (n < step);
-        return (
-          <button key={label} type="button" disabled={n > maxStep} aria-current={n === step ? "step" : undefined} onClick={() => onGo(n)}
-            className={cn("inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-40",
-              n === step ? "border-[#A98BFF] bg-[#7B3FE4]/20 text-foreground" : "border-border text-muted-foreground")}>
-            <span className="grid size-5 place-items-center rounded-full bg-[#7B3FE4]/30 text-[11px]">{done ? <Check className="size-3 text-[#5BD69A]" /> : n}</span>
-            {label}
-          </button>
-        );
-      })}
-    </nav>
-    </div>
-  );
-}
-
 function Nav({ back, next, nextLabel = "Avançar", nextDisabled }: { back?: () => void; next?: () => void; nextLabel?: string; nextDisabled?: boolean }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-4">
       {back ? <Button type="button" variant="outline" className="rounded-full" onClick={back}>Voltar</Button> : <span />}
-      {next && <Button type="button" className="gt-btn3d rounded-full px-6 font-semibold" onClick={next} disabled={nextDisabled}>{nextLabel}</Button>}
+      {next && <Button type="button" className="rounded-full px-6 font-semibold" onClick={next} disabled={nextDisabled}>{nextLabel}</Button>}
     </div>
   );
 }
 
-function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
+function Step({ title, children }: { n: number; title: string; children: React.ReactNode }) {
   return (
-    <section className="gt-pop space-y-4 rounded-[18px] border border-border bg-card p-5">
-      <p data-testid="mission" className="inline-flex items-center gap-2 rounded-full bg-[#7B3FE4]/15 px-3 py-1 text-xs font-medium text-[#C9BBFA]">🎯 Missão: {MISSIONS[n - 1]}</p>
-      <h2 className="flex items-center gap-3 font-display text-lg font-semibold">
-        <span className="grid size-7 place-items-center rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-sm text-white">{n}</span>
-        {title}
-      </h2>
-      {children}
+    <section className="flex gap-3">
+      <span aria-hidden className="mt-1 size-6 shrink-0 rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#A98BFF]" />
+      <div className="min-w-0 flex-1 space-y-4">
+        <h2 className="font-medium">{title}</h2>
+        {children}
+      </div>
     </section>
   );
 }
@@ -128,26 +73,8 @@ export default function InfluencerPage() {
   const [flowConnected, setFlowConnected] = useState(false);
   const [restored, setRestored] = useState(false);
   const [step, setStep] = useState(1);
-  const [maxStep, setMaxStep] = useState(1);
-  const [xp, setXp] = useState(0);
-  const [cheer, setCheer] = useState<string | null>(null);
-  const [doneSteps, setDoneSteps] = useState<number[]>([]);
-  const cheerTimer = useRef<number | undefined>(undefined);
-  const celebrate = (text: string) => {
-    setCheer(text);
-    window.clearTimeout(cheerTimer.current);
-    cheerTimer.current = window.setTimeout(() => setCheer(null), 3200);
-  };
-  const award = (n: number, points: number, text: string) => {
-    if (doneSteps.includes(n)) return;
-    setDoneSteps((current) => [...current, n]);
-    setXp((current) => current + points);
-    celebrate(text);
-  };
   const go = (n: number) => {
-    if (n > step) award(step, XP_STEP, `Etapa ${step} concluída! +${XP_STEP} XP 🎉`);
     setStep(n);
-    setMaxStep((current) => Math.max(current, n));
     document.getElementById("influencer-topo")?.scrollIntoView?.({ behavior: "smooth", block: "start" });
   };
   useEffect(() => {
@@ -156,7 +83,7 @@ export default function InfluencerPage() {
       if (typeof saved.ad === "string") setAd(saved.ad);
       if (saved.profile && typeof saved.profile === "object") {
         setProfile({ ...EMPTY, ...saved.profile });
-        if (saved.profile.look || saved.profile.age) { setStep(2); setMaxStep(2); }
+        if (saved.profile.look || saved.profile.age) { setStep(2); }
       }
       if (Array.isArray(saved.searches)) setSearches(saved.searches);
       if (typeof saved.copy4 === "string") setCopy4(saved.copy4);
@@ -307,7 +234,6 @@ export default function InfluencerPage() {
       }
       setBoards(result);
       setActiveVideo(0);
-      award(4, XP_FINAL, `Tudo pronto! +${XP_FINAL} XP 🏆`);
     } catch {
       setError("Sem conexão. Tente de novo.");
     } finally { setBusy(null); }
@@ -360,19 +286,18 @@ export default function InfluencerPage() {
   const hasProfile = Boolean(profile.look.trim() || profile.age.trim());
 
   return (
-    <main className="mx-auto w-full max-w-4xl space-y-6 px-4 py-8 sm:px-8">
+    <main className="mx-auto w-full max-w-3xl space-y-6 px-4 py-8 sm:px-8">
       <PageHeader icon={UserRound} title="Criar influencer" description="Do anúncio até a pessoa: achamos o rosto no Pinterest e escrevemos o prompt realista para gerar a imagem em qualquer IA." />
       <span className="inline-block rounded-full border border-[#A98BFF]/40 px-2.5 py-0.5 text-[11px] font-semibold tracking-wider text-[#A98BFF]">BETA</span>
 
       <div id="influencer-topo" />
-      <Stepper step={step} maxStep={maxStep} onGo={go} finished={boards.length > 0} xp={xp} />
-      {cheer && (
-        <div role="status" aria-live="polite" data-testid="cheer" className="gt-pop rounded-[14px] border border-[#5BD69A]/40 bg-[#5BD69A]/10 px-4 py-3 text-sm font-semibold text-[#5BD69A]">
-          {cheer}
-          <Confetti />
+      {step > 1 && (
+        <div className="space-y-2" data-testid="chat-history">
+          <div className="flex justify-center"><p className="max-w-[85%] rounded-full border border-border bg-card px-5 py-2 text-center text-xs font-semibold uppercase tracking-wide">{(ad || profile.look).slice(0, 140)}</p></div>
+          {(profile.name || profile.age) && <p className="text-center text-xs text-muted-foreground">✓ {[profile.name, profile.age].filter(Boolean).join(", ")}</p>}
+          {(photoUrl || pickedPin) && step > 2 && <p className="text-center text-xs text-muted-foreground">✓ Foto escolhida</p>}
         </div>
       )}
-
       {busy && (
         <div role="status" className="flex items-center gap-3 rounded-[14px] border border-[#A98BFF]/40 bg-[#7B3FE4]/10 px-4 py-3 text-sm">
           <Loader2 className="size-4 animate-spin text-[#A98BFF]" />
@@ -679,7 +604,7 @@ export default function InfluencerPage() {
                 <p className="text-sm text-muted-foreground">Sugestões de próximos passos</p>
                 {([
                   ["Fazer mais vídeos com outra abertura", () => { setVideoCount(3); setBoards([]); document.getElementById("influencer-topo")?.scrollIntoView?.({ behavior: "smooth" }); }],
-                  ["Trocar a pessoa ou o nicho", () => { setBoards([]); setProfile(EMPTY); setPrompts([]); setStep(1); setMaxStep(1); }],
+                  ["Trocar a pessoa ou o nicho", () => { setBoards([]); setProfile(EMPTY); setPrompts([]); setStep(1); }],
                   ["Montar com legenda na Automação", () => { window.location.href = "/automacao"; }],
                 ] as [string, () => void][]).map(([label, action]) => (
                   <button key={label} type="button" onClick={action} className="block w-full rounded-[12px] px-2 py-2 text-left text-sm hover:bg-muted">↳ {label}</button>
