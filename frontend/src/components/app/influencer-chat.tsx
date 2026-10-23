@@ -8,12 +8,16 @@ import { FLOW_CHOICES, defaultFlowCategory, saveFlowCategory } from "@/lib/flow-
 import { useI18n } from "@/lib/i18n";
 import { EXAMPLES, SKILLS, type Lang3, type SkillId } from "@/lib/influencer-examples";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
+import { loadMySkills, saveMySkills } from "@/lib/influencer-skills";
 
 type Option = { label: string; detail?: string };
 type Question = { question: string; options: Option[] };
 type Persona = { name: string; age: string; look: string; setting: string };
 type Pin = { id: string; thumb: string; full: string };
 type Board = { scenes: { line: string; what: string }[]; imagePrompts: string[]; videoPrompts: string[] };
+type Snap = Record<string, unknown>;
+type ChatItem = { id: number; title: string; project?: string; snap?: Snap };
 type Phase = "home" | "intake" | "ask" | "approve" | "photos" | "prompt" | "count" | "model" | "cost" | "board";
 
 const FLOW_URL = "https://labs.google/fx/pt/tools/flow";
@@ -94,6 +98,16 @@ const S = {
   vBody: ["Corpo", "Body", "Cuerpo"],
   vCta: ["CTA", "CTA", "CTA"],
   go: ["Continuar", "Continue", "Continuar"],
+  createProject: ["Criar projeto", "Create project", "Crear proyecto"],
+  skillsLink: ["Skills", "Skills", "Skills"],
+  projects: ["Projetos", "Projects", "Proyectos"],
+  noProject: ["Sem projeto", "No project", "Sin proyecto"],
+  newProject: ["Novo projeto", "New project", "Nuevo proyecto"],
+  allProjects: ["Todos", "All", "Todos"],
+  saveSkill: ["Salvar como skill", "Save as skill", "Guardar como skill"],
+  saved: ["Skill salva", "Skill saved", "Skill guardada"],
+  remove: ["Apagar chat", "Delete chat", "Borrar chat"],
+  modelLabel: ["Modelo do Flow", "Flow model", "Modelo de Flow"],
   preview: ["Pré-visualização", "Preview", "Vista previa"],
 } as const;
 
@@ -155,10 +169,27 @@ export function InfluencerChat() {
   const endRef = useRef<HTMLDivElement>(null);
   const t0 = useRef(0);
   const [worked, setWorked] = useState<Record<string, number>>({});
-  const [chats, setChats] = useState<{ id: number; title: string }[]>([]);
+  const [chats, setChats] = useState<ChatItem[]>([]);
+  const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
+  const [project, setProject] = useState("");
+  const [filter2, setFilter2] = useState("");
+  const [newProject, setNewProject] = useState("");
+  const [modelChosen, setModelChosen] = useState(false);
+  const [skillSaved, setSkillSaved] = useState(false);
+  const chatId = useRef<number | null>(null);
+  const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
-    try { const saved = JSON.parse(window.localStorage.getItem("gv-influencer-chats") ?? "[]"); if (Array.isArray(saved)) setChats(saved.slice(0, 12)); } catch { /* sem armazenamento */ }
+    try { const saved = JSON.parse(window.localStorage.getItem("gv-influencer-chats") ?? "[]"); if (Array.isArray(saved)) setChats(saved.slice(0, 30)); } catch { /* sem armazenamento */ }
+    try { const saved = JSON.parse(window.localStorage.getItem("gv-influencer-projects") ?? "[]"); if (Array.isArray(saved)) setProjects(saved); } catch { /* sem armazenamento */ }
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const incoming = params.get("prompt");
+      if (incoming) { setPrompt(incoming.slice(0, 600)); const sk = params.get("skill"); if (sk && SKILLS.some((item) => item.id === sk)) setSkill(sk as SkillId); }
+    } catch { /* sem URL */ }
+    setHydrated(true);
   }, []);
+  const persistChats = (list: ChatItem[]) => { setChats(list); try { window.localStorage.setItem("gv-influencer-chats", JSON.stringify(list)); } catch { /* sem armazenamento */ } };
+  const persistProjects = (list: { id: string; name: string }[]) => { setProjects(list); try { window.localStorage.setItem("gv-influencer-projects", JSON.stringify(list)); } catch { /* sem armazenamento */ } };
   const mark = (key: string) => setWorked((current) => (current[key] ? current : { ...current, [key]: Math.max(1, Math.round((Date.now() - t0.current) / 1000)) }));
 
   useEffect(() => { setModel(defaultFlowCategory(isAdmin)); }, [isAdmin]);
@@ -187,6 +218,7 @@ export function InfluencerChat() {
   }
 
   function reset() {
+    chatId.current = null; setSkillSaved(false);
     setPhase("home"); setPrompt(""); setSkill(""); setBusy(""); setError(""); setQuestions([]); setQi(0); setPicked(null); setAnswers([]);
     setPersona({ name: "", age: "", look: "", setting: "" }); setSearches([]); setCopyText(""); setPins([]); setPin(null); setPhoto(null);
     setPrompts([]); setSummaries([]); setVideoCount(1); setBoards([]); setActive(0); setProductLook(""); setProductLink(""); setLinkOpen(false); setAttached([]);
@@ -213,9 +245,8 @@ export function InfluencerChat() {
   function start() {
     setError(""); setWorked({});
     t0.current = Date.now();
-    const next = [{ id: Date.now(), title: prompt.slice(0, 60) }, ...chats.filter((c) => c.title !== prompt.slice(0, 60))].slice(0, 12);
-    setChats(next);
-    try { window.localStorage.setItem("gv-influencer-chats", JSON.stringify(next)); } catch { /* sem armazenamento */ }
+    chatId.current = Date.now();
+    persistChats([{ id: chatId.current, title: prompt.slice(0, 60), project }, ...chats].slice(0, 30));
     if (attached.length && skill) { setPhase("intake"); void readProduct(attached); return; }
     setPhase("intake");
   }
@@ -322,6 +353,49 @@ export function InfluencerChat() {
     try { await navigator.clipboard.writeText(text); setSent(key); window.setTimeout(() => setSent(""), 1800); } catch { /* o texto continua na tela */ }
   }
 
+  const snapshot = (): Snap => ({ phase, prompt, skill, answers, persona, searches, copyText, pins, pin, prompts, summaries, videoCount, vary, model, boards, productLook, productLink, worked });
+  const snapKey = JSON.stringify(snapshot());
+  useEffect(() => {
+    if (!hydrated || chatId.current === null || phase === "home") return;
+    const id = chatId.current;
+    setChats((current) => {
+      const next = current.map((c) => (c.id === id ? { ...c, title: prompt.slice(0, 60) || c.title, project: project || c.project, snap: JSON.parse(snapKey) } : c));
+      try { window.localStorage.setItem("gv-influencer-chats", JSON.stringify(next)); } catch { /* sem armazenamento */ }
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snapKey, hydrated]);
+
+  function openChat(chat: ChatItem) {
+    reset();
+    chatId.current = chat.id;
+    setPrompt(chat.title);
+    const snap = chat.snap as Record<string, never> | undefined;
+    if (!snap) return;
+    const unsettled = snap.phase === "intake" || snap.phase === "ask";
+    setPrompt((snap.prompt as string) || chat.title); setSkill((snap.skill as SkillId) || "");
+    if (unsettled && !(snap.persona as Persona)?.name) { chatId.current = null; return; }
+    setAnswers(snap.answers ?? []); setPersona(snap.persona ?? { name: "", age: "", look: "", setting: "" }); setSearches(snap.searches ?? []); setCopyText((snap.copyText as string) ?? "");
+    setPins(snap.pins ?? []); setPin(snap.pin ?? null); setPrompts(snap.prompts ?? []); setSummaries(snap.summaries ?? []); setVideoCount((snap.videoCount as number) ?? 1);
+    setVary(snap.vary ?? { hook: true, body: false, cta: false }); setModel((snap.model as string) ?? model); setBoards(snap.boards ?? []); setProductLook((snap.productLook as string) ?? ""); setProductLink((snap.productLink as string) ?? "");
+    lookRef.current = (snap.productLook as string) ?? ""; linkRef.current = (snap.productLink as string) ?? "";
+    setWorked(snap.worked ?? {}); setProject(chat.project ?? "");
+    setPhase(((snap.phase as Phase) === "ask" || (snap.phase as Phase) === "intake") ? "approve" : (snap.phase as Phase));
+  }
+
+  function deleteChat(id: number) { persistChats(chats.filter((c) => c.id !== id)); if (chatId.current === id) reset(); }
+  function addProject() {
+    const name = newProject.trim().slice(0, 40);
+    if (!name) return;
+    persistProjects([...projects, { id: String(Date.now()), name }]);
+    setNewProject("");
+  }
+  function saveAsSkill() {
+    const list = loadMySkills();
+    saveMySkills([{ id: String(Date.now()), title: prompt.slice(0, 60), prompt, skill: skill && (skill as string) !== "other" ? skill : "" }, ...list].slice(0, 30));
+    setSkillSaved(true);
+  }
+
   const shown = EXAMPLES.filter((item) => filter === "all" || item.skill === filter);
   const q = questions[qi];
   const totalCredits = chosen.credits * SCENES * videoCount;
@@ -347,7 +421,18 @@ export function InfluencerChat() {
           <ImagePlus className="size-4" /> {attached.length ? `${attached.length} ✓` : t("attachPhoto")}
         </button>
         {attached.length > 0 && !started && <button type="button" aria-label={t("stop")} onClick={() => setAttached([])} className="text-muted-foreground hover:text-foreground"><X className="size-3.5" /></button>}
-        <span className="ml-auto hidden whitespace-nowrap text-xs text-muted-foreground md:inline">{t("askFirst")}</span>
+        <select aria-label={t("modelLabel")} value={model} onChange={(event) => { setModel(event.target.value); saveFlowCategory(event.target.value); setModelChosen(true); }} disabled={started}
+          className="max-w-[9rem] truncate rounded-full border border-border bg-background px-2 py-1 text-xs text-muted-foreground disabled:opacity-60">
+          {FLOW_CHOICES.map((item) => <option key={item.id} value={item.id}>{item.id === "lower" ? "Lower Priority" : item.name}</option>)}
+        </select>
+        {projects.length > 0 && (
+          <select aria-label={t("projects")} value={project} onChange={(event) => setProject(event.target.value)} disabled={started}
+            className="max-w-[8rem] truncate rounded-full border border-border bg-background px-2 py-1 text-xs text-muted-foreground disabled:opacity-60">
+            <option value="">{t("noProject")}</option>
+            {projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
+        )}
+        <span className="ml-auto hidden whitespace-nowrap text-xs text-muted-foreground lg:inline">{t("askFirst")}</span>
         <button type="button" aria-label={t("send")} title={t("send")} onClick={start} disabled={started || prompt.trim().length < 8}
           className={cn("flex size-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white disabled:opacity-40", "ml-auto md:ml-0")}>
           {busy ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-5" />}
@@ -360,10 +445,25 @@ export function InfluencerChat() {
     <div className="grid gap-6 lg:grid-cols-[200px_minmax(0,1fr)] xl:grid-cols-[200px_minmax(0,1fr)_260px]">
     <aside className="hidden space-y-2 lg:block" aria-label={t("chats")} data-testid="chat-sidebar">
       <button type="button" onClick={reset} className="flex w-full items-center gap-2 rounded-[14px] bg-card px-3 py-2.5 text-sm font-medium hover:bg-muted"><Plus className="size-4" /> {t("newChat")}</button>
+      <Link href="/influencer/skills" className="flex w-full items-center gap-2 rounded-[14px] px-3 py-2.5 text-sm font-medium hover:bg-card">⚡ {t("skillsLink")}</Link>
+      <div className="space-y-1.5 px-1 pt-2" data-testid="chat-projects">
+        <p className="px-2 text-xs text-muted-foreground">{t("projects")}</p>
+        <div className="flex flex-wrap gap-1.5 px-1">
+          <Chip on={filter2 === ""} onClick={() => setFilter2("")}>{t("allProjects")}</Chip>
+          {projects.map((item) => <Chip key={item.id} on={filter2 === item.id} onClick={() => setFilter2(item.id)}>{item.name}</Chip>)}
+        </div>
+        <div className="flex gap-1.5 px-1">
+          <input value={newProject} onChange={(event) => setNewProject(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") addProject(); }} maxLength={40} aria-label={t("newProject")} placeholder={t("newProject")} className="min-w-0 flex-1 rounded-full border border-border bg-background px-3 py-1 text-xs" />
+          <button type="button" aria-label={t("createProject")} onClick={addProject} className="rounded-full border border-border px-2 text-xs hover:text-foreground"><Plus className="size-3.5" /></button>
+        </div>
+      </div>
       <p className="px-2 pt-3 text-xs text-muted-foreground">{t("chats")}</p>
-      {chats.length === 0 && <p className="px-2 text-xs text-muted-foreground">{t("noChats")}</p>}
-      {chats.map((chat) => (
-        <button key={chat.id} type="button" onClick={() => { reset(); setPrompt(chat.title); }} className="block w-full truncate rounded-[12px] px-3 py-2 text-left text-sm hover:bg-card">{chat.title}</button>
+      {chats.filter((c) => !filter2 || c.project === filter2).length === 0 && <p className="px-2 text-xs text-muted-foreground">{t("noChats")}</p>}
+      {chats.filter((c) => !filter2 || c.project === filter2).map((chat) => (
+        <div key={chat.id} className={cn("group flex items-center rounded-[12px] hover:bg-card", chatId.current === chat.id && "bg-card")}>
+          <button type="button" onClick={() => openChat(chat)} className="min-w-0 flex-1 truncate px-3 py-2 text-left text-sm">{chat.title}</button>
+          <button type="button" aria-label={`${t("remove")}: ${chat.title}`} onClick={() => deleteChat(chat.id)} className="mr-1 hidden rounded-full p-1 text-muted-foreground hover:text-foreground group-hover:block"><X className="size-3.5" /></button>
+        </div>
       ))}
     </aside>
     <section className="mx-auto w-full max-w-3xl min-w-0 space-y-6" data-testid="influencer-chat">
@@ -537,10 +637,10 @@ export function InfluencerChat() {
               </div>
             </div>
           )}
-          {phase === "count" && <Button type="button" className="rounded-full" onClick={() => setPhase("model")}>{t("go")} <ArrowRight className="size-4" /></Button>}
+          {phase === "count" && <Button type="button" className="rounded-full" onClick={() => setPhase(modelChosen ? "cost" : "model")}>{t("go")} <ArrowRight className="size-4" /></Button>}
         </Msg>
       )}
-      {["model", "cost", "board"].includes(phase) && (
+      {["model", "cost", "board"].includes(phase) && !modelChosen && (
         <Msg testid="chat-model">
           <p>{t("whichModel")}</p>
           <div role="radiogroup" aria-label={t("whichModel")} className="flex flex-wrap gap-2">
@@ -596,6 +696,7 @@ export function InfluencerChat() {
           </div>
           <div className="space-y-1" data-testid="next-steps">
             <p className="text-muted-foreground">{t("nextSteps")}</p>
+            <button type="button" onClick={saveAsSkill} disabled={skillSaved} className="block w-full rounded-[12px] px-2 py-2 text-left hover:bg-muted disabled:opacity-60">↳ {skillSaved ? `✓ ${t("saved")}` : t("saveSkill")}</button>
             {([[t("more"), () => { setVideoCount(3); setBoards([]); setPhase("count"); }], [t("automation"), () => { window.location.href = "/automacao"; }]] as [string, () => void][]).map(([label, action]) => (
               <button key={label} type="button" onClick={action} className="block w-full rounded-[12px] px-2 py-2 text-left hover:bg-muted">↳ {label}</button>
             ))}

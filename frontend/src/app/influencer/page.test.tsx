@@ -115,9 +115,54 @@ describe("Criar influencer em chat", () => {
     expect(await screen.findByTestId("chat-product")).toHaveTextContent(/foto do produto ou o link/);
     fireEvent.click(screen.getByRole("button", { name: "Colar o link" }));
     fireEvent.change(screen.getByLabelText("Colar o link", { selector: "input" }), { target: { value: "https://loja.com/produto" } });
-    fireEvent.click(screen.getByRole("button", { name: "Adicionar" }));
+    fireEvent.click(within(screen.getByTestId("chat-product")).getByRole("button", { name: "Adicionar" }));
     expect(await screen.findByTestId("chat-approval")).toBeInTheDocument();
     expect(String(bodies[0].prompt)).toContain("https://loja.com/produto");
     expect(bodies[0].skill).toBe("dropshipping");
+  });
+
+  it("guarda o chat, reabre de onde parou e apaga", async () => {
+    mockApi();
+    render(<InfluencerPage />);
+    await sendPrompt();
+    fireEvent.click(within(await screen.findByTestId("chat-niche")).getByRole("button", { name: /Nutra/ }));
+    await noProduct();
+    expect(await screen.findByTestId("chat-approval")).toBeInTheDocument();
+    await waitFor(() => expect(window.localStorage.getItem("gv-influencer-chats")).toContain("Bia"));
+    fireEvent.click(within(screen.getByTestId("chat-sidebar")).getByRole("button", { name: /Novo chat/ }));
+    expect(screen.getByRole("heading", { name: "O que vamos criar hoje?" })).toBeInTheDocument();
+    const sidebar = screen.getByTestId("chat-sidebar");
+    fireEvent.click(within(sidebar).getByRole("button", { name: /^Gere uma influencer de 22 anos/ }));
+    expect(await screen.findByTestId("chat-approval")).toHaveTextContent("Bia");
+    fireEvent.click(within(sidebar).getByRole("button", { name: /Apagar chat/ }));
+    expect(window.localStorage.getItem("gv-influencer-chats")).toBe("[]");
+  });
+
+  it("cria projeto e o modelo escolhido na caixa pula a pergunta do modelo", async () => {
+    mockApi();
+    render(<InfluencerPage />);
+    const sidebar = screen.getByTestId("chat-sidebar");
+    fireEvent.change(within(sidebar).getByLabelText("Novo projeto"), { target: { value: "Loja de roupas" } });
+    fireEvent.click(within(sidebar).getByRole("button", { name: "Criar projeto" }));
+    expect(within(sidebar).getByRole("button", { name: "Loja de roupas" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Modelo do Flow"), { target: { value: "lite" } });
+    await sendPrompt();
+    fireEvent.click(within(await screen.findByTestId("chat-niche")).getByRole("button", { name: /Nutra/ }));
+    await noProduct();
+    fireEvent.click(await screen.findByRole("button", { name: /^Aprovar/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Seguir sem foto" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Fazer os vídeos/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    expect(await screen.findByTestId("video-approval")).toBeInTheDocument();
+    expect(screen.queryByTestId("chat-model")).toBeNull();
+  });
+
+  it("abre já preenchido quando vem de uma skill", () => {
+    window.history.pushState({}, "", "/influencer?prompt=Influencer%20de%2030%20anos%20teste&skill=shopee");
+    mockApi();
+    render(<InfluencerPage />);
+    expect((screen.getByLabelText("Descreva a influencer") as HTMLTextAreaElement).value).toBe("Influencer de 30 anos teste");
+    expect(within(screen.getByRole("group", { name: "Nicho (opcional)" })).getByRole("button", { name: /Shopee/ })).toHaveAttribute("aria-pressed", "true");
+    window.history.pushState({}, "", "/");
   });
 });
