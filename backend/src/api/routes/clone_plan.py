@@ -733,3 +733,45 @@ def urlparse_host(url: str) -> str:
     from urllib.parse import urlparse
 
     return urlparse(url).hostname or ""
+
+
+@router.post("/influencer-storyboard")
+async def influencer_storyboard(request: Request, db: AsyncSession = Depends(get_db)):
+    """Splits the copy into ~8 s scenes and writes image and animation prompts for the chosen persona (Flow package)."""
+    user_id = await _user_id(request, db)
+    from ...integrations import load_user_keys
+    from ...usage import get_balance, set_server_blocked, set_usage_user
+
+    await load_user_keys(db, user_id)
+    set_usage_user(user_id)
+    set_server_blocked((await get_balance(db, user_id))["exhausted"])
+    try:
+        data = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=400, detail="JSON object expected")
+    persona = data.get("persona") if isinstance(data.get("persona"), dict) else {}
+    look = _clip(
+        ", ".join(part for part in (str(persona.get("name") or ""), str(persona.get("age") or ""), str(persona.get("look") or "")) if part.strip()),
+        300,
+    )
+    if not look:
+        raise HTTPException(status_code=400, detail="Describe the person")
+    variation = {
+        "title": _clip(str(persona.get("name") or "Influencer"), 40),
+        "avatar": _clip(str(persona.get("name") or "Influencer"), 40),
+        "look": look,
+        "setting": _clip(str(persona.get("setting") or ""), 200),
+    }
+    ctx = _context({**data, "reference": data.get("copy"), "keyword": data.get("keyword") or "X", "count": 1})
+    _check_script_rate(user_id)
+    scenes = await stage_scenes(ctx)
+    images = await stage_images(ctx, scenes, [variation])
+    lines = [[scene["line"] for scene in scenes]]
+    videos = await stage_videos(ctx, scenes, [variation], lines)
+    return {
+        "scenes": [{"line": scene["line"], "what": scene["what"]} for scene in scenes],
+        "imagePrompts": images[0]["prompts"],
+        "videoPrompts": videos[0]["prompts"],
+    }

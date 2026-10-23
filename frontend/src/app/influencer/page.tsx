@@ -5,10 +5,13 @@ import { Check, ClipboardCopy, ExternalLink, ImagePlus, Loader2, Search, Sparkle
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { useSession } from "@/lib/auth-client";
+import { FLOW_MODELS, readFlowCategory, saveFlowCategory } from "@/lib/flow-models";
 import { PageHeader } from "@/components/app/page-header";
 import { cn } from "@/lib/utils";
 
 type Pin = { id: string; thumb: string; full: string; link: string };
+type Board = { scenes: { line: string; what: string }[]; imagePrompts: string[]; videoPrompts: string[] };
 type Profile = { name: string; age: string; look: string; setting: string; extra: string };
 const EMPTY: Profile = { name: "", age: "", look: "", setting: "", extra: "" };
 const FLOW_URL = "https://flow.google.com";
@@ -48,7 +51,7 @@ export default function InfluencerPage() {
   const [photo, setPhoto] = useState<File | null>(null);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [prompts, setPrompts] = useState<string[]>([]);
-  const [busy, setBusy] = useState<"profile" | "prompt" | "pins" | null>(null);
+  const [busy, setBusy] = useState<"profile" | "prompt" | "pins" | "board" | null>(null);
   const [pins, setPins] = useState<Pin[]>([]);
   const [pinsFailed, setPinsFailed] = useState(false);
   const [pickedPin, setPickedPin] = useState<Pin | null>(null);
@@ -56,6 +59,21 @@ export default function InfluencerPage() {
   const [copied, setCopied] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [flowConnected, setFlowConnected] = useState(false);
+  const { data: session } = useSession();
+  const isAdmin = Boolean((session?.user as { is_admin?: boolean } | undefined)?.is_admin);
+  const [copy4, setCopy4] = useState("");
+  const [model, setModel] = useState<string>(FLOW_MODELS[0].id);
+  const [sceneCount, setSceneCount] = useState(4);
+  const [board, setBoard] = useState<Board | null>(null);
+  const [sent, setSent] = useState<string | null>(null);
+  useEffect(() => { setModel(readFlowCategory() ?? FLOW_MODELS[0].id); }, []);
+  useEffect(() => {
+    setCopy4((current) => current || ad);
+  }, [ad]);
+  const words = copy4.split(/\s+/).filter(Boolean).length;
+  useEffect(() => { if (words) setSceneCount(Math.max(1, Math.min(6, Math.round(words / 20)))); }, [words]);
+  const chosen = FLOW_MODELS.find((item) => item.id === model) ?? FLOW_MODELS[0];
+  const perScene = isAdmin ? 0 : chosen.credits;
   useEffect(() => {
     try { setFlowConnected(Boolean(JSON.parse(window.localStorage.getItem("gv-conectar-flow-v1") ?? "{}").flow)); } catch { /* storage unavailable */ }
   }, []);
@@ -111,6 +129,39 @@ export default function InfluencerPage() {
     } catch {
       setPinsFailed(true);
     } finally { setBusy(null); }
+  }
+
+  async function buildBoard() {
+    setError(null);
+    setBusy("board");
+    try {
+      const response = await fetch("/api/multiplier/clone/influencer-storyboard", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ copy: copy4, scene_count: sceneCount, persona: profile, language: "pt-BR" }),
+      });
+      if (!response.ok) { setError(await errorOf(response, "Não consegui montar o storyboard. Confira a fala e tente de novo.")); return; }
+      setBoard(await response.json());
+    } catch {
+      setError("Sem conexão. Tente de novo.");
+    } finally { setBusy(null); }
+  }
+
+  const flowPackage = () => JSON.stringify({
+    app: "clipgringa-flow", version: 1, sceneCount: board?.scenes.length ?? 0,
+    model: isAdmin ? "Veo 3.1 - Lite [Lower Priority]" : chosen.name,
+    flowModel: isAdmin ? "[Lower Priority]" : chosen.needle,
+    lowerPriority: isAdmin,
+    videos: [{
+      title: profile.name || "Influencer",
+      scenes: (board?.scenes ?? []).map((_, index) => ({
+        imagePrompt: board?.imagePrompts[index] ?? "", videoPrompt: board?.videoPrompts[index] ?? "",
+        file: `Video01_Cena${String(index + 1).padStart(2, "0")}.mp4`,
+      })),
+    }],
+  }, null, 2);
+
+  async function copyText(key: string, text: string) {
+    try { await navigator.clipboard.writeText(text); setSent(key); window.setTimeout(() => setSent(null), 2000); } catch { /* texto continua na tela */ }
   }
 
   async function writePrompts() {
@@ -285,6 +336,63 @@ export default function InfluencerPage() {
                   <a key={ai.name} href={ai.href} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1 hover:text-foreground">{ai.name} <ExternalLink className="size-3 opacity-60" /></a>
                 ))}
               </div>
+            </div>
+          )}
+        </Step>
+      )}
+
+      {hasProfile && (
+        <Step n={4} title="Fazer o vídeo barato no seu Flow">
+          <p className="text-sm text-muted-foreground">O app divide a fala em cenas de uns 8 segundos e escreve os prompts de imagem e de movimento, sempre com a mesma pessoa. Você só confere e manda para o Flow.</p>
+          <label className="block space-y-1 text-sm">Fala do vídeo (a copy)
+            <textarea value={copy4} onChange={(event) => setCopy4(event.target.value)} rows={5} maxLength={4000} className={inputClass} aria-label="Fala do vídeo" />
+          </label>
+          <div className="space-y-2">
+            <p className="text-sm">Qual modelo do Flow?</p>
+            <div role="radiogroup" aria-label="Modelo do Flow" className="flex flex-wrap gap-2">
+              {isAdmin ? (
+                <span className="rounded-full border border-transparent bg-primary px-4 py-1.5 text-sm text-primary-foreground">Lower Priority · 0 créditos</span>
+              ) : FLOW_MODELS.map((item) => (
+                <button key={item.id} type="button" role="radio" aria-checked={model === item.id} onClick={() => { setModel(item.id); saveFlowCategory(item.id); }}
+                  className={cn("rounded-full border px-4 py-1.5 text-sm", model === item.id ? "border-transparent bg-primary text-primary-foreground" : "border-border text-muted-foreground")}>
+                  {item.name} · {item.credits} créd./cena <span className="opacity-70">({item.note})</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            <span>Cenas:</span>
+            <button type="button" aria-label="Menos uma cena" className="size-8 rounded-full border border-border" onClick={() => setSceneCount((n) => Math.max(1, n - 1))}>−</button>
+            <b className="tabular-nums">{sceneCount}</b>
+            <button type="button" aria-label="Mais uma cena" className="size-8 rounded-full border border-border" onClick={() => setSceneCount((n) => Math.min(6, n + 1))}>+</button>
+            <span className="text-muted-foreground">≈ {sceneCount * 8}s · gasto estimado: <b className="text-foreground">{perScene * sceneCount} créditos</b> do seu Flow</span>
+          </div>
+          <Button type="button" onClick={() => void buildBoard()} disabled={busy !== null || copy4.trim().length < 20} className="rounded-full">
+            {busy === "board" ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />} {busy === "board" ? "Montando o storyboard…" : "Montar o storyboard"}
+          </Button>
+
+          {board && (
+            <div className="space-y-3" data-testid="storyboard">
+              <ol className="space-y-2">
+                {board.scenes.map((scene, index) => (
+                  <li key={`${index}-${scene.line}`} className="rounded-[14px] border border-border bg-background p-3 text-sm">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Cena {index + 1}</p>
+                    <p>“{scene.line}”</p>
+                    <p className="text-xs text-muted-foreground">{scene.what}</p>
+                  </li>
+                ))}
+              </ol>
+              <div className="flex flex-wrap items-center gap-2">
+                <button type="button" onClick={() => { void copyText("pack", flowPackage()); window.open(FLOW_URL, "_blank", "noopener"); }}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-4 py-2 text-sm font-medium text-white">
+                  {sent === "pack" ? <Check className="size-4" /> : <ClipboardCopy className="size-4" />} Copiar pacote e abrir o Flow
+                </button>
+                <button type="button" onClick={() => void copyText("all", board.scenes.map((scene, index) => `CENA ${index + 1}\nFala: ${scene.line}\nImagem: ${board.imagePrompts[index] ?? ""}\nMovimento: ${board.videoPrompts[index] ?? ""}`).join("\n\n"))}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-border px-4 py-2 text-sm hover:text-foreground">
+                  {sent === "all" ? <Check className="size-4 text-[#5BD69A]" /> : <ClipboardCopy className="size-4" />} Copiar só os prompts
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground">Com a extensão ClipGringa · Flow, cole o pacote nela e ela gera e baixa as cenas sozinha. Sem a extensão, use “Copiar só os prompts” e cole no Flow cena por cena. Depois suba os vídeos na Automação para montar com legenda.</p>
             </div>
           )}
         </Step>

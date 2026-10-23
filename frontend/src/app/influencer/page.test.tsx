@@ -58,6 +58,21 @@ describe("Criar influencer", () => {
     expect(screen.getByTestId("photo-drop")).toBeInTheDocument();
   });
 
+  it("monta o storyboard e mostra o gasto estimado em créditos", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (String(url).includes("influencer-profile")) return new Response(JSON.stringify({ name: "Marta", age: "50", look: "loira", setting: "cozinha", searches: ["x"] }), { status: 200 });
+      return new Response(JSON.stringify({ scenes: [{ line: "Eu não dormia", what: "Ela fala" }, { line: "Até testar", what: "Mostra" }], imagePrompts: ["i1", "i2"], videoPrompts: ["v1", "v2"] }), { status: 200 });
+    }));
+    render(<InfluencerPage />);
+    const copy = "Esta melatonina natural que não se acha na farmácia me fez parar de acordar no meio da noite e ninguém fala sobre isso. Até dois meses atrás eu achava normal ficar cansada o dia todo e depender de café para fazer qualquer coisa.";
+    fireEvent.change(screen.getByLabelText("Anúncio ou descrição da pessoa"), { target: { value: copy } });
+    fireEvent.click(screen.getByRole("button", { name: /Descobrir a pessoa/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Montar o storyboard/ }));
+    expect(await screen.findByTestId("storyboard")).toHaveTextContent("Eu não dormia");
+    expect(screen.getByText(/gasto estimado/)).toHaveTextContent(/créditos do seu Flow/);
+    expect(screen.getByRole("button", { name: /Copiar pacote e abrir o Flow/ })).toBeInTheDocument();
+  });
+
   it("mostra um erro simples quando a leitura falha", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ detail: "x" }), { status: 502 })));
     render(<InfluencerPage />);
