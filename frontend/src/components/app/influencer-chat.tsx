@@ -228,6 +228,17 @@ export function InfluencerChat() {
   const [active, setActive] = useState(0);
   const [sent, setSent] = useState("");
   const [demo, setDemo] = useState("");
+  const orbitRef = useRef<HTMLDivElement>(null);
+  // Luz que corre em volta da caixa: o ângulo é atualizado por script, então anda em qualquer navegador.
+  useEffect(() => {
+    let frame = 0; const begin = performance.now();
+    const loop = (now: number) => {
+      orbitRef.current?.style.setProperty("--cg-angle", `${(((now - begin) / 4500) * 360) % 360}deg`);
+      frame = window.requestAnimationFrame(loop);
+    };
+    frame = window.requestAnimationFrame(loop);
+    return () => window.cancelAnimationFrame(frame);
+  }, [phase]);
   const fileRef = useRef<HTMLInputElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const t0 = useRef(0);
@@ -512,7 +523,7 @@ export function InfluencerChat() {
   );
 
   const composer = (
-    <div className="cg-orbit relative">
+    <div ref={orbitRef} className="cg-orbit relative">
     <div className="relative rounded-[26px] bg-[#1a191d] p-5 ring-1 ring-white/10 shadow-[0_20px_60px_-30px_#000]" data-testid="chat-composer">
       <textarea value={started ? "" : prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); if (!started && !busy && prompt.trim().length >= 8) start(); } }} rows={3} maxLength={600} disabled={started} aria-label={lang === "en" ? "Describe the influencer" : lang === "es" ? "Describe a la influencer" : "Descreva a influencer"}
         placeholder={phase === "home" ? (demo ? `${demo}▍` : t("ph")) : t("follow")}
