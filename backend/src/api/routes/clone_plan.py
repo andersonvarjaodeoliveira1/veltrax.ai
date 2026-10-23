@@ -1019,3 +1019,52 @@ async def influencer_storyboard(request: Request, db: AsyncSession = Depends(get
         "imagePrompts": images[0]["prompts"],
         "videoPrompts": videos[0]["prompts"],
     }
+
+
+class _Caption(BaseModel):
+    caption: str = Field(description="The post text, with line breaks, ready to paste")
+    hashtags: list[str] = Field(default_factory=list, description="3 to 6 hashtags without the # sign")
+
+
+CAPTION_SYSTEM = f"""You are a direct-response copywriter writing the text of a Facebook Page video post.
+Write: a first line that stops the scroll (curiosity, problem or result), then 2 to 4 short lines that explain the value in simple words, then one clear call to action.
+Use at most 3 emojis, short paragraphs, no jargon. Use only facts that appear in the video text or title: never invent results, numbers, prices or guarantees.
+{SAFETY}"""
+
+
+@router.post("/influencer-caption")
+async def influencer_caption(request: Request, db: AsyncSession = Depends(get_db)):
+    """Writes the Facebook post text (copywriter style) for a finished video."""
+    user_id = await _user_id(request, db)
+    from ...integrations import load_user_keys
+    from ...usage import get_balance, set_server_blocked, set_usage_user
+
+    await load_user_keys(db, user_id)
+    set_usage_user(user_id)
+    set_server_blocked((await get_balance(db, user_id))["exhausted"])
+    try:
+        data = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=400, detail="JSON object expected")
+    text = _clip(str(data.get("text") or ""), 2500)
+    title = _clip(str(data.get("title") or ""), 160)
+    if not (text.strip() or title.strip()):
+        raise HTTPException(status_code=400, detail="Send the video text or title")
+    language = str(data.get("language") or "pt-BR")
+    name = LANGUAGES.get(language, LANGUAGES["pt-BR"])
+    prompt = (
+        f"Write the post in {name}.\n"
+        f"Video title: {title}\nNiche: {_clip(str(data.get('niche') or ''), 80)}\n"
+        f"What is said in the video:\n{text}"
+    )
+    _check_script_rate(user_id)
+    out = await _run(CAPTION_SYSTEM, _Caption, prompt)
+    tags = []
+    for raw in out.hashtags[:6]:
+        tag = "".join(ch for ch in str(raw) if ch.isalnum() or ch == "_")[:30]
+        if tag:
+            tags.append(f"#{tag}")
+    body = _clip(str(out.caption).strip(), 1800)
+    return {"caption": (body + ("\n\n" + " ".join(tags) if tags else "")).strip()}

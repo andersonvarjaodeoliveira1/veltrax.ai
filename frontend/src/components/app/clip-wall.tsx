@@ -8,6 +8,7 @@ import {
   Play, Scissors, Share2, Sparkles, Star, Trash2, TrendingUp,
 } from "lucide-react";
 import { ClipCover, ScoreRing } from "@/components/app/clip-cover";
+import { FacebookPublish } from "@/components/app/facebook-publish";
 import DynamicVideoPlayer from "@/components/dynamic-video-player";
 import { TranscriptPreview } from "@/components/transcript-preview";
 import { Button } from "@/components/ui/button";
@@ -190,6 +191,7 @@ export function ClipFocus({ clip, taskId, index, total, busy, editable, onNaviga
                 <Button size="sm" onClick={onDownload} disabled={busy}>
                   {busy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}Download
                 </Button>
+                <FacebookPublish clip={clip} className="h-8 px-3 text-sm" />
                 {editable && (
                   <Button size="sm" variant="outline" asChild>
                     <Link href={`/tasks/${taskId}/edit?clip=${clip.id}`}><Scissors className="size-4" />Open in editor</Link>

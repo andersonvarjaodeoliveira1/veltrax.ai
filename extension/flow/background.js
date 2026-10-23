@@ -6,6 +6,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     pending = { filename: String(message.filename || ""), at: Date.now() };
     sendResponse({ ok: true });
   }
+  if (message && message.type === "clipgringa-fb-open" && /^https:\/\/(www|web)\.facebook\.com\//.test(String(message.url || ""))) {
+    chrome.tabs.create({ url: String(message.url), active: true })
+      .then(() => sendResponse({ ok: true }))
+      .catch((e) => sendResponse({ ok: false, error: String((e && e.message) || e) }));
+    return true;
+  }
   if (message && message.type === "clipgringa-click" && _sender.tab) {
     trustedClick(_sender.tab.id, Number(message.x), Number(message.y))
       .then(() => sendResponse({ ok: true }))
