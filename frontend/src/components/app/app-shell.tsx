@@ -32,10 +32,10 @@ const DOWNLOADER_URL = "https://turboscribe.ai/pt/downloader/youtube/video";
 const WHATSAPP_URL = "https://wa.me/5511913142143?text=" + encodeURIComponent("Olá! Quero comprar API ou conta do Flow para usar no ClipGringa.");
 
 const NAV: NavItem[] = [
-  { href: "/list", label: "Library", group: "Criar", icon: Film, match: (p) => p.startsWith("/list") || p.startsWith("/tasks") },
+  { href: "/automacao", label: "Modelar vídeo orgânico", group: "1 · Vídeo orgânico", icon: Workflow, match: (p) => p.startsWith("/automacao"), badge: "BETA" },
+  { href: "/influencer", label: "Criar avatar (influencer)", group: "2 · Avatar", icon: UserRound, match: (p) => p.startsWith("/influencer"), badge: "BETA" },
+  { href: "/list", label: "Library", group: "3 · Cortes para TikTok", icon: Film, match: (p) => p.startsWith("/list") || p.startsWith("/tasks") },
   { href: "/folders", label: "Folders", icon: FolderOpen, match: (p) => p.startsWith("/folders") },
-  { href: "/influencer", label: "Criar influencer", icon: UserRound, match: (p) => p.startsWith("/influencer"), badge: "BETA" },
-  { href: "/automacao", label: "Automação", icon: Workflow, match: (p) => p.startsWith("/automacao"), badge: "BETA" },
   { href: DOWNLOADER_URL, label: "Baixar vídeo", icon: Download, match: () => false, external: true },
   { href: "/conectar-flow", label: "Conectar ao Flow", group: "Minha conta", icon: Link2, match: (p) => p.startsWith("/conectar-flow") },
   { href: "/conectar-facebook", label: "Conectar ao Facebook", group: "Minha conta", icon: Link2, badge: "BETA", match: (p) => p.startsWith("/conectar-facebook") },
