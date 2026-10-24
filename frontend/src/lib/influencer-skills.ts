@@ -42,7 +42,16 @@ export const READY_SKILLS: ReadySkill[] = [
     prompt: L("Influencer de 32 anos em um escritório em casa falando sobre o curso online que criou", "32-year-old influencer in a home office talking about the online course she created", "Influencer de 32 años en una oficina en casa hablando del curso online que creó") },
 ];
 
-export type MySkill = { id: string; title: string; prompt: string; skill: string };
+export type MySkill = { id: string; title: string; prompt: string; skill: string; style?: Record<string, unknown>; model?: string; videoCount?: number };
+/** Skill fixada: aparece direto no chat, já com o pedido e os ajustes preenchidos. */
+export type PinnedSkill = { id: string; title: string; prompt: string; skill: string; emoji?: string; style?: Record<string, unknown>; model?: string; videoCount?: number };
+const PIN_KEY = "gv-influencer-pinned";
+export function loadPinned(): PinnedSkill[] {
+  try { const saved = JSON.parse(window.localStorage.getItem(PIN_KEY) ?? "[]"); return Array.isArray(saved) ? saved : []; } catch { return []; }
+}
+export function savePinned(list: PinnedSkill[]): void {
+  try { window.localStorage.setItem(PIN_KEY, JSON.stringify(list)); } catch { /* sem armazenamento */ }
+}
 const KEY = "gv-influencer-myskills";
 
 export function loadMySkills(): MySkill[] {

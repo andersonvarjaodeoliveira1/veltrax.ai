@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, Trash2 } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { SKILLS, type Lang3 } from "@/lib/influencer-examples";
-import { CATEGORIES, READY_SKILLS, loadMySkills, saveMySkills, type MySkill, type SkillCategory } from "@/lib/influencer-skills";
+import { CATEGORIES, READY_SKILLS, loadMySkills, loadPinned, saveMySkills, savePinned, type MySkill, type PinnedSkill, type SkillCategory } from "@/lib/influencer-skills";
 import { cn } from "@/lib/utils";
 
 const S = {
@@ -14,6 +14,8 @@ const S = {
   explore: ["Explorar", "Explore", "Explorar"],
   mine: ["Minhas skills", "My skills", "Mis skills"],
   recreate: ["Recriar", "Recreate", "Recrear"],
+  pin: ["Fixar no chat", "Pin to chat", "Fijar en el chat"],
+  pinned: ["Fixada ✓", "Pinned ✓", "Fijada ✓"],
   back: ["Voltar ao chat", "Back to chat", "Volver al chat"],
   none: ["Você ainda não salvou skills. Depois de criar um vídeo no chat, toque em “Salvar como skill”.", "You have no saved skills yet. After making a video in the chat, tap “Save as skill”.", "Aún no guardaste skills. Después de crear un video en el chat, toca “Guardar como skill”."],
   newSkill: ["Criar a minha skill", "Create my skill", "Crear mi skill"],
@@ -34,7 +36,10 @@ export default function InfluencerSkillsPage() {
   const [name, setName] = useState("");
   const [text, setText] = useState("");
   const [niche, setNiche] = useState("");
-  useEffect(() => { setMine(loadMySkills()); }, []);
+  const [pins, setPins] = useState<PinnedSkill[]>([]);
+  useEffect(() => { setMine(loadMySkills()); setPins(loadPinned()); }, []);
+  const isPinned = (id: string) => pins.some((p) => p.id === id);
+  const togglePin = (item: PinnedSkill) => { const next = isPinned(item.id) ? pins.filter((p) => p.id !== item.id) : [item, ...pins].slice(0, 12); setPins(next); savePinned(next); };
 
   const href = (prompt: string, skill: string) => `/influencer?prompt=${encodeURIComponent(prompt)}${skill ? `&skill=${skill}` : ""}`;
   const list = READY_SKILLS.filter((item) => category === "all" || item.category === category);
@@ -72,7 +77,10 @@ export default function InfluencerSkillsPage() {
                   </div>
                 </div>
                 <p className="text-sm text-muted-foreground">{item.desc[lang]}</p>
-                <Link href={href(item.prompt[lang], item.skill)} className="inline-block rounded-full bg-[#7B3FE4] px-4 py-1.5 text-sm font-medium text-white">{S.recreate[i]}</Link>
+                <div className="flex flex-wrap gap-2">
+                  <Link href={href(item.prompt[lang], item.skill)} className="inline-block rounded-full bg-[#7B3FE4] px-4 py-1.5 text-sm font-medium text-white">{S.recreate[i]}</Link>
+                  <button type="button" aria-pressed={isPinned(item.id)} onClick={() => togglePin({ id: item.id, title: item.name[lang], prompt: item.prompt[lang], skill: item.skill, emoji: item.emoji })} className="rounded-full border border-border px-4 py-1.5 text-sm text-muted-foreground hover:text-foreground aria-pressed:border-[#A98BFF] aria-pressed:text-foreground">{isPinned(item.id) ? S.pinned[i] : S.pin[i]}</button>
+                </div>
               </div>
             ))}
           </div>
@@ -102,6 +110,7 @@ export default function InfluencerSkillsPage() {
             <div key={item.id} className="flex items-center gap-3 rounded-[18px] border border-border bg-card p-4" data-testid="my-skill">
               <div className="min-w-0 flex-1"><p className="truncate font-medium">{item.title}</p></div>
               <Link href={href(item.prompt, item.skill)} className="rounded-full bg-[#7B3FE4] px-4 py-1.5 text-sm font-medium text-white">{S.recreate[i]}</Link>
+              <button type="button" aria-pressed={isPinned(item.id)} onClick={() => togglePin({ id: item.id, title: item.title, prompt: item.prompt, skill: item.skill, style: item.style, model: item.model, videoCount: item.videoCount })} className="rounded-full border border-border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground aria-pressed:border-[#A98BFF] aria-pressed:text-foreground">{isPinned(item.id) ? S.pinned[i] : S.pin[i]}</button>
               <button type="button" aria-label={`${S.remove[i]}: ${item.title}`} onClick={() => { const next = mine.filter((x) => x.id !== item.id); setMine(next); saveMySkills(next); }} className="text-muted-foreground hover:text-foreground"><Trash2 className="size-4" /></button>
             </div>
           ))}

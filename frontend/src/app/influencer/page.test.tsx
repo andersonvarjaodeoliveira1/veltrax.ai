@@ -53,6 +53,15 @@ describe("Criar influencer em chat", () => {
     expect(await screen.findByTestId("chat-niche")).toBeInTheDocument();
   });
 
+  it("mostra as skills fixadas e ao tocar preenche o pedido, o nicho e os ajustes", async () => {
+    window.localStorage.setItem("gv-influencer-pinned", JSON.stringify([{ id: "p1", title: "Minha skill batom", prompt: "Influencer de 28 anos vendendo batom", skill: "shopee", style: { captions: true, camera: "pov" }, videoCount: 3 }]));
+    mockApi();
+    render(<InfluencerPage />);
+    fireEvent.click(within(await screen.findByTestId("pinned-home")).getByRole("button", { name: /Minha skill batom/ }));
+    expect((screen.getByLabelText("Descreva a influencer") as HTMLTextAreaElement).value).toBe("Influencer de 28 anos vendendo batom");
+    expect(within(screen.getByRole("group", { name: "Nicho (opcional)" })).getByRole("button", { name: /Shopee/ })).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("clicar em Recriar preenche o pedido e o nicho", () => {
     mockApi();
     render(<InfluencerPage />);

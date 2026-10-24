@@ -9,7 +9,7 @@ import { LanguageSwitcher, useI18n } from "@/lib/i18n";
 import { EXAMPLES, SKILLS, type Lang3, type SkillId } from "@/lib/influencer-examples";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-import { loadMySkills, saveMySkills } from "@/lib/influencer-skills";
+import { loadMySkills, loadPinned, saveMySkills, type PinnedSkill } from "@/lib/influencer-skills";
 import { dataUrlToFile, fileToDataUrl, loadModels, saveModels, type MyModel } from "@/lib/influencer-models";
 
 type Option = { label: string; detail?: string };
@@ -140,6 +140,7 @@ const S = {
   go: ["Continuar", "Continue", "Continuar"],
   createProject: ["Criar projeto", "Create project", "Crear proyecto"],
   follow: ["Para pedir outra influencer, toque em Novo chat", "To request another influencer, tap New chat", "Para pedir otra influencer, toca en Nuevo chat"],
+  pinnedTitle: ["Skills fixadas", "Pinned skills", "Skills fijadas"],
   skillsLink: ["Skills", "Skills", "Skills"],
   projects: ["Projetos", "Projects", "Proyectos"],
   noProject: ["Sem projeto", "No project", "Sin proyecto"],
@@ -268,6 +269,7 @@ export function InfluencerChat() {
   const selModel = models.find((m) => m.id === selModelId) ?? null;
   const [skillSaved, setSkillSaved] = useState(false);
   const chatId = useRef<number | null>(null);
+  const [pinnedSkills, setPinnedSkills] = useState<PinnedSkill[]>([]);
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
     try { const saved = JSON.parse(window.localStorage.getItem("gv-influencer-chats") ?? "[]"); if (Array.isArray(saved)) setChats(saved.slice(0, 30)); } catch { /* sem armazenamento */ }
@@ -278,6 +280,7 @@ export function InfluencerChat() {
       if (incoming) { setPrompt(incoming.slice(0, 600)); const sk = params.get("skill"); if (sk && SKILLS.some((item) => item.id === sk)) setSkill(sk as SkillId); }
     } catch { /* sem URL */ }
     setModels(loadModels());
+    setPinnedSkills(loadPinned());
     setHydrated(true);
   }, []);
   const persistChats = (list: ChatItem[]) => { setChats(list); try { window.localStorage.setItem("gv-influencer-chats", JSON.stringify(list)); } catch { /* sem armazenamento */ } };
@@ -505,9 +508,16 @@ export function InfluencerChat() {
     persistProjects([...projects, { id: String(Date.now()), name }]);
     setNewProject("");
   }
+  function applyPinned(item: PinnedSkill) {
+    if (started) return;
+    setPrompt(item.prompt.slice(0, 600)); setSkill((SKILLS.some((x) => x.id === item.skill) ? item.skill : "") as SkillId | "");
+    if (item.style) setStyle((current) => ({ ...current, ...(item.style as Partial<typeof current>) }));
+    if (item.model && FLOW_CHOICES.some((m) => m.id === item.model)) { setModel(item.model); setModelChosen(true); }
+    if (item.videoCount) setVideoCount(item.videoCount);
+  }
   function saveAsSkill() {
     const list = loadMySkills();
-    saveMySkills([{ id: String(Date.now()), title: prompt.slice(0, 60), prompt, skill: skill && (skill as string) !== "other" ? skill : "" }, ...list]);
+    saveMySkills([{ id: String(Date.now()), title: prompt.slice(0, 60), prompt, skill: skill && (skill as string) !== "other" ? skill : "", style, model, videoCount }, ...list]);
     setSkillSaved(true);
   }
 
@@ -575,6 +585,16 @@ export function InfluencerChat() {
       <Link href="/list" className="mb-2 flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground hover:text-foreground">← {t("navApp")}</Link>
       <button type="button" onClick={reset} className="flex w-full items-center gap-3 rounded-[14px] bg-white/5 px-2 py-2 text-sm font-medium hover:bg-white/10"><span aria-hidden className="grid size-7 place-items-center rounded-[9px] bg-white/10"><Plus className="size-4" /></span> {t("newChat")}</button>
       <Link href="/influencer/skills" className="flex w-full items-center gap-3 rounded-[14px] px-2 py-2 text-sm font-medium hover:bg-white/5"><span aria-hidden className="grid size-7 place-items-center rounded-[9px] bg-white/10 text-xs">⚡</span> {t("skillsLink")}</Link>
+      {pinnedSkills.length > 0 && (
+        <div className="space-y-0.5 px-1 pb-1" data-testid="pinned-sidebar">
+          <p className="px-1 pt-1 text-[11px] uppercase tracking-wide text-muted-foreground">{t("pinnedTitle")}</p>
+          {pinnedSkills.map((item) => (
+            <button key={item.id} type="button" disabled={started} onClick={() => applyPinned(item)} className="flex w-full items-center gap-2 truncate rounded-[10px] px-2 py-1.5 text-left text-sm hover:bg-white/5 disabled:opacity-50">
+              <span aria-hidden>{item.emoji ?? "⚡"}</span><span className="truncate">{item.title}</span>
+            </button>
+          ))}
+        </div>
+      )}
       <details className="space-y-1.5 px-1" data-testid="chat-projects">
         <summary className="flex cursor-pointer list-none items-center gap-3 rounded-[14px] px-1 py-2 text-sm font-medium hover:bg-white/5"><span aria-hidden className="grid size-7 place-items-center rounded-[9px] bg-white/10 text-xs">▤</span> {t("projects")}</summary>
         <div className="flex flex-wrap gap-1.5 px-1">
@@ -624,6 +644,12 @@ export function InfluencerChat() {
           </div>
           {composer}
           {nicheRow}
+          {pinnedSkills.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2" data-testid="pinned-home">
+              <span className="text-xs text-muted-foreground">{t("pinnedTitle")}:</span>
+              {pinnedSkills.map((item) => <Chip key={item.id} onClick={() => applyPinned(item)}>{item.emoji ?? "⚡"} {item.title}</Chip>)}
+            </div>
+          )}
           <div className="space-y-3" data-testid="my-models">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs text-muted-foreground">{t("myModel")}:</span>
