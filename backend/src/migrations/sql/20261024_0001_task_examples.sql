@@ -1,0 +1,3 @@
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_example BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS example_group VARCHAR(60);
+CREATE INDEX IF NOT EXISTS idx_tasks_is_example ON tasks (is_example) WHERE is_example;

@@ -412,6 +412,8 @@ class TaskRepository:
                     "top_virality_score": row.top_virality_score,
                     "cover_clip_id": row.cover_clip_id,
                     "folder_id": getattr(row, "folder_id", None),
+                    "is_example": bool(getattr(row, "is_example", False)),
+                    "example_group": getattr(row, "example_group", None),
                     "created_at": row.created_at,
                     "updated_at": row.updated_at,
                 }

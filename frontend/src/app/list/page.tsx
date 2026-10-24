@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Kbd } from "@/components/ui/kbd";
 import { GenerationCard } from "@/components/app/generation-card";
+import { LibraryExamples, ExampleToggle } from "@/components/app/library-examples";
 import { fetchGenerations, type GenerationSummary } from "@/lib/generations";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -58,6 +59,7 @@ async function buildSupportError(response: Response, fallbackMessage: string) {
 
 export default function ListPage() {
   const { data: session, isPending } = useSession();
+  const isAdmin = Boolean((session?.user as { is_admin?: boolean } | undefined)?.is_admin);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -398,6 +400,8 @@ export default function ListPage() {
         </Alert>
       )}
 
+      <div className="mt-8"><LibraryExamples /></div>
+
       <div className="mt-6">
         {isLoading ? (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
@@ -422,14 +426,16 @@ export default function ListPage() {
         ) : (
           <div className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {visibleTasks.map((task) => (
-              <GenerationCard
-                key={task.id}
-                generation={task}
-                showStatus
-                selected={selectedTaskIds.includes(task.id)}
-                onToggle={() => handleToggleTask(task.id)}
-                selectionDisabled={activeBatchAction !== null}
-              />
+              <div key={task.id}>
+                <GenerationCard
+                  generation={task}
+                  showStatus
+                  selected={selectedTaskIds.includes(task.id)}
+                  onToggle={() => handleToggleTask(task.id)}
+                  selectionDisabled={activeBatchAction !== null}
+                />
+                {isAdmin && task.status === "completed" && <ExampleToggle id={task.id} isExample={Boolean(task.is_example)} group={task.example_group} onChanged={() => void refreshTasks()} />}
+              </div>
             ))}
           </div>
         )}

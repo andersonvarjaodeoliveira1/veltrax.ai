@@ -499,6 +499,120 @@ async def get_shared_clip_file(
     )
 
 
+# ---- Exemplos da biblioteca: cortes prontos que o admin marca e todas as contas podem assistir (só leitura). ----
+def _example_clip_url(task_id: str, clip_id: str) -> str:
+    return f"/tasks/examples/{task_id}/clips/{clip_id}/file"
+
+
+@router.get("/examples")
+async def list_example_tasks(request: Request, db: AsyncSession = Depends(get_db)):
+    """Lista os cortes marcados como exemplo, agrupados por tema. Qualquer conta logada pode ver."""
+    from sqlalchemy import text
+
+    await _get_user_id_from_headers(request, db)
+    result = await db.execute(
+        text(
+            """
+            SELECT t.id, t.example_group, t.created_at, s.title AS source_title,
+                   (SELECT COUNT(*) FROM generated_clips c WHERE c.task_id = t.id) AS clips_count,
+                   (SELECT MAX(virality_score) FROM generated_clips c WHERE c.task_id = t.id) AS top_virality_score,
+                   (SELECT id FROM generated_clips c WHERE c.task_id = t.id
+                    ORDER BY virality_score DESC NULLS LAST, clip_order ASC LIMIT 1) AS cover_clip_id
+            FROM tasks t LEFT JOIN sources s ON t.source_id = s.id
+            WHERE t.is_example AND t.status = 'completed'
+            ORDER BY t.example_group NULLS LAST, t.created_at DESC
+            LIMIT 120
+            """
+        )
+    )
+    items = []
+    for row in result.fetchall():
+        items.append(
+            {
+                "id": row.id,
+                "group": row.example_group or "Outros",
+                "title": row.source_title or "Exemplo",
+                "clips_count": row.clips_count,
+                "top_virality_score": row.top_virality_score,
+                "cover_url": _example_clip_url(row.id, row.cover_clip_id) if row.cover_clip_id else None,
+            }
+        )
+    return {"examples": items}
+
+
+@router.get("/examples/{task_id}")
+async def get_example_task(task_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    """Os cortes de um exemplo (campos públicos), só se o corte estiver marcado como exemplo."""
+    from sqlalchemy import text
+
+    await _get_user_id_from_headers(request, db)
+    flag = await db.execute(text("SELECT is_example FROM tasks WHERE id = :id"), {"id": task_id})
+    row = flag.fetchone()
+    if not row or not row.is_example:
+        raise HTTPException(status_code=404, detail="Example not found")
+    task_service = TaskService(db)
+    task = await task_service.get_task_with_clips(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Example not found")
+    clips = []
+    for clip in task.get("clips", []):
+        item = {key: clip.get(key) for key in PUBLIC_CLIP_FIELDS}
+        item["video_url"] = _example_clip_url(task_id, clip["id"])
+        clips.append(item)
+    return {"id": task_id, "title": task.get("source_title"), "clips": clips}
+
+
+@router.get("/examples/{task_id}/clips/{clip_id}/file")
+async def get_example_clip_file(
+    task_id: str,
+    clip_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db, scope="function"),
+):
+    """Serve o arquivo de um corte de exemplo para qualquer conta logada."""
+    from sqlalchemy import text
+
+    await _get_user_id_from_headers(request, db)
+    flag = await db.execute(text("SELECT is_example FROM tasks WHERE id = :id"), {"id": task_id})
+    row = flag.fetchone()
+    if not row or not row.is_example:
+        raise HTTPException(status_code=404, detail="Example not found")
+    task_service = TaskService(db)
+    clip = await task_service.clip_repo.get_clip_by_id(db, clip_id)
+    if not clip or clip.get("task_id") != task_id:
+        raise HTTPException(status_code=404, detail="Clip not found")
+    clip_path = Path(clip["file_path"])
+    if not clip_path.exists():
+        raise HTTPException(status_code=404, detail="Clip file not found")
+    await db.close()
+    return FileResponse(
+        path=str(clip_path),
+        media_type="video/mp4",
+        filename=clip["filename"],
+        content_disposition_type="inline",
+        headers={"Cache-Control": "private, max-age=300"},
+    )
+
+
+@router.patch("/{task_id}/example")
+async def set_task_example(task_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    """Admin: marca ou desmarca um corte como exemplo da biblioteca e define o tema."""
+    from sqlalchemy import text
+
+    await require_admin_user(request, db, get_config())
+    body = await _read_json_object(request)
+    is_example = bool(body.get("is_example"))
+    group = " ".join(str(body.get("group") or "").split())[:60] or None
+    result = await db.execute(
+        text("UPDATE tasks SET is_example = :flag, example_group = :grp WHERE id = :id AND status = 'completed'"),
+        {"flag": is_example, "grp": group if is_example else None, "id": task_id},
+    )
+    await db.commit()
+    if not result.rowcount:
+        raise HTTPException(status_code=404, detail="Task not found or not completed")
+    return {"id": task_id, "is_example": is_example, "group": group if is_example else None}
+
+
 @router.get("/{task_id}")
 async def get_task(
     task_id: str, request: Request, db: AsyncSession = Depends(get_db)

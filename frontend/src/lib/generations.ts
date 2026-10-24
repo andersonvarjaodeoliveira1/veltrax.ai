@@ -10,6 +10,8 @@ export interface GenerationSummary {
   top_virality_score?: number | null;
   cover_clip_id?: string | null;
   folder_id?: string | null;
+  is_example?: boolean;
+  example_group?: string | null;
   created_at: string;
   updated_at: string;
 }
