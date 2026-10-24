@@ -687,7 +687,7 @@ export function InfluencerChat() {
                   className={cn("rounded-[10px] px-3.5 py-1.5 text-xs font-medium", filter === id ? "bg-white/10 text-foreground" : "text-muted-foreground hover:bg-white/5")}>{label}</button>
               ))}
             </div>
-            <div className="grid gap-x-4 gap-y-6 sm:grid-cols-2">
+            <div className="grid gap-x-4 gap-y-6 sm:grid-cols-2 xl:grid-cols-3">
               {shown.map((item) => (
                 <button key={item.id} type="button" onClick={() => { setPrompt(item.prompt[lang]); setSkill(item.skill); }} className="group text-left">
                   <div className="relative aspect-[16/10] overflow-hidden rounded-[20px] ring-1 ring-white/10" style={{ background: `radial-gradient(120% 90% at 20% 0%, ${item.from}66, transparent 60%), radial-gradient(100% 90% at 100% 100%, ${item.to}55, transparent 60%), #17161b` }} aria-hidden>
@@ -696,7 +696,9 @@ export function InfluencerChat() {
                     <span className="absolute bottom-3 left-3 rounded-full bg-black/45 px-2.5 py-0.5 text-[10px] font-medium text-white/90">{SKILLS.find((x) => x.id === item.skill)?.name[lang]}</span>
                   </div>
                   <span className="mt-3 flex items-center gap-3">
-                    <span className="min-w-0 flex-1 line-clamp-2 text-sm font-medium leading-snug">{item.title[lang]}</span>
+                    <span aria-hidden className="grid size-7 shrink-0 place-items-center rounded-[9px] bg-white/10 text-sm">{item.emoji}</span>
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{item.title[lang]}</span>
+                    <span className="inline-flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground transition group-hover:hidden">⚡ Skill</span>
                     <span className="rounded-full bg-[#7B3FE4] px-3 py-1 text-xs font-medium text-white opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100">{t("recreate")}</span>
                   </span>
                 </button>
