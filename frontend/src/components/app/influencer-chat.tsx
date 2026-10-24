@@ -27,6 +27,12 @@ function saveRemote(chat: ChatItem) {
 
 type Phase = "home" | "intake" | "ask" | "approve" | "photos" | "prompt" | "count" | "model" | "cost" | "board";
 
+const CHANGE_HINTS: Record<"pt" | "en" | "es", string[]> = {
+  pt: ["Deixe ela mais morena e com cabelo curto", "Troque o cenário para uma cozinha clara", "Fale mais do desconto e da urgência", "Deixe o tom mais animado e divertido", "Ela deve ter 35 anos e parecer mais madura", "Mostre o produto logo no começo"],
+  en: ["Make her tanner with short hair", "Change the scene to a bright kitchen", "Talk more about the discount and urgency", "Make the tone more lively and fun", "She should be 35 and look more mature", "Show the product right at the start"],
+  es: ["Hazla más morena y con pelo corto", "Cambia el escenario a una cocina clara", "Habla más del descuento y la urgencia", "Haz el tono más animado y divertido", "Debe tener 35 años y verse más madura", "Muestra el producto al inicio"],
+};
+
 const FLOW_URL = "https://labs.google/fx/pt/tools/flow";
 const SCENES = 4;
 const ANGLES = ["curiosity", "problem", "proof", "question"];
@@ -60,6 +66,12 @@ const S = {
   newChat: ["Novo chat", "New chat", "Nuevo chat"],
   other: ["Outro", "Other", "Otro"],
   otherHint: ["Escreva o que você quer", "Write what you want", "Escribe lo que quieres"],
+  secVideo: ["Vídeo", "Video", "Video"],
+  secScene: ["Cenário", "Scene", "Escena"],
+  secVoice: ["Voz", "Voice", "Voz"],
+  secEnd: ["Final", "Ending", "Final"],
+  changeQ: ["Ajuste pedido pela pessoa", "Change asked by the person", "Ajuste pedido por la persona"],
+  changeSent: ["Ajuste aplicado na influencer e no prompt.", "Change applied to the influencer and the prompt.", "Ajuste aplicado a la influencer y al prompt."],
   styleAsk: ["Como você quer os vídeos?", "How do you want the videos?", "¿Cómo quieres los videos?"],
   styCaptions: ["Legenda no vídeo", "Subtitles", "Subtítulos"],
   styVoice: ["Idioma da voz", "Voice language", "Idioma de la voz"],
@@ -192,6 +204,7 @@ const S = {
   vCta: ["CTA", "CTA", "CTA"],
   go: ["Continuar", "Continue", "Continuar"],
   createProject: ["Criar projeto", "Create project", "Crear proyecto"],
+  changePh: ["Peça um ajuste: eu aplico na influencer e no prompt", "Ask for a change: I apply it to the influencer and the prompt", "Pide un ajuste: lo aplico a la influencer y al prompt"],
   follow: ["Para pedir outra influencer, toque em Novo chat", "To request another influencer, tap New chat", "Para pedir otra influencer, toca en Nuevo chat"],
   pinnedTitle: ["Skills fixadas", "Pinned skills", "Skills fijadas"],
   skillsLink: ["Skills", "Skills", "Skills"],
@@ -298,6 +311,8 @@ export function InfluencerChat() {
   const [active, setActive] = useState(0);
   const [sent, setSent] = useState("");
   const [demo, setDemo] = useState("");
+  const [changeText, setChangeText] = useState("");
+  const [hint, setHint] = useState("");
   const orbitRef = useRef<HTMLDivElement>(null);
   // Luz que corre em volta da caixa: o ângulo é atualizado por script, então anda em qualquer navegador.
   useEffect(() => {
@@ -527,12 +542,12 @@ export function InfluencerChat() {
     } catch { /* sem fotos: o membro envia a sua ou segue sem foto */ } finally { setBusy(""); }
   }
 
-  async function writePrompt(file: File | null, chosenPin: Pin | null, keepPin = false) {
+  async function writePrompt(file: File | null, chosenPin: Pin | null, keepPin = false, opts?: { persona?: Persona; extra?: string }) {
     setPhoto(file); if (!keepPin) setPin(chosenPin);
     setPhase("prompt"); setBusy("prompt"); setError("");
     try {
       const form = new FormData();
-      Object.entries({ ...persona, extra: "" }).forEach(([key, value]) => form.append(key, value));
+      Object.entries({ ...(opts?.persona ?? persona), extra: opts?.extra ?? "" }).forEach(([key, value]) => form.append(key, value));
       if (file) form.append("image", file); else if (chosenPin) form.append("image_url", chosenPin.full);
       const response = await fetch("/api/multiplier/clone/influencer-prompt", { method: "POST", body: form });
       if (!response.ok) { await fail(response); setPhase("photos"); return; }
@@ -659,6 +674,55 @@ export function InfluencerChat() {
   const q = questions[qi];
   const totalCredits = chosen.credits * SCENES * videoCount;
   const started = phase !== "home";
+  const canChange = started && Boolean(persona.name) && busy === "";
+
+  // Depois que a influencer existe, a caixa aceita ajustes: sugere um, apaga e traz outro.
+  useEffect(() => {
+    if (!canChange || changeText || typeof window === "undefined") { setHint(""); return; }
+    const texts = CHANGE_HINTS[lang];
+    let ti = 0; let n = 0; let erasing = false; let timer = 0;
+    const tick = () => {
+      const full = texts[ti % texts.length];
+      if (!erasing) { n += 1; setHint(full.slice(0, n)); if (n >= full.length) { erasing = true; timer = window.setTimeout(tick, 2200); return; } }
+      else { n -= 2; setHint(full.slice(0, Math.max(n, 0))); if (n <= 0) { erasing = false; n = 0; ti += 1; timer = window.setTimeout(tick, 500); return; } }
+      timer = window.setTimeout(tick, erasing ? 18 : 40);
+    };
+    timer = window.setTimeout(tick, 700);
+    return () => window.clearTimeout(timer);
+  }, [canChange, changeText, lang]);
+
+  async function applyChange() {
+    const extra = changeText.trim().slice(0, 400);
+    if (!extra || !canChange) return;
+    setChangeText(""); setError("");
+    const keep = phase;
+    const next = [...answers, { question: t("changeQ"), answer: extra }];
+    setAnswers(next); setPrompt((current) => `${current}\n${extra}`.slice(0, 1200));
+    setBusy("build");
+    try {
+      const data = await brief(next);
+      if (!data) return;
+      const updated: Persona = selModel ? selModel.persona : data.persona ?? persona;
+      setPersona(updated); setSearches(Array.isArray(data.searches) ? data.searches : searches); setCopyText(data.copy || copyText);
+      if (prompts.length) {
+        await writePrompt(photo, pin, true, { persona: updated, extra });
+        // Etapas depois do prompt: os roteiros antigos não valem mais, então volta para escolher de novo.
+        if (["count", "model", "cost", "board"].includes(keep)) { setBoards([]); setPhase("count"); }
+      } else setPhase(keep === "ask" || keep === "intake" ? "approve" : keep);
+      setSent(t("changeSent")); window.setTimeout(() => setSent(""), 2500);
+    } catch { setError(t("error")); } finally { setBusy(""); }
+  }
+  const STYLE_ROWS = () => ([
+            ["format", t("styFormat"), [["talk", t("fmtTalk")], ["pov", t("fmtPov")], ["recipe", t("fmtRecipe")]]],
+            ["setting", t("stySetting"), [["", t("styAuto")], ["home", t("setHome")], ["farm", t("setFarm")], ["office", t("setOffice")], ["car", t("setCar")], ["outdoor", t("setOutdoor")]]],
+            ["avatarMix", t("styAvatarMix"), [[false, t("noWord")], [true, t("yesWord")]]],
+            ["cta", t("styCta"), [["bio", t("ctaBio")], ["comment", t("ctaComment")], ["keyword", t("ctaKeyword")]]],
+            ["captions", t("styCaptions"), [[false, t("styNo")], [true, t("styYes")]]],
+            ["voice", t("styVoice"), [["", `${t("styAuto")} (${LANG_NAMES[LANG_CODE[lang]]})`], ["pt-BR", "Português (Brasil)"], ["pt-PT", "Português (Portugal)"], ["en", "English"], ["es", "Español"], ["fr", "Français"], ["de", "Deutsch"], ["it", "Italiano"]]],
+            ["tone", t("styTone"), [["", t("styAuto")], ["calm", t("toneCalm")], ["lively", t("toneLively")], ["deep", t("toneDeep")], ["soft", t("toneSoft")], ["young", t("toneYoung")], ["mature", t("toneMature")]]],
+            ["camera", t("styCamera"), [["selfie", t("camSelfie")], ["tripod", t("camTripod")], ["pov", t("camPov")], ["cinematic", t("camCinema")]]],
+            ["product", t("styProduct"), [[true, t("styYes")], [false, t("styNo")]]],
+          ] as [keyof typeof style, string, [string | boolean, string][]][]);
 
   const nicheRow = (
     <div className="flex flex-wrap items-center gap-1 text-sm">
@@ -677,8 +741,8 @@ export function InfluencerChat() {
   const composer = (
     <div ref={orbitRef} className="cg-orbit relative">
     <div className="relative rounded-[26px] bg-[#1a191d] p-5 ring-1 ring-white/10 shadow-[0_20px_60px_-30px_#000]" data-testid="chat-composer">
-      <textarea value={started ? "" : prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); if (!started && !busy && prompt.trim().length >= 8) start(); } }} rows={3} maxLength={600} disabled={started} aria-label={lang === "en" ? "Describe the influencer" : lang === "es" ? "Describe a la influencer" : "Descreva a influencer"}
-        placeholder={phase === "home" ? (demo ? `${demo}▍` : t("ph")) : t("follow")}
+      <textarea value={started ? changeText : prompt} onChange={(event) => (started ? setChangeText(event.target.value) : setPrompt(event.target.value))} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); if (started) void applyChange(); else if (!busy && prompt.trim().length >= 8) start(); } }} rows={3} maxLength={600} disabled={started && !canChange} aria-label={lang === "en" ? "Describe the influencer" : lang === "es" ? "Describe a la influencer" : "Descreva a influencer"}
+        placeholder={phase === "home" ? (demo ? `${demo}▍` : t("ph")) : canChange ? (hint ? `${hint}▍` : t("changePh")) : t("follow")}
         className="min-h-[96px] w-full resize-none bg-transparent px-1 py-1 text-lg outline-none placeholder:text-muted-foreground/70 disabled:opacity-60" />
       <div className="mt-2 flex items-center gap-2">
         <input ref={attachRef} type="file" multiple accept="image/png,image/jpeg,image/webp" className="sr-only" aria-label={t("attachPhoto")}
@@ -701,11 +765,12 @@ export function InfluencerChat() {
           </select>
         )}
         <span className="ml-auto inline-flex items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">✋ {t("askFirst")}</span>
-        <button type="button" aria-label={t("send")} title={t("send")} onClick={start} disabled={started || prompt.trim().length < 8}
+        <button type="button" aria-label={t("send")} title={t("send")} onClick={() => (started ? void applyChange() : start())} disabled={started ? !canChange || changeText.trim().length < 3 : prompt.trim().length < 8}
           className="flex size-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#A98BFF] to-[#7B3FE4] text-white disabled:opacity-40">
           {busy ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-5" />}
         </button>
       </div>
+      {sent === t("changeSent") && <p role="status" className="mt-2 px-1 text-xs text-[#5BD69A]">✓ {sent}</p>}
       <p className="mt-2 px-1 text-[11px] text-muted-foreground" data-testid="cost-estimate">
         {chosen.credits === 0 ? t("estFree") : `${t("estimate")}: ~${chosen.credits * SCENES} ${t("creditsWord")} / ${t("video")} (${SCENES} ${t("scenesWord")} × ${chosen.credits})`}
       </p>
@@ -1011,20 +1076,22 @@ export function InfluencerChat() {
         <Msg testid="chat-style">
           <p>{t("styleAsk")}</p>
           {([
-            ["format", t("styFormat"), [["talk", t("fmtTalk")], ["pov", t("fmtPov")], ["recipe", t("fmtRecipe")]]],
-            ["setting", t("stySetting"), [["", t("styAuto")], ["home", t("setHome")], ["farm", t("setFarm")], ["office", t("setOffice")], ["car", t("setCar")], ["outdoor", t("setOutdoor")]]],
-            ["avatarMix", t("styAvatarMix"), [[false, t("noWord")], [true, t("yesWord")]]],
-            ["cta", t("styCta"), [["bio", t("ctaBio")], ["comment", t("ctaComment")], ["keyword", t("ctaKeyword")]]],
-            ["captions", t("styCaptions"), [[false, t("styNo")], [true, t("styYes")]]],
-            ["voice", t("styVoice"), [["", `${t("styAuto")} (${LANG_NAMES[LANG_CODE[lang]]})`], ["pt-BR", "Português (Brasil)"], ["pt-PT", "Português (Portugal)"], ["en", "English"], ["es", "Español"], ["fr", "Français"], ["de", "Deutsch"], ["it", "Italiano"]]],
-            ["tone", t("styTone"), [["", t("styAuto")], ["calm", t("toneCalm")], ["lively", t("toneLively")], ["deep", t("toneDeep")], ["soft", t("toneSoft")], ["young", t("toneYoung")], ["mature", t("toneMature")]]],
-            ["camera", t("styCamera"), [["selfie", t("camSelfie")], ["tripod", t("camTripod")], ["pov", t("camPov")], ["cinematic", t("camCinema")]]],
-            ["product", t("styProduct"), [[true, t("styYes")], [false, t("styNo")]]],
-          ] as [keyof typeof style, string, [string | boolean, string][]][]).map(([key, label, opts]) => (
-            <div key={key} role="radiogroup" aria-label={label} className="flex flex-wrap items-center gap-2">
-              <span className="w-full text-xs text-muted-foreground sm:w-28">{label}</span>
-              {opts.map(([value, text]) => (
-                <Chip key={String(value)} role="radio" on={(key === "product" ? (style.product ?? Boolean(productLook || productLink)) : style[key]) === value} onClick={() => { if (phase === "count") setStyle((current) => ({ ...current, [key]: value })); }}>{text}</Chip>
+            [`🎬 ${t("secVideo")}`, ["format", "camera", "product", "avatarMix"]],
+            [`📍 ${t("secScene")}`, ["setting"]],
+            [`🎙️ ${t("secVoice")}`, ["voice", "tone"]],
+            [`📣 ${t("secEnd")}`, ["cta", "captions"]],
+          ] as [string, string[]][]).map(([title, keys]) => (
+            <div key={title} className="space-y-3 rounded-[18px] border border-white/10 bg-white/[0.03] p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#A98BFF]">{title}</p>
+              {(STYLE_ROWS().filter(([key]) => keys.includes(key as string))).map(([key, label, opts]) => (
+                <div key={key} role="radiogroup" aria-label={label} className="space-y-1.5">
+                  <span className="block text-xs text-muted-foreground">{label}</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {opts.map(([value, text]) => (
+                      <Chip key={String(value)} role="radio" on={(key === "product" ? (style.product ?? Boolean(productLook || productLink)) : style[key]) === value} onClick={() => { if (phase === "count") setStyle((current) => ({ ...current, [key]: value })); }}>{text}</Chip>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           ))}

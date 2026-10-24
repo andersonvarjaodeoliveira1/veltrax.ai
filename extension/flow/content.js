@@ -326,27 +326,50 @@
   /* ---------- painel ---------- */
   const css = `
   :host{all:initial}
-  .box{position:fixed;top:72px;right:16px;width:360px;max-height:calc(100vh - 100px);overflow:auto;z-index:2147483000;background:#0f0d14;color:#f2eefc;border:1px solid rgba(255,255,255,.14);border-radius:18px;font:13px/1.45 "Google Sans",Inter,system-ui,sans-serif;box-shadow:0 18px 50px rgba(0,0,0,.55)}
-  .head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.08)}
-  .title{font-weight:600;font-size:13px}
-  .badge{font-size:10px;font-weight:600;color:#a98bff;border:1px solid rgba(169,139,255,.5);padding:2px 7px;border-radius:99px;margin-left:6px}
-  .x{background:none;border:0;color:#a79fb8;cursor:pointer;font-size:16px}
-  .body{padding:12px 14px;display:flex;flex-direction:column;gap:10px}
-  textarea{width:100%;min-height:84px;resize:vertical;background:#09080c;color:#f2eefc;border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:8px;font:11px ui-monospace,monospace;box-sizing:border-box}
-  .row{display:flex;gap:8px;flex-wrap:wrap}
-  button.b{border:0;border-radius:99px;padding:9px 16px;font:600 12px inherit;cursor:pointer;color:#fff;background:linear-gradient(135deg,#8b5cf6,#7b3fe4)}
-  button.b.o{background:transparent;border:1px solid rgba(255,255,255,.2);color:#e8e2f8}
-  button.b:disabled{opacity:.45;cursor:default}
-  .bar{height:7px;border-radius:99px;background:rgba(255,255,255,.1);overflow:hidden}
-  .bar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,#8b5cf6,#a98bff);transition:width .4s}
-  .now{font-size:12px;color:#e8e2f8}
+  *{box-sizing:border-box}
+  .box{position:fixed;top:72px;right:16px;width:372px;max-height:calc(100vh - 100px);overflow:auto;z-index:2147483000;color:#f2eefc;font:13px/1.45 "Google Sans",Inter,system-ui,sans-serif;border-radius:22px;padding:1px;
+    background:linear-gradient(160deg,rgba(169,139,255,.7),rgba(123,63,228,.15) 35%,rgba(70,40,160,.1) 70%,rgba(169,139,255,.5));box-shadow:0 0 0 1px rgba(0,0,0,.4),0 24px 70px rgba(80,30,200,.45),0 0 40px rgba(123,63,228,.25)}
+  .inner{border-radius:21px;background:radial-gradient(120% 80% at 100% 0%,rgba(123,63,228,.28),transparent 55%),radial-gradient(90% 60% at 0% 100%,rgba(58,155,187,.12),transparent 60%),#0a0814;overflow:hidden}
+  .head{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.07)}
+  .orb{width:30px;height:30px;border-radius:50%;flex:none;background:conic-gradient(from 0deg,#7b3fe4,#a98bff,#3a9bbb,#7b3fe4);animation:spin 5s linear infinite;position:relative;box-shadow:0 0 18px rgba(123,63,228,.7)}
+  .orb:after{content:"";position:absolute;inset:5px;border-radius:50%;background:#0a0814}
+  .idle .orb{animation-duration:14s}
+  .ttl{flex:1;min-width:0}
+  .eyebrow{font:600 9px ui-monospace,SFMono-Regular,monospace;letter-spacing:.18em;color:#a98bff;text-transform:uppercase}
+  .title{font-weight:700;font-size:15px;letter-spacing:-.01em}
+  .x{background:rgba(255,255,255,.06);border:0;color:#c9bbfa;cursor:pointer;font-size:15px;width:26px;height:26px;border-radius:50%}
+  .x:hover{background:rgba(255,255,255,.12)}
+  .body{padding:14px 16px 16px;display:flex;flex-direction:column;gap:12px}
+  .chips{display:flex;gap:6px;flex-wrap:wrap}
+  .chip{font:600 10px ui-monospace,monospace;letter-spacing:.06em;padding:4px 9px;border-radius:99px;border:1px solid rgba(169,139,255,.35);color:#c9bbfa;background:rgba(123,63,228,.12);display:inline-flex;align-items:center;gap:6px}
+  .dot{width:6px;height:6px;border-radius:50%;background:#5bd69a;box-shadow:0 0 8px #5bd69a}
+  .run .dot{background:#f5b454;box-shadow:0 0 8px #f5b454;animation:pulse 1.1s ease-in-out infinite}
+  .status{border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03);border-radius:16px;padding:12px 14px}
+  .now{font-size:13px;color:#f2eefc}
   .muted{font-size:11px;color:#a79fb8}
-  .err{font-size:12px;color:#f0466b}
-  .ok{color:#5bd69a}
-  ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;max-height:200px;overflow:auto}
-  li{display:flex;justify-content:space-between;gap:8px;font-size:11px;padding:5px 8px;border-radius:9px;background:rgba(255,255,255,.04)}
-  .st-done{color:#5bd69a}.st-run{color:#f5b454}.st-err{color:#f0466b}.st-wait{color:#a79fb8}
-  label.chk{display:flex;gap:6px;align-items:center;font-size:11px;color:#c9bbfa}
+  .err{font-size:12px;color:#ff7a95;margin-top:6px}
+  .err:empty{display:none}
+  .bar{height:6px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:10px;position:relative}
+  .bar>i{display:block;height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,#5a1baa,#7b3fe4,#a98bff);box-shadow:0 0 14px #7b3fe4;transition:width .5s}
+  .run .bar:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.35),transparent);animation:scan 1.6s linear infinite}
+  .row{display:flex;gap:8px;flex-wrap:wrap}
+  button.b{border:0;border-radius:99px;padding:10px 18px;font:600 12px inherit;cursor:pointer;color:#fff;background:linear-gradient(135deg,#8b5cf6,#7b3fe4);box-shadow:0 8px 22px -8px #7b3fe4}
+  button.b:hover:not(:disabled){filter:brightness(1.12)}
+  button.b.o{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.16);color:#e8e2f8;box-shadow:none}
+  button.b:disabled{opacity:.4;cursor:default}
+  details.adv{border:1px dashed rgba(255,255,255,.14);border-radius:14px;padding:9px 12px}
+  details.adv summary{cursor:pointer;font:600 10px ui-monospace,monospace;letter-spacing:.12em;color:#a79fb8;text-transform:uppercase}
+  textarea{width:100%;min-height:76px;resize:vertical;margin-top:10px;background:#07060d;color:#d9d2ee;border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:8px;font:11px ui-monospace,monospace}
+  ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px;max-height:210px;overflow:auto}
+  li{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;padding:8px 11px;border-radius:12px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.05)}
+  li.cur{border-color:rgba(245,180,84,.45);background:rgba(245,180,84,.07)}
+  li span:last-child{font:600 10px ui-monospace,monospace;letter-spacing:.06em;text-transform:uppercase}
+  .st-done{color:#5bd69a}.st-run{color:#f5b454}.st-err{color:#ff7a95}.st-wait{color:#8d85a3}
+  label.chk{display:flex;gap:6px;align-items:center;font-size:11px;color:#c9bbfa;margin-top:10px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes pulse{50%{opacity:.35}}
+  @keyframes scan{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+  @media (prefers-reduced-motion:reduce){.orb,.run .dot,.run .bar:after{animation:none}}
   `;
 
   const host = document.createElement("div");
@@ -355,19 +378,23 @@
   const root = host.attachShadow({ mode: "open" });
   root.innerHTML = `
   <style>${css}</style>
-  <div class="box" id="box">
-    <div class="head"><div><span class="title">ClipGringa · Flow</span><span class="badge">LOWER PRIORITY</span></div><button class="x" id="min" title="Minimizar">–</button></div>
+  <div class="box idle" id="box"><div class="inner">
+    <div class="head"><span class="orb"></span><div class="ttl"><div class="eyebrow">Piloto automático · Flow</div><div class="title">ClipGringa</div></div><button class="x" id="min" title="Minimizar">–</button></div>
     <div class="body" id="body">
-      <div class="muted">Cole o pacote do ClipGringa (botão “Copiar pacote”). A extensão gera as imagens e os vídeos em Lower Priority, sem gastar créditos.</div>
-      <textarea id="pkg" placeholder='Cole aqui o pacote do ClipGringa'></textarea>
-      <label class="chk"><input type="checkbox" id="test"> Só a primeira cena (teste)</label>
-      <div class="row"><button class="b" id="go">Começar</button><button class="b o" id="stop" disabled>Parar</button><button class="b o" id="clear">Limpar</button></div>
-      <div class="bar"><i id="fill"></i></div>
-      <div class="now" id="now">Pronto para começar.</div>
-      <div class="err" id="err"></div>
+      <div class="chips"><span class="chip"><i class="dot"></i><span id="chipst">PRONTO</span></span><span class="chip">LOWER PRIORITY · 0 CRÉDITOS</span></div>
+      <div class="status">
+        <div class="now" id="now">Pronto. Envie o pacote pelo site e eu faço o resto sozinho.</div>
+        <div class="err" id="err"></div>
+        <div class="bar"><i id="fill"></i></div>
+      </div>
       <ul id="list"></ul>
+      <div class="row"><button class="b" id="go">Começar</button><button class="b o" id="stop" disabled>Parar</button><button class="b o" id="clear">Limpar</button></div>
+      <details class="adv"><summary>Pacote (avançado)</summary>
+        <textarea id="pkg" placeholder='Cole aqui o pacote do ClipGringa'></textarea>
+        <label class="chk"><input type="checkbox" id="test"> Só a primeira cena (teste)</label>
+      </details>
     </div>
-  </div>`;
+  </div></div>`;
 
   const el = (id) => root.getElementById(id);
   let running = false;
@@ -375,6 +402,10 @@
   let state = { jobs: [], done: {}, errors: {} };
 
   function setNow(msg) { el("now").textContent = msg; }
+  function setRunning(on) {
+    const box = el("box"); box.classList.toggle("run", on); box.classList.toggle("idle", !on);
+    el("chipst").textContent = on ? "TRABALHANDO" : "PRONTO";
+  }
   function setError(msg) { el("err").textContent = msg || ""; }
 
   function render() {
@@ -387,7 +418,7 @@
       if (state.done[j.key]) st = "<span class='st-done'>baixado</span>";
       else if (state.errors[j.key]) st = "<span class='st-err'>erro</span>";
       else if (state.current === j.key) st = `<span class='st-run'>${state.phase || "gerando"}</span>`;
-      return `<li><span>${label}</span>${st}</li>`;
+      return `<li class="${state.current === j.key ? "cur" : ""}"><span>${label}</span>${st}</li>`;
     }).join("");
   }
 
@@ -454,11 +485,30 @@
     if (onlyFirst) stopFlag = true;
   }
 
+  const FLOW_HOME = "https://labs.google/fx/pt/tools/flow";
+  const inProject = () => /\/project\//.test(location.pathname);
+
+  // Garante que estamos dentro de um projeto do Flow: abre um novo sozinho quando preciso.
+  async function ensureProject() {
+    if (inProject()) return true;
+    setNow("Abrindo um novo projeto no Flow…");
+    const isNew = (b) => visible(b) && /(novo projeto|new project)/i.test(`${text(b)} ${b.getAttribute("aria-label") || ""}`.trim());
+    const btn = await waitFor(() => $$("button, [role=button], a", document).find(isNew), 15000);
+    if (!btn) {
+      if (!/\/tools\/flow/.test(location.pathname)) { setNow("Indo para a página do Flow…"); location.href = FLOW_HOME; }
+      return false;
+    }
+    btn.click();
+    const inside = await waitFor(inProject, 25000, 300);
+    if (inside) await sleep(3000);
+    return Boolean(inside);
+  }
+
   async function start() {
     if (running) return;
     setError("");
-    if (!/\/project\//.test(location.pathname)) {
-      setError("Abra um projeto do Flow (a tela com suas imagens e vídeos, não a ferramenta ClipGringa) e clique em Começar de novo.");
+    if (!(await ensureProject())) {
+      setError("Ainda não consegui abrir um projeto sozinho. Se a página recarregar, eu continuo; senão, abra um projeto do Flow.");
       return;
     }
     try {
@@ -468,7 +518,7 @@
         state = { jobs: parsed.jobs, done: {}, errors: {}, raw: el("pkg").value.trim() };
       }
     } catch (e) { setError(e.message); return; }
-    running = true; stopFlag = false;
+    running = true; stopFlag = false; setRunning(true);
     el("go").disabled = true; el("stop").disabled = false;
     const onlyFirst = el("test").checked;
     await persist(); render();
@@ -488,11 +538,17 @@
       state.current = null; state.phase = "";
       setNow(left === 0 ? "Tudo pronto! Os vídeos foram baixados na pasta Downloads/ClipGringa. Envie-os no ClipGringa." : stopFlag ? "Parado. Clique em Começar para continuar de onde parou." : `Terminou com ${left} cena(s) pendente(s). Clique em Começar para tentar de novo.`);
     } finally {
-      running = false; el("go").disabled = false; el("stop").disabled = true; render();
+      running = false; setRunning(false); el("go").disabled = false; el("stop").disabled = true; render();
     }
   }
 
   el("go").addEventListener("click", start);
+  let pasteTimer = 0;
+  el("pkg").addEventListener("input", () => {
+    // Colou o pacote? Começa sozinho, sem precisar clicar.
+    window.clearTimeout(pasteTimer);
+    pasteTimer = window.setTimeout(() => { try { parsePackage(el("pkg").value); if (!running) start(); } catch (_e) { /* ainda não é um pacote válido */ } }, 800);
+  });
   el("stop").addEventListener("click", () => { stopFlag = true; setNow("Parando assim que a etapa atual terminar…"); });
   el("clear").addEventListener("click", async () => {
     if (running) return;
@@ -512,16 +568,7 @@
       const got = (await chrome.storage.local.get(PENDING_KEY))[PENDING_KEY];
       if (!got || !got.raw || Date.now() - got.at > 30 * 60 * 1000) { if (got) await chrome.storage.local.remove(PENDING_KEY); return; }
       el("pkg").value = got.raw;
-      if (!/\/project\//.test(location.pathname)) {
-        // Fora de um projeto: abre um novo sozinho e continua (o pacote fica guardado até começar).
-        setNow("Pacote recebido. Abrindo um novo projeto no Flow…");
-        const btn = await waitFor(() => $$("button, [role=button], a", document).find((b) => visible(b) && /^(\+\s*)?(novo projeto|new project)$/i.test(text(b).trim())), 10000);
-        if (!btn) { setNow("Pacote recebido. Abra um projeto do Flow e clique em Começar."); return; }
-        btn.click();
-        const inside = await waitFor(() => /\/project\//.test(location.pathname), 20000, 300);
-        if (!inside) { setNow("Pacote recebido. Abra um projeto do Flow e clique em Começar."); return; }
-        await sleep(3000);
-      }
+      if (!(await ensureProject())) return; // o pacote fica guardado e continua quando a página do Flow abrir
       await chrome.storage.local.remove(PENDING_KEY);
       setNow("Pacote recebido do ClipGringa. Começando…");
       start();

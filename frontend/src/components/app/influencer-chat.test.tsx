@@ -91,3 +91,29 @@ it("without a product the AI creates one, and Editar redoes the brief with the n
   await waitFor(() => expect(bodies.length).toBe(2));
   expect(JSON.stringify(bodies[1])).toContain("mais morena");
 });
+
+it("after the brief, the composer takes a change and folds it into the influencer", async () => {
+  const bodies: Record<string, unknown>[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+    const u = String(url);
+    if (u.includes("/product-create")) return new Response(JSON.stringify({ name: "Creme", summary: "", look: "", image: "" }), { status: 200 });
+    if (u.includes("/influencer-brief")) {
+      bodies.push(JSON.parse(String(init?.body)));
+      return new Response(JSON.stringify({ persona: { name: bodies.length > 1 ? "Bia morena" : "Bia", age: "22", look: "loira", setting: "casa" }, searches: [], copy: "texto" }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ chats: [] }), { status: 200 });
+  }));
+  window.localStorage.clear();
+  const user = userEvent.setup();
+  render(<InfluencerChat />);
+  await user.click((await screen.findAllByRole("button", { name: /Skill/ }))[0]);
+  await user.click(screen.getAllByRole("button", { name: "Criar a influencer" }).slice(-1)[0]);
+  await user.click(await screen.findByRole("button", { name: "Não tenho" }));
+  await screen.findByTestId("chat-approval");
+  const box = screen.getByLabelText("Descreva a influencer");
+  await waitFor(() => expect(box).toBeEnabled());
+  await user.type(box, "deixe ela mais morena");
+  await user.click(screen.getAllByRole("button", { name: "Criar a influencer" }).slice(-1)[0]);
+  await waitFor(() => expect(screen.getByTestId("chat-approval")).toHaveTextContent("Bia morena"));
+  expect(JSON.stringify(bodies[1])).toContain("deixe ela mais morena");
+});
