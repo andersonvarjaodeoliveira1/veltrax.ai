@@ -801,9 +801,24 @@ async def product_search(request: Request, db: AsyncSession = Depends(get_db)):
     found = await _run_parts(PRODUCT_FIND_SYSTEM, _Found, parts)
     if not body and not (found.summary or found.look):
         raise HTTPException(status_code=404, detail="PRODUCT_NOT_FOUND")
+    generated = False
+    if not body:
+        try:
+            from .clone_render import google_image
+
+            about = _text(found.look, 300) or _text(found.summary, 200) or name
+            body, kind = await asyncio.wait_for(
+                google_image(f"Clean e-commerce studio photo of one product: {_text(found.name, 80) or name}. {about}. White background, soft light, centered, no people, no text, no logo."), timeout=90)
+            image_url, generated = "", True
+            if not found.look:
+                found.look = about
+        except Exception:
+            logger.warning("product image generation failed", exc_info=True)
+            body = b""
     import base64
 
     return {
+        "generated": generated,
         "name": _text(found.name, 80) or name,
         "summary": _text(found.summary, 300),
         "look": _text(found.look, 500),

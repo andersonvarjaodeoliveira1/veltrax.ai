@@ -163,6 +163,7 @@ const S = {
   searchHint2: ["Lendo o que dizem no Reddit…", "Reading what Reddit says…", "Leyendo lo que dicen en Reddit…"],
   searchHint3: ["Escolhendo a melhor foto…", "Picking the best photo…", "Eligiendo la mejor foto…"],
   photoMissing: ["Não achei foto. Anexe a sua se puder.", "No photo found. Attach yours if you can.", "No encontré foto. Adjunta la tuya si puedes."],
+  aiPhoto: ["Foto criada por IA (não achei uma real).", "AI-made photo (no real one found).", "Foto creada por IA (no encontré una real)."],
   useThis: ["Usar este produto", "Use this product", "Usar este producto"],
   searchAgain: ["Buscar outra foto", "Try another photo", "Buscar otra foto"],
   notFound: ["Não achei esse produto. Confira o nome ou anexe a sua foto.", "I couldn't find that product. Check the name or attach your photo.", "No encontré ese producto. Revisa el nombre o adjunta tu foto."],
@@ -270,7 +271,7 @@ export function InfluencerChat() {
   const [nameOpen, setNameOpen] = useState(false);
   const [productName, setProductName] = useState("");
   const [searching, setSearching] = useState(false);
-  const [found, setFound] = useState<{ name: string; summary: string; look: string; image: string; image_url: string } | null>(null);
+  const [found, setFound] = useState<{ name: string; summary: string; look: string; image: string; image_url: string; generated?: boolean } | null>(null);
   const seenPhotos = useRef<string[]>([]);
   const productRef = useRef<HTMLInputElement>(null);
   const lookRef = useRef("");
@@ -403,7 +404,7 @@ export function InfluencerChat() {
       if (!response.ok) { await fail(response); return; }
       const data = await response.json();
       if (typeof data.image_url === "string") seenPhotos.current.push(data.image_url);
-      setFound({ name: String(data.name ?? name), summary: String(data.summary ?? ""), look: String(data.look ?? ""), image: String(data.image ?? ""), image_url: String(data.image_url ?? "") });
+      setFound({ name: String(data.name ?? name), summary: String(data.summary ?? ""), look: String(data.look ?? ""), image: String(data.image ?? ""), image_url: String(data.image_url ?? ""), generated: Boolean(data.generated) });
     } catch { setError(t("error")); } finally { setBusy(""); setSearching(false); }
   }
 
@@ -803,6 +804,7 @@ export function InfluencerChat() {
               <div className="min-w-0 space-y-2">
                 <p className="font-medium text-foreground">{found.name}</p>
                 {found.summary && <p className="text-xs text-muted-foreground">{found.summary}</p>}
+                {found.generated && <p className="text-[11px] text-[#A98BFF]">{t("aiPhoto")}</p>}
                 <div className="flex flex-wrap gap-2">
                   <Button type="button" size="sm" className="rounded-full" disabled={busy !== ""} onClick={() => { setProductLook(found.look); void runBrief(found.look, ""); }}>{t("useThis")}</Button>
                   <Button type="button" size="sm" variant="outline" className="rounded-full" disabled={busy !== ""} onClick={() => void searchProduct(true)}>{t("searchAgain")}</Button>
