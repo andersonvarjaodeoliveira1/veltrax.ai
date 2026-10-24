@@ -294,7 +294,7 @@ button[class*="to-[#7B3FE4]"]:active::before { animation-delay: 0.12s; border-co
   content: "";
   position: absolute;
   inset: -2px;
-  border-radius: 28px;
+  border-radius: var(--cg-r, 28px);
   padding: 2px;
   pointer-events: none;
   background: conic-gradient(from var(--cg-angle, 0deg), transparent 0 38%, #4a1596 52%, #7b3fe4 68%, #a98bff 84%, #ffffff 97%, transparent 100%);

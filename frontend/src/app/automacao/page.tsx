@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, ClipboardCopy, Download, Loader2, Sparkles, Trash2, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -62,6 +62,18 @@ function captionOf(item: Creative) {
 }
 
 export default function AutomationPage() {
+  const orbitRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    // A luz que corre em volta do botão principal, igual à caixa do chat do influencer.
+    if (typeof window === "undefined" || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    let frame = 0; const begin = performance.now();
+    const loop = (now: number) => {
+      orbitRef.current?.style.setProperty("--cg-angle", `${(((now - begin) / 4500) * 360) % 360}deg`);
+      frame = window.requestAnimationFrame(loop);
+    };
+    frame = window.requestAnimationFrame(loop);
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
   const [ready, setReady] = useState(false);
   const [tab, setTab] = useState<TabKey>("clonagem");
   const [creatives, setCreatives] = useState<Creative[]>([]);
@@ -233,8 +245,9 @@ export default function AutomationPage() {
       )}
 
       <nav aria-label="Etapas" className="space-y-2">
+        <div ref={orbitRef} className="cg-orbit relative w-full sm:w-auto sm:min-w-[320px]" style={{ "--cg-r": "20px" } as React.CSSProperties}>
         <button type="button" onClick={() => setTab(MAIN_TAB.key)} aria-current={tab === MAIN_TAB.key}
-          className={cn("w-full rounded-[18px] border px-5 py-4 text-left transition-all sm:w-auto sm:min-w-[320px]",
+          className={cn("relative w-full rounded-[18px] border px-5 py-4 text-left transition-all sm:w-auto sm:min-w-[320px]",
             tab === MAIN_TAB.key ? "border-transparent bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white shadow-[0_12px_30px_-14px_#7B3FE4]" : "border-[#A98BFF]/50 bg-card hover:border-[#A98BFF]")}>
           <span className="flex items-center gap-2 text-base font-semibold">
             {MAIN_TAB.label}
@@ -242,6 +255,7 @@ export default function AutomationPage() {
           </span>
           <span className="block text-xs opacity-85">{MAIN_TAB.hint}</span>
         </button>
+        </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="mr-1 text-[11px] uppercase tracking-wide text-muted-foreground">Modo manual</span>
           {TABS.map((item) => {

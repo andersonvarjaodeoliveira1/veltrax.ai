@@ -1242,21 +1242,43 @@ export function CloneWizard() {
                 </div>
               </div>
             )}
-            <details className="rounded-[14px] border border-border p-3 text-sm">
-              <summary className="cursor-pointer font-medium">Falar sobre o meu produto (opcional)</summary>
-              <div className="mt-3">{productFields}</div>
-            </details>
-            <details className="rounded-[14px] border border-border p-3 text-sm">
-              <summary className="cursor-pointer text-muted-foreground">Ajustes (opcional)</summary>
-              <div className="mt-3 space-y-4">
-                <Group label="Quantos vídeos">
-                  <Chips label="Quantos vídeos" value={p.count} onPick={(count) => patch({ count })} options={COUNT_OPTIONS.map((n) => ({ value: n, text: String(n) }))} />
-                </Group>
-                <Group label="Quantas cenas" hint="Cada cena tem cerca de 8 segundos.">
-                  <Chips label="Quantas cenas" value={p.sceneCount} onPick={chooseScenes} options={[1, 2, 3, 4, 5, 6].map((n) => ({ value: n, text: n === 1 ? "1 cena" : `${n} cenas` }))} />
-                </Group>
+            <div className="space-y-3 rounded-[22px] border border-dashed border-[#7B3FE4]/40 bg-[#7B3FE4]/[0.05] p-4" data-testid="quest-extras">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#A98BFF]">Complementos · opcional</p>
+                <p className="mt-1 text-sm text-muted-foreground">Não precisa para clonar. Abra só se quiser deixar o vídeo mais com a sua cara.</p>
               </div>
-            </details>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <details className="group rounded-[18px] border border-white/10 bg-card p-4 text-sm open:sm:col-span-2 open:border-[#7B3FE4]/50">
+                  <summary className="flex cursor-pointer list-none items-center gap-3">
+                    <span aria-hidden className="grid size-10 shrink-0 place-items-center rounded-[12px] bg-[#7B3FE4]/20 text-lg">🛍️</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-medium">Falar sobre o meu produto (opcional)</span>
+                      <span className="block text-xs text-muted-foreground">Nome, o que ele faz e fotos</span>
+                    </span>
+                    <span aria-hidden className="text-muted-foreground transition-transform group-open:rotate-180">⌄</span>
+                  </summary>
+                  <div className="mt-4 border-t border-white/10 pt-4">{productFields}</div>
+                </details>
+                <details className="group rounded-[18px] border border-white/10 bg-card p-4 text-sm open:sm:col-span-2 open:border-[#7B3FE4]/50">
+                  <summary className="flex cursor-pointer list-none items-center gap-3">
+                    <span aria-hidden className="grid size-10 shrink-0 place-items-center rounded-[12px] bg-white/10 text-lg">🎚️</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-medium">Ajustes (opcional)</span>
+                      <span className="block text-xs text-muted-foreground">Quantos vídeos e quantas cenas</span>
+                    </span>
+                    <span aria-hidden className="text-muted-foreground transition-transform group-open:rotate-180">⌄</span>
+                  </summary>
+                  <div className="mt-4 space-y-4 border-t border-white/10 pt-4">
+                    <Group label="Quantos vídeos">
+                      <Chips label="Quantos vídeos" value={p.count} onPick={(count) => patch({ count })} options={COUNT_OPTIONS.map((n) => ({ value: n, text: String(n) }))} />
+                    </Group>
+                    <Group label="Quantas cenas" hint="Cada cena tem cerca de 8 segundos.">
+                      <Chips label="Quantas cenas" value={p.sceneCount} onPick={chooseScenes} options={[1, 2, 3, 4, 5, 6].map((n) => ({ value: n, text: n === 1 ? "1 cena" : `${n} cenas` }))} />
+                    </Group>
+                  </div>
+                </details>
+              </div>
+            </div>
           </section>
         )}
 
