@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Check, ExternalLink, Trash2 } from "lucide-react";
 import { RESTRICTIONS, insights, type FbPage, type Restriction } from "@/lib/fb-insights";
 import { cn } from "@/lib/utils";
+import { RisingReels } from "@/components/app/rising-reels";
 
 type Page = FbPage;
 type Status = { loggedIn: boolean; pages: Page[]; version: string } | "none" | null;
@@ -47,23 +48,24 @@ export function FacebookConnectCard() {
       <a href="https://www.facebook.com/pages/?category=your_pages" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-sm hover:text-foreground">
         <ExternalLink className="size-4" /> Abrir o Facebook e escolher a página
       </a>
-      <p className="text-xs text-muted-foreground">Na sua página, clique no botão roxo <b>“Salvar esta página no ClipGringa”</b> que a extensão mostra no canto da tela. Pode salvar várias páginas.</p>
+      <p className="text-xs text-muted-foreground">Na sua página, clique no botão roxo <b>“Salvar esta página no ClipGringa”</b> que a extensão mostra no canto da tela. Pode salvar várias páginas. Para vigiar uma página de concorrente, use o botão <b>“Acompanhar (concorrente)”</b>.</p>
       {info.lines.length > 0 && (
         <div className="space-y-1 rounded-[14px] border border-[#A98BFF]/40 bg-[#7B3FE4]/10 p-3 text-xs" data-testid="fb-insights">
           {info.lines.map((line) => <p key={line}>{line}</p>)}
         </div>
       )}
+      {pages.length > 0 && <RisingReels pages={pages} />}
       {pages.length > 0 && (
         <ul className="space-y-1.5">
           {pages.map((page) => (
             <li key={page.url} className="flex flex-wrap items-center gap-2 rounded-[12px] bg-muted/40 px-3 py-2 text-sm" data-testid="fb-page">
-              <span className="min-w-0 flex-1 truncate">{info.best?.page.url === page.url && "🔥 "}{page.name}</span>
-              <span role="group" aria-label={`Restrição de ${page.name}`} className="flex flex-wrap gap-1">
+              <span className="min-w-0 flex-1 truncate">{info.best?.page.url === page.url && "🔥 "}{page.name}{page.spy && <span className="ml-2 rounded-full border border-border px-2 py-0.5 text-[10px] text-muted-foreground">concorrente</span>}</span>
+              {!page.spy && <span role="group" aria-label={`Restrição de ${page.name}`} className="flex flex-wrap gap-1">
                 {RESTRICTIONS.map((r) => (
                   <button key={r.id} type="button" aria-pressed={page.restriction === r.id} onClick={() => window.postMessage({ source: "clipgringa-page", type: "fb-set-restriction", url: page.url, restriction: r.id satisfies Restriction }, window.location.origin)}
                     className="rounded-full border border-border px-2.5 py-0.5 text-[11px] text-muted-foreground aria-pressed:border-transparent aria-pressed:bg-[#7B3FE4] aria-pressed:text-white">{r.label}</button>
                 ))}
-              </span>
+              </span>}
               <span className="w-full text-xs text-muted-foreground">{(() => { const row = info.ranking.find((x) => x.page.url === page.url); return row && (row.today || row.avg7) ? `Hoje: ${row.today.toLocaleString("pt-BR")} views · média 7 dias: ${row.avg7.toLocaleString("pt-BR")}` : "Sem dados de views ainda: abra a página no Facebook para eu ler."; })()}</span>
               <button type="button" aria-label={`Remover ${page.name}`} onClick={() => window.postMessage({ source: "clipgringa-page", type: "fb-remove-page", url: page.url }, window.location.origin)} className="text-muted-foreground hover:text-foreground"><Trash2 className="size-4" /></button>
             </li>

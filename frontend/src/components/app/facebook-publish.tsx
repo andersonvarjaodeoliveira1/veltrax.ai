@@ -55,7 +55,7 @@ export function FacebookPublish({ clip, className }: { clip: { filename: string;
       if ((event.origin && event.origin !== window.location.origin) || !d || d.source !== "clipgringa-flow") return;
       if (d.type === "fb-status") {
         answered.current = true;
-        const pages: Page[] = Array.isArray(d.pages) ? d.pages : [];
+        const pages: Page[] = (Array.isArray(d.pages) ? d.pages : []).filter((p: Page) => !p.spy);
         setStatus({ loggedIn: d.loggedIn === true, pages, version: String(d.version || "") });
         setPageUrl((current) => current || pages[0]?.url || "");
       } else if (d.type === "fb-publish-ack") {

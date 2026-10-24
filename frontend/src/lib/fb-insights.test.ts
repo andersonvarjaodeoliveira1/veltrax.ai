@@ -29,3 +29,26 @@ describe("restrição e viralização das páginas", () => {
     expect(out.lines.join(" ")).not.toMatch(/rendem em média/);
   });
 });
+
+import { risingReels } from "./fb-insights";
+
+describe("risingReels", () => {
+  const H = 3_600_000;
+  const base = 1_700_000_000_000;
+  it("lista quem mais subiu por hora e separa os vencedores", () => {
+    const page = { name: "Minha", url: "https://facebook.com/a", reels: {
+      "1": { f: base, h: [[base, 2000], [base + 4 * H, 9000]] as [number, number][] },
+      "2": { f: base, h: [[base, 1000], [base + 1 * H, 4000]] as [number, number][] },
+      "3": { f: base, h: [[base, 50000], [base + 2 * H, 50100]] as [number, number][] },
+      "4": { f: base, h: [[base, 100]] as [number, number][] },
+    } };
+    const { rising, winners } = risingReels([page]);
+    expect(rising.map((r) => r.id)).toEqual(["2", "1"]);
+    expect(rising[0].growth).toBe(3000);
+    expect(winners.map((r) => r.id)).toEqual(["3"]);
+  });
+  it("ignora leituras com menos de 1 hora de diferença", () => {
+    const page = { name: "A", url: "u", reels: { "9": { f: 0, h: [[0, 100], [1000, 90000]] as [number, number][] } } };
+    expect(risingReels([page]).rising).toHaveLength(0);
+  });
+});

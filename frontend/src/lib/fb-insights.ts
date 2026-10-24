@@ -1,6 +1,8 @@
 // Restrição de cada página do Facebook e quanto ela está rendendo (views lidas pela extensão no próprio Chrome do cliente).
 export type Restriction = "world" | "us" | "world_no_us";
-export type FbPage = { name: string; url: string; restriction?: Restriction; stats?: Record<string, { views: number; videos: number }> };
+/** Leituras de um reel: f = primeira vez visto (ms), h = lista de [momento em ms, views]. */
+export type ReelRead = { f: number; h: [number, number][] };
+export type FbPage = { name: string; url: string; restriction?: Restriction; spy?: boolean; stats?: Record<string, { views: number; videos: number }>; reels?: Record<string, ReelRead> };
 
 export const RESTRICTIONS: { id: Restriction; label: string }[] = [
   { id: "world", label: "Mundo todo" },
@@ -27,12 +29,12 @@ export function summarize(page: FbPage, now: Date = new Date()): PageSummary {
 export type Insights = { ranking: PageSummary[]; best: PageSummary | null; lines: string[] };
 
 export function insights(pages: FbPage[], now: Date = new Date()): Insights {
-  const ranking = pages.map((p) => summarize(p, now)).sort((a, b) => (b.today || b.avg7) - (a.today || a.avg7));
+  const ranking = pages.filter((p) => !p.spy).map((p) => summarize(p, now)).sort((a, b) => (b.today || b.avg7) - (a.today || a.avg7));
   const withData = ranking.filter((r) => r.today > 0 || r.avg7 > 0);
   const best = withData[0] ?? null;
   const lines: string[] = [];
   if (best) lines.push(`Viralizando mais hoje: ${best.page.name} (${restrictionLabel(best.page.restriction)}), com ${best.today.toLocaleString("pt-BR")} views nos vídeos lidos.`);
-  const missing = pages.filter((p) => !p.restriction).length;
+  const missing = pages.filter((p) => !p.restriction && !p.spy).length;
   if (missing > 0) lines.push(`Marque a restrição de ${missing} ${missing === 1 ? "página" : "páginas"} para eu comparar quais rendem mais.`);
   const groups = RESTRICTIONS.map((r) => {
     const list = ranking.filter((x) => x.page.restriction === r.id && x.avg7 > 0);
@@ -47,3 +49,33 @@ export function insights(pages: FbPage[], now: Date = new Date()): Insights {
   }
   return { ranking, best, lines };
 }
+
+export type RisingReel = { page: FbPage; id: string; url: string; views: number; growth: number; hours: number; perHour: number };
+
+/**
+ * "Subindo agora": reels que ganharam views entre a primeira e a última leitura feita pela extensão
+ * (com pelo menos 1 hora de diferença). Quem sobe mais por hora vem primeiro.
+ */
+export function risingReels(pages: FbPage[], minGrowth = 1000, minHours = 1): { rising: RisingReel[]; winners: RisingReel[] } {
+  const rising: RisingReel[] = [];
+  const winners: RisingReel[] = [];
+  for (const page of pages) {
+    for (const [id, read] of Object.entries(page.reels ?? {})) {
+      const h = [...(read.h ?? [])].sort((a, b) => a[0] - b[0]);
+      if (!h.length) continue;
+      const first = h[0];
+      const last = h[h.length - 1];
+      const hours = (last[0] - first[0]) / 3_600_000;
+      const base = { page, id, url: `https://www.facebook.com/reel/${id}`, views: last[1] };
+      const growth = last[1] - first[1];
+      if (hours >= minHours && growth >= minGrowth) rising.push({ ...base, growth, hours, perHour: growth / hours });
+      else if (last[1] >= 10_000) winners.push({ ...base, growth: Math.max(growth, 0), hours, perHour: 0 });
+    }
+  }
+  rising.sort((a, b) => b.perHour - a.perHour);
+  winners.sort((a, b) => b.views - a.views);
+  return { rising: rising.slice(0, 30), winners: winners.slice(0, 30) };
+}
+
+export const compact = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).replace(".", ",")} mi` : n >= 1000 ? `${Math.round(n / 1000)} mil` : String(n));
+export const sinceLabel = (hours: number) => (hours < 48 ? `${Math.max(1, Math.round(hours))} h` : `${Math.round(hours / 24)} d`);

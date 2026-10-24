@@ -66,11 +66,12 @@
     return { name, url: url.origin + key };
   }
   let chip = null;
+  let spyChip = null;
   async function refreshChip() {
-    if (!isLoggedIn()) { if (chip) chip.remove(); chip = null; return; }
+    if (!isLoggedIn()) { if (chip) chip.remove(); chip = null; if (spyChip) spyChip.remove(); spyChip = null; return; }
     const info = pageInfo();
     const acc = await getAcc();
-    if (!info) { if (chip) { chip.remove(); chip = null; } return; }
+    if (!info) { if (chip) { chip.remove(); chip = null; } if (spyChip) { spyChip.remove(); spyChip = null; } return; }
     const saved = (acc.pages || []).some((p) => p.url === info.url);
     if (!chip) {
       chip = document.createElement("button");
@@ -88,6 +89,22 @@
     }
     chip.textContent = saved ? "✓ Página salva no ClipGringa" : "Salvar esta página no ClipGringa";
     chip.style.opacity = saved ? ".75" : "1";
+    if (!spyChip) {
+      spyChip = document.createElement("button");
+      spyChip.type = "button";
+      spyChip.style.cssText = "position:fixed;left:16px;bottom:62px;z-index:2147482000;border:1px solid rgba(255,255,255,.25);border-radius:999px;padding:8px 14px;font:600 12px system-ui,sans-serif;color:#fff;background:#0f0d14;cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.35)";
+      document.body.appendChild(spyChip);
+      spyChip.addEventListener("click", async () => {
+        const now = pageInfo();
+        if (!now) return;
+        const cur = await getAcc();
+        if ((cur.pages || []).some((p) => p.url === now.url)) return;
+        await saveAcc({ pages: [...(cur.pages || []), { ...now, spy: true }].slice(0, 40) });
+        refreshChip();
+      });
+    }
+    spyChip.style.display = saved ? "none" : "block";
+    spyChip.textContent = "Acompanhar (concorrente)";
   }
 
   /* ---------- publicar ---------- */
@@ -207,12 +224,54 @@
     await saveAcc({ pages });
   }
 
+  /* ---------- views de cada reel (para o "Subindo agora") ---------- */
+  const REEL_RE = /\/reel\/(\d+)/;
+  function cardViews(anchor) {
+    const lines = String(anchor.innerText || "").split("\n").map((l) => l.trim()).filter(Boolean);
+    for (const line of lines) if (/^[\d.,]+\s*(mil|mi|k|m)?$/i.test(line)) return parseCount(line);
+    const m = String(anchor.innerText || "").match(/([\d.,]+\s*(?:mil|mi|k|m)?)\s*(?:visualiza[cç][õo]es|views|reproduc[cç][õo]es|vistas)/i);
+    return m ? parseCount(m[1]) : 0;
+  }
+  async function scanReels() {
+    const acc = await getAcc();
+    const here = location.origin + location.pathname;
+    const page = (acc.pages || []).find((p) => here.startsWith(p.url.split("?")[0]) || location.href.startsWith(p.url));
+    if (!page || /\/reel\//.test(location.pathname)) return;
+    const seen = new Map();
+    document.querySelectorAll('a[href*="/reel/"]').forEach((a) => {
+      const m = REEL_RE.exec(a.getAttribute("href") || "");
+      if (!m) return;
+      const v = cardViews(a);
+      if (v > 0 && v > (seen.get(m[1]) || 0)) seen.set(m[1], v);
+    });
+    if (!seen.size) return;
+    const now = Date.now();
+    const pages = (acc.pages || []).map((p) => {
+      if (p.url !== page.url) return p;
+      const reels = { ...(p.reels || {}) };
+      seen.forEach((v, id) => {
+        const cur = reels[id] || { f: now, h: [] };
+        const h = (cur.h || []).slice();
+        const last = h[h.length - 1];
+        if (!last || (v !== last[1] && now - last[0] > 20 * 60 * 1000) || now - last[0] > 3 * 3600 * 1000) h.push([now, v]);
+        else if (v > last[1]) last[1] = v;
+        reels[id] = { f: cur.f, h: h.length > 9 ? [h[0], ...h.slice(-8)] : h };
+      });
+      const ids = Object.keys(reels).sort((x, y) => (reels[y].h[reels[y].h.length - 1][0]) - (reels[x].h[reels[x].h.length - 1][0])).slice(0, 150);
+      const kept = {};
+      ids.forEach((id) => { kept[id] = reels[id]; });
+      return { ...p, reels: kept };
+    });
+    await saveAcc({ pages });
+  }
+  async function scanAll() { await scanViews(); await scanReels(); }
+
   async function tick() {
     await saveAcc({ loggedIn: isLoggedIn(), seenAt: Date.now() });
     refreshChip();
   }
-  setInterval(() => { if (isLoggedIn()) scanViews().catch(() => undefined); }, 15000);
-  setTimeout(() => { if (isLoggedIn()) scanViews().catch(() => undefined); }, 6000);
+  setInterval(() => { if (isLoggedIn()) scanAll().catch(() => undefined); }, 15000);
+  setTimeout(() => { if (isLoggedIn()) scanAll().catch(() => undefined); }, 6000);
   tick();
   setInterval(tick, 5000);
   runJob();
