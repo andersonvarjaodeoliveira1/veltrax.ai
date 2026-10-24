@@ -162,6 +162,7 @@ const S = {
   searchHint1: ["Pesquisando no Google…", "Searching Google…", "Buscando en Google…"],
   searchHint2: ["Lendo o que dizem no Reddit…", "Reading what Reddit says…", "Leyendo lo que dicen en Reddit…"],
   searchHint3: ["Escolhendo a melhor foto…", "Picking the best photo…", "Eligiendo la mejor foto…"],
+  photoMissing: ["Não achei foto. Anexe a sua se puder.", "No photo found. Attach yours if you can.", "No encontré foto. Adjunta la tuya si puedes."],
   useThis: ["Usar este produto", "Use this product", "Usar este producto"],
   searchAgain: ["Buscar outra foto", "Try another photo", "Buscar otra foto"],
   notFound: ["Não achei esse produto. Confira o nome ou anexe a sua foto.", "I couldn't find that product. Check the name or attach your photo.", "No encontré ese producto. Revisa el nombre o adjunta tu foto."],
@@ -795,8 +796,10 @@ export function InfluencerChat() {
           )}
           {found && (
             <div data-testid="product-found" className="flex gap-3 rounded-[18px] border border-white/10 bg-white/[0.03] p-3">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={found.image} alt={found.name} className="size-24 shrink-0 rounded-xl bg-white object-contain" />
+              {found.image
+                // eslint-disable-next-line @next/next/no-img-element
+                ? <img src={found.image} alt={found.name} className="size-24 shrink-0 rounded-xl bg-white object-contain" />
+                : <div className="grid size-24 shrink-0 place-items-center rounded-xl bg-white/5 px-2 text-center text-[11px] text-muted-foreground">{t("photoMissing")}</div>}
               <div className="min-w-0 space-y-2">
                 <p className="font-medium text-foreground">{found.name}</p>
                 {found.summary && <p className="text-xs text-muted-foreground">{found.summary}</p>}

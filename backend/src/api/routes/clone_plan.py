@@ -585,7 +585,31 @@ def _page_image(html: str, base: str) -> str:
         match = _re.search(pattern, html, _re.I)
         if match:
             return urljoin(base, match.group(1).replace("&amp;", "&"))
-    return ""
+    match = _re.search(r'<link[^>]+rel=["\']image_src["\'][^>]+href=["\']([^"\']+)', html, _re.I)
+    if match:
+        return urljoin(base, match.group(1))
+    match = _re.search(r'"image"\s*:\s*\[?\s*"(https?:[^"]+)"', html, _re.I)
+    return match.group(1).replace("\\/", "/") if match else ""
+
+
+def _ddg_images(query: str) -> list[str]:
+    """Image search on DuckDuckGo; returns direct https picture URLs (empty on any failure)."""
+    import re as _re
+
+    import httpx
+
+    ua = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124 Safari/537.36"}
+    try:
+        with httpx.Client(timeout=12, headers=ua, follow_redirects=True) as http:
+            home = http.get("https://duckduckgo.com/", params={"q": query, "iax": "images", "ia": "images"}).text
+            token = _re.search(r"vqd=([\d-]+)", home)
+            if not token:
+                return []
+            data = http.get("https://duckduckgo.com/i.js", params={"q": query, "o": "json", "vqd": token.group(1), "l": "br-pt", "p": "1"}, headers={"Referer": "https://duckduckgo.com/"}).json()
+        return [str(r["image"]) for r in (data.get("results") or []) if str(r.get("image") or "").startswith("https://")]
+    except Exception:
+        logger.warning("duckduckgo images failed", exc_info=True)
+        return []
 
 
 def _ddg_search(query: str) -> list[dict[str, str]]:
@@ -629,7 +653,8 @@ async def _claude_search(name: str, key: str) -> tuple[list[dict[str, str]], lis
 
     prompt = (
         f'Search the web for the product "{name}" (Brazilian Portuguese results first) and also look at Reddit discussions about it. '
-        "Reply with 2-3 short sentences saying what the product is and who it is for, in Portuguese. No lists."
+        "Reply with 2-3 short sentences saying what the product is and who it is for, in Portuguese. "
+        "Then, on a last line, write 'PAGES:' followed by up to 5 https links to pages that show the product photo (the brand's own site first, then stores like Mercado Livre, Shopee, Amazon, Magalu), separated by spaces."
     )
     body = {
         "model": "claude-sonnet-5-5", "max_tokens": 700,
@@ -659,7 +684,13 @@ async def _claude_search(name: str, key: str) -> tuple[list[dict[str, str]], lis
                 seen.add(url)
                 (reddit if "reddit.com" in url else web).append({"url": url, "title": str(item.get("title") or ""), "text": ""})
     summary = " ".join(str(b.get("text") or "") for b in blocks if b.get("type") == "text").strip()
-    return web, reddit, summary
+    if "PAGES:" in summary:
+        summary, _, listed = summary.partition("PAGES:")
+        import re as _re
+
+        first = [{"url": u.rstrip(".,;)"), "title": "", "text": ""} for u in _re.findall(r"https://[^\s<>\"']+", listed)][:5]
+        web = first + [h for h in web if h["url"] not in {f["url"] for f in first}]
+    return web, reddit, summary.strip()
 
 
 @router.post("/product-search")
@@ -726,35 +757,57 @@ async def product_search(request: Request, db: AsyncSession = Depends(get_db)):
     import httpx
 
     candidates: list[tuple[bytes, str, str]] = []
-    headers = {"User-Agent": "Mozilla/5.0 (compatible; ClipGringaBot/1.0)", "Accept": "text/html,image/*"}
+    headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+               "Accept": "text/html,application/xhtml+xml,image/*;q=0.8", "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.7"}
     async with httpx.AsyncClient(timeout=8, headers=headers) as http:
-        for hit in [h for h in web if "reddit.com" not in h["url"]][:6]:
-            if len(candidates) >= 3:
-                break
+        async def from_page(hit: dict[str, str]) -> tuple[bytes, str, str] | None:
             try:
-                page, _ = await _safe_get(http, hit["url"], 400_000)
+                page, _ = await _safe_get(http, hit["url"], 500_000)
                 image_url = _page_image(page.decode("utf-8", "ignore"), hit["url"])
-                if not image_url or image_url in skip:
-                    continue
-                body, kind = await _safe_get(http, image_url, MAX_PHOTO_BYTES)
-                if kind in PHOTO_TYPES and len(body) > 8_000:
-                    candidates.append((body, kind, image_url))
+                return await from_image(image_url)
             except Exception:
-                continue
-    if not candidates:
-        raise HTTPException(status_code=404, detail="PRODUCT_PHOTO_NOT_FOUND")
-    body, kind, image_url = max(candidates, key=lambda c: len(c[0]))
+                return None
+
+        async def from_image(image_url: str) -> tuple[bytes, str, str] | None:
+            if not image_url or image_url in skip:
+                return None
+            try:
+                body, kind = await _safe_get(http, image_url, MAX_PHOTO_BYTES)
+            except Exception:
+                return None
+            if kind in PHOTO_TYPES and len(body) > 8_000:
+                return body, kind, image_url
+            return None
+
+        pages = [h for h in web if "reddit.com" not in h["url"]][:10]
+        for result in await asyncio.gather(*(from_page(h) for h in pages)):
+            if result:
+                candidates.append(result)
+        if not candidates:
+            for image_url in (await asyncio.to_thread(_ddg_images, name))[:8]:
+                result = await from_image(image_url)
+                if result:
+                    candidates.append(result)
+                if len(candidates) >= 3:
+                    break
+    logger.info("product search %r: %d web, %d reddit, %d photos", name, len(web), len(reddit), len(candidates))
+    body, kind, image_url = max(candidates, key=lambda c: len(c[0])) if candidates else (b"", "", "")
     snippets = (f"[Claude web search] {claude_summary}\n" if claude_summary else "") + "\n".join(f"[{'Reddit' if h in reddit else 'Google'}] {h['title']} - {h['text']}" for h in (web[:6] + reddit[:4]))
     from pydantic_ai import BinaryContent
 
-    found = await _run_parts(PRODUCT_FIND_SYSTEM, _Found, [f"Search: {name}\n{_clip(snippets, 3000)}", BinaryContent(data=body, media_type=kind)])
+    parts: list[Any] = [f"Search: {name}\n{_clip(snippets, 3000)}"]
+    if body:
+        parts.append(BinaryContent(data=body, media_type=kind))
+    found = await _run_parts(PRODUCT_FIND_SYSTEM, _Found, parts)
+    if not body and not (found.summary or found.look):
+        raise HTTPException(status_code=404, detail="PRODUCT_NOT_FOUND")
     import base64
 
     return {
         "name": _text(found.name, 80) or name,
         "summary": _text(found.summary, 300),
         "look": _text(found.look, 500),
-        "image": f"data:{kind};base64,{base64.b64encode(body).decode()}",
+        "image": f"data:{kind};base64,{base64.b64encode(body).decode()}" if body else "",
         "image_url": image_url,
         "sources": [h["url"] for h in (web[:3] + reddit[:2]) if h["url"]],
     }
