@@ -38,6 +38,7 @@ const NAV: NavItem[] = [
   { href: "/automacao", label: "Automação", icon: Workflow, match: (p) => p.startsWith("/automacao"), badge: "BETA" },
   { href: DOWNLOADER_URL, label: "Baixar vídeo", icon: Download, match: () => false, external: true },
   { href: "/conectar-flow", label: "Conectar ao Flow", group: "Minha conta", icon: Link2, match: (p) => p.startsWith("/conectar-flow") },
+  { href: "/conectar-facebook", label: "Conectar ao Facebook", group: "Minha conta", icon: Link2, badge: "BETA", match: (p) => p.startsWith("/conectar-facebook") },
   { href: "/minhas-apis", label: "Minhas APIs", icon: KeyRound, match: (p) => p.startsWith("/minhas-apis") },
   { href: WHATSAPP_URL, label: "API e Flow", icon: MessageCircle, match: () => false, external: true },
 ];
