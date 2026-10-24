@@ -5,6 +5,28 @@ import { InfluencerChat } from "./influencer-chat";
 
 afterEach(() => vi.unstubAllGlobals());
 
+it("suggests the right spelling and searches again when clicked", async () => {
+  const names: string[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+    if (String(url).includes("/clone/product-search")) {
+      const sent = JSON.parse(String(init?.body)).name as string;
+      names.push(sent);
+      return new Response(JSON.stringify({ name: "Wipink Body Cream", summary: "Creme.", look: "tube", image: "data:image/png;base64,AAAA", image_url: `https://x.com/${names.length}.png`, suggestion: sent === "wepink" ? "Wipink" : "" }), { status: 200 });
+    }
+    return new Response(JSON.stringify({}), { status: 200 });
+  }));
+  window.localStorage.clear();
+  const user = userEvent.setup();
+  render(<InfluencerChat />);
+  await user.click((await screen.findAllByRole("button", { name: /Skill/ }))[0]);
+  await user.click(screen.getAllByRole("button", { name: "Criar a influencer" }).slice(-1)[0]);
+  await user.click(await screen.findByRole("button", { name: /Escrever o nome do produto/ }));
+  await user.type(screen.getByLabelText("Escrever o nome do produto"), "wepink");
+  await user.click(screen.getByRole("button", { name: "Buscar" }));
+  await user.click(await screen.findByRole("button", { name: "Wipink" }));
+  await waitFor(() => expect(names).toEqual(["wepink", "Wipink"]));
+});
+
 it("searches a product by name and shows the photo before using it", async () => {
   const calls: { url: string; body?: string }[] = [];
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {

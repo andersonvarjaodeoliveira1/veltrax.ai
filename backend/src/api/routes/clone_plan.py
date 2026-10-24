@@ -678,6 +678,16 @@ def _ddg_images(query: str) -> list[str]:
         return []
 
 
+def _suggest(typed: str, proper: str) -> str:
+    """Returns the proper name when it is a different spelling of what was typed (a 'did you mean')."""
+    import difflib
+
+    a, b = " ".join(typed.lower().split()), " ".join(str(proper or "").lower().split())
+    if not b or a == b or a in b or b in a:
+        return ""
+    return " ".join(str(proper).split())[:80] if difflib.SequenceMatcher(None, a, b).ratio() >= 0.6 else ""
+
+
 def _ddg_search(query: str) -> list[dict[str, str]]:
     """Plain web search (DuckDuckGo HTML) used when no Apify token is set or it returns nothing."""
     import html as _html
@@ -712,14 +722,15 @@ def _ddg_search(query: str) -> list[dict[str, str]]:
     return results[:8]
 
 
-async def _claude_search(name: str, key: str) -> tuple[list[dict[str, str]], list[dict[str, str]], str]:
+async def _claude_search(name: str, key: str) -> tuple[list[dict[str, str]], list[dict[str, str]], str, str]:
     """Searches the web (Google-like, plus Reddit) through Claude's server-side web_search tool.
     Returns (web hits, reddit hits, a short written summary). Empty results on any failure."""
     import httpx
 
     prompt = (
         f'Search the web for the product "{name}" (Brazilian Portuguese results first) and also look at Reddit discussions about it. '
-        "Reply with 2-3 short sentences saying what the product is and who it is for, in Portuguese. "
+        "If the name looks misspelled, find the correct product name. Start your reply with a line 'NAME: <correct product name>' (brand and product, as people write it). "
+        "Then write 2-3 short sentences saying what the product is and who it is for, in Portuguese. "
         "Then, on a last line, write 'PAGES:' followed by up to 5 https links to pages that show the product photo (the brand's own site first, then stores like Mercado Livre, Shopee, Amazon, Magalu), separated by spaces."
     )
     body = {
@@ -733,11 +744,11 @@ async def _claude_search(name: str, key: str) -> tuple[list[dict[str, str]], lis
                                    headers={"x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"})
         if resp.status_code != 200:
             logger.warning("claude web search failed: %s", resp.status_code)
-            return [], [], ""
+            return [], [], "", "", ""
         blocks = resp.json().get("content") or []
     except Exception:
         logger.warning("claude web search failed", exc_info=True)
-        return [], [], ""
+        return [], [], "", ""
     web: list[dict[str, str]] = []
     reddit: list[dict[str, str]] = []
     seen: set[str] = set()
@@ -750,13 +761,20 @@ async def _claude_search(name: str, key: str) -> tuple[list[dict[str, str]], lis
                 seen.add(url)
                 (reddit if "reddit.com" in url else web).append({"url": url, "title": str(item.get("title") or ""), "text": ""})
     summary = " ".join(str(b.get("text") or "") for b in blocks if b.get("type") == "text").strip()
+    corrected = ""
+    import re as _re0
+
+    named = _re0.match(r"\s*NAME:\s*(.+?)(?:\s{2,}|\n|$)", summary)
+    if named:
+        corrected = named.group(1).strip().strip("*\"'")[:80]
+        summary = summary[named.end():]
     if "PAGES:" in summary:
         summary, _, listed = summary.partition("PAGES:")
         import re as _re
 
         first = [{"url": u.rstrip(".,;)"), "title": "", "text": ""} for u in _re.findall(r"https://[^\s<>\"']+", listed)][:5]
         web = first + [h for h in web if h["url"] not in {f["url"] for f in first}]
-    return web, reddit, summary.strip()
+    return web, reddit, summary.strip(), corrected
 
 
 PRODUCT_CREATE_SYSTEM = f"""The person has no product yet. Invent ONE realistic product that fits what they asked for, using only the info they gave.
@@ -852,8 +870,9 @@ async def product_search(request: Request, db: AsyncSession = Depends(get_db)):
     web: list[dict[str, str]] = []
     reddit: list[dict[str, str]] = []
     claude_summary = ""
+    corrected = ""
     if claude_key:
-        web, reddit, claude_summary = await _claude_search(name, claude_key)
+        web, reddit, claude_summary, corrected = await _claude_search(name, claude_key)
     try:
         if not web and not reddit:
             web, reddit = await asyncio.wait_for(asyncio.to_thread(search), timeout=150)
@@ -906,7 +925,12 @@ async def product_search(request: Request, db: AsyncSession = Depends(get_db)):
     parts: list[Any] = [f"Search: {name}\n{_clip(snippets, 3000)}"]
     if body:
         parts.append(BinaryContent(data=body, media_type=kind))
-    found = await _run_parts(PRODUCT_FIND_SYSTEM, _Found, parts)
+    try:
+        found = await _run_parts(PRODUCT_FIND_SYSTEM, _Found, parts)
+    except Exception:
+        # A leitura da foto é um extra: sem cota de IA, usamos o que a busca já trouxe.
+        logger.warning("product photo reading failed", exc_info=True)
+        found = _Found(name=corrected or name, summary=_clip(claude_summary, 300), look=_clip(claude_summary, 300))
     if not body and not (found.summary or found.look):
         raise HTTPException(status_code=404, detail="PRODUCT_NOT_FOUND")
     generated = False
@@ -927,6 +951,7 @@ async def product_search(request: Request, db: AsyncSession = Depends(get_db)):
 
     return {
         "generated": generated,
+        "suggestion": _suggest(name, corrected or found.name),
         "name": _text(found.name, 80) or name,
         "summary": _text(found.summary, 300),
         "look": _text(found.look, 500),

@@ -177,6 +177,7 @@ const S = {
   editBtn: ["Editar", "Edit", "Editar"],
   editLabel: ["Cole mais informações para ajustar a influencer e o prompt", "Paste more info to adjust the influencer and the prompt", "Pega más información para ajustar la influencer y el prompt"],
   editApply: ["Refazer com isso", "Redo with this", "Rehacer con esto"],
+  didYouMean: ["Você quis dizer", "Did you mean", "¿Quisiste decir"],
   useThis: ["Usar este produto", "Use this product", "Usar este producto"],
   searchAgain: ["Buscar outra foto", "Try another photo", "Buscar otra foto"],
   notFound: ["Não achei esse produto. Confira o nome ou anexe a sua foto.", "I couldn't find that product. Check the name or attach your photo.", "No encontré ese producto. Revisa el nombre o adjunta tu foto."],
@@ -287,7 +288,7 @@ export function InfluencerChat() {
   const [creating, setCreating] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editText, setEditText] = useState("");
-  const [found, setFound] = useState<{ name: string; summary: string; look: string; image: string; image_url: string; generated?: boolean } | null>(null);
+  const [found, setFound] = useState<{ name: string; summary: string; look: string; image: string; image_url: string; generated?: boolean; suggestion?: string } | null>(null);
   const seenPhotos = useRef<string[]>([]);
   const productRef = useRef<HTMLInputElement>(null);
   const lookRef = useRef("");
@@ -428,8 +429,9 @@ export function InfluencerChat() {
     setPhase("intake");
   }
 
-  async function searchProduct(again = false) {
-    const name = productName.trim();
+  async function searchProduct(again = false, override?: string) {
+    const name = (override ?? productName).trim();
+    if (override) setProductName(override);
     if (name.length < 2) return;
     if (!again) seenPhotos.current = [];
     setBusy("think"); setSearching(true); setError(""); setFound(null);
@@ -441,7 +443,7 @@ export function InfluencerChat() {
       if (!response.ok) { await fail(response); return; }
       const data = await response.json();
       if (typeof data.image_url === "string") seenPhotos.current.push(data.image_url);
-      setFound({ name: String(data.name ?? name), summary: String(data.summary ?? ""), look: String(data.look ?? ""), image: String(data.image ?? ""), image_url: String(data.image_url ?? ""), generated: Boolean(data.generated) });
+      setFound({ name: String(data.name ?? name), summary: String(data.summary ?? ""), look: String(data.look ?? ""), image: String(data.image ?? ""), image_url: String(data.image_url ?? ""), generated: Boolean(data.generated), suggestion: typeof data.suggestion === "string" ? data.suggestion : "" });
     } catch { setError(t("error")); } finally { setBusy(""); setSearching(false); }
   }
 
@@ -876,6 +878,9 @@ export function InfluencerChat() {
                 <p className="font-medium text-foreground">{found.name}</p>
                 {found.summary && <p className="text-xs text-muted-foreground">{found.summary}</p>}
                 {found.generated && <p className="text-[11px] text-[#A98BFF]">{t("aiPhoto")}</p>}
+                {found.suggestion && (
+                  <p className="text-xs">{t("didYouMean")} <button type="button" className="font-semibold text-[#A98BFF] underline underline-offset-2" disabled={busy !== ""} onClick={() => void searchProduct(false, found.suggestion)}>{found.suggestion}</button>?</p>
+                )}
                 <div className="flex flex-wrap gap-2">
                   <Button type="button" size="sm" className="rounded-full" disabled={busy !== ""} onClick={() => { setProductLook(found.look); void runBrief(found.look, ""); }}>{t("useThis")}</Button>
                   <Button type="button" size="sm" variant="outline" className="rounded-full" disabled={busy !== ""} onClick={() => void searchProduct(true)}>{t("searchAgain")}</Button>
