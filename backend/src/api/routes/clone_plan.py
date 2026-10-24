@@ -523,6 +523,156 @@ async def product_look(request: Request, db: AsyncSession = Depends(get_db)):
     return {"look": _text(out.description, 500)}
 
 
+class _Found(BaseModel):
+    name: str = Field(default="", description="Short product name, up to 8 words")
+    summary: str = Field(default="", description="What it is and who it is for, 1-2 short sentences in the language of the search")
+    look: str = Field(default="", description="20-50 words in English describing how the product looks, no brand names or readable text")
+
+
+PRODUCT_FIND_SYSTEM = f"""You get a product name, search-result snippets (Google and Reddit) and one product photo.
+Return the clean product name, a short summary (1-2 sentences, same language as the search) and a visual description in English.
+If the photo clearly is not the searched product, leave look empty.
+{SAFETY}"""
+
+
+def _public_https(url: str) -> bool:
+    """True when the URL is https and its host resolves only to public addresses (blocks local/private targets)."""
+    import ipaddress
+    import socket
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or not parsed.hostname:
+        return False
+    try:
+        infos = socket.getaddrinfo(parsed.hostname, parsed.port or 443, proto=socket.IPPROTO_TCP)
+    except OSError:
+        return False
+    return bool(infos) and all(ipaddress.ip_address(info[4][0]).is_global for info in infos)
+
+
+async def _safe_get(client: Any, url: str, limit: int) -> tuple[bytes, str]:
+    """GETs a public https URL (up to 3 redirects, each re-checked) and returns at most `limit` bytes plus the content type."""
+    from urllib.parse import urljoin
+
+    for _ in range(4):
+        if not await asyncio.to_thread(_public_https, url):
+            raise ValueError("blocked")
+        async with client.stream("GET", url, follow_redirects=False) as resp:
+            if resp.status_code in (301, 302, 303, 307, 308) and resp.headers.get("location"):
+                url = urljoin(url, resp.headers["location"])
+                continue
+            if resp.status_code != 200:
+                raise ValueError("status")
+            body = bytearray()
+            async for chunk in resp.aiter_bytes():
+                body.extend(chunk)
+                if len(body) >= limit:
+                    break
+            return bytes(body[:limit]), (resp.headers.get("content-type") or "").split(";")[0].strip().lower()
+    raise ValueError("redirects")
+
+
+def _page_image(html: str, base: str) -> str:
+    import re as _re
+    from urllib.parse import urljoin
+
+    for pattern in (
+        r'<meta[^>]+(?:property|name)=["\']og:image(?::secure_url)?["\'][^>]+content=["\']([^"\']+)',
+        r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+(?:property|name)=["\']og:image',
+        r'<meta[^>]+name=["\']twitter:image["\'][^>]+content=["\']([^"\']+)',
+    ):
+        match = _re.search(pattern, html, _re.I)
+        if match:
+            return urljoin(base, match.group(1).replace("&amp;", "&"))
+    return ""
+
+
+@router.post("/product-search")
+async def product_search(request: Request, db: AsyncSession = Depends(get_db)):
+    """Looks a product up by name on Google and Reddit, picks the best photo and describes the product."""
+    user_id = await _user_id(request, db)
+    try:
+        data = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    name = _clip(str((data or {}).get("name") or ""), 80).strip()
+    skip = {str(u) for u in ((data or {}).get("skip") or []) if isinstance(u, str)}
+    if len(name) < 2:
+        raise HTTPException(status_code=400, detail="Write the product name")
+    token = get_config().apify_api_token
+    if not token:
+        raise HTTPException(status_code=503, detail="Product search is not configured")
+    _check_script_rate(user_id)
+    from ...integrations import load_user_keys
+    from ...usage import get_balance, set_server_blocked, set_usage_user
+
+    await load_user_keys(db, user_id)
+    set_usage_user(user_id)
+    set_server_blocked((await get_balance(db, user_id))["exhausted"])
+
+    def search() -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+        from apify_client import ApifyClient
+
+        client = ApifyClient(token)
+        out: dict[str, list[dict[str, str]]] = {"web": [], "reddit": []}
+        for key, query in (("web", name), ("reddit", f"site:reddit.com {name}")):
+            try:
+                call = client.actor(GOOGLE_ACTOR).call(
+                    run_input={"queries": query, "maxPagesPerQuery": 1, "resultsPerPage": 8, "countryCode": "br", "languageCode": "pt-BR", "saveHtmlToKeyValueStore": False},
+                    timeout_secs=90,
+                )
+                for page in client.dataset(call["defaultDatasetId"]).iterate_items():
+                    for item in page.get("organicResults") or []:
+                        out[key].append({"url": str(item.get("url") or ""), "title": str(item.get("title") or ""), "text": str(item.get("description") or "")})
+            except Exception:
+                logger.warning("product search failed (%s)", key, exc_info=True)
+        return out["web"], out["reddit"]
+
+    try:
+        web, reddit = await asyncio.wait_for(asyncio.to_thread(search), timeout=150)
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="The search took too long. Try again.")
+    if not web and not reddit:
+        raise HTTPException(status_code=404, detail="PRODUCT_NOT_FOUND")
+
+    import httpx
+
+    candidates: list[tuple[bytes, str, str]] = []
+    headers = {"User-Agent": "Mozilla/5.0 (compatible; ClipGringaBot/1.0)", "Accept": "text/html,image/*"}
+    async with httpx.AsyncClient(timeout=8, headers=headers) as http:
+        for hit in [h for h in web if "reddit.com" not in h["url"]][:6]:
+            if len(candidates) >= 3:
+                break
+            try:
+                page, _ = await _safe_get(http, hit["url"], 400_000)
+                image_url = _page_image(page.decode("utf-8", "ignore"), hit["url"])
+                if not image_url or image_url in skip:
+                    continue
+                body, kind = await _safe_get(http, image_url, MAX_PHOTO_BYTES)
+                if kind in PHOTO_TYPES and len(body) > 8_000:
+                    candidates.append((body, kind, image_url))
+            except Exception:
+                continue
+    if not candidates:
+        raise HTTPException(status_code=404, detail="PRODUCT_PHOTO_NOT_FOUND")
+    body, kind, image_url = max(candidates, key=lambda c: len(c[0]))
+    snippets = "\n".join(f"[{'Reddit' if h in reddit else 'Google'}] {h['title']} - {h['text']}" for h in (web[:6] + reddit[:4]))
+    from pydantic_ai import BinaryContent
+
+    found = await _run_parts(PRODUCT_FIND_SYSTEM, _Found, [f"Search: {name}\n{_clip(snippets, 3000)}", BinaryContent(data=body, media_type=kind)])
+    import base64
+
+    return {
+        "name": _text(found.name, 80) or name,
+        "summary": _text(found.summary, 300),
+        "look": _text(found.look, 500),
+        "image": f"data:{kind};base64,{base64.b64encode(body).decode()}",
+        "image_url": image_url,
+        "sources": [h["url"] for h in (web[:3] + reddit[:2]) if h["url"]],
+    }
+
+
 async def _run_parts(system: str, output_type: type[BaseModel], parts: list[Any], model: Any = None) -> Any:
     from pydantic_ai import Agent
 
@@ -1089,7 +1239,7 @@ You are the help assistant of ClipGringa, a web app that makes short videos. Ans
 
 WHAT THE APP HAS (left menu):
 1. "Modelar vídeo orgânico": the automation area. Paste a viral video link, copy its structure with the person's own product and avatar, and join the scenes made in the Flow into a final video with subtitles.
-2. "Criar avatar (influencer)": a chat that creates an AI influencer and the videos. Steps: write what you want, pick the niche, optionally add a product (link or photo), approve the avatar (or continue without a photo), choose how many videos, the model and read the credit estimate, answer the style questions (subtitles yes/no, voice language and type, camera, show the product, video format, setting, vary the avatar, final call to action), approve the storyboard, then tap "Copiar pacote e abrir o Flow". Skills can be saved and pinned in the sidebar.
+2. "Criar avatar (influencer)": a chat that creates an AI influencer and the videos. Steps: write what you want, pick the niche, optionally add a product (type its name and the app finds the photo, or send a link or photooto), approve the avatar (or continue without a photo), choose how many videos, the model and read the credit estimate, answer the style questions (subtitles yes/no, voice language and type, camera, show the product, video format, setting, vary the avatar, final call to action), approve the storyboard, then tap "Copiar pacote e abrir o Flow". Skills can be saved and pinned in the sidebar.
 3. "Cortes para TikTok": "Novos cortes" (paste a YouTube link or upload a long video and get vertical clips with subtitles and a virality score), "Biblioteca" (all your clips, plus "Exemplos para começar" to see sample results), "Pastas" (organize), "Baixar vídeo" (download a video from a link).
 4. "Minha conta": "Conectar ao Flow" (install the ClipGringa Chrome extension, open Google Flow logged in, so the videos are made in the person's own Flow account), "Minhas APIs" (personal API keys), "API e Flow" (talk to the team on WhatsApp to buy an API or a Flow account).
 

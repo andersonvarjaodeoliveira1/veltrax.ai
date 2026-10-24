@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, ArrowUp, Check, ClipboardCopy, ImagePlus, Loader2, Plus, Sparkles, X } from "lucide-react";
+import { ArrowRight, ArrowUp, Check, ClipboardCopy, ImagePlus, Loader2, Plus, Search, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth-client";
 import { FLOW_CHOICES, defaultFlowCategory, saveFlowCategory } from "@/lib/flow-models";
@@ -155,6 +155,16 @@ const S = {
   hasProduct: ["Você tem foto do produto ou o link dele?", "Do you have a product photo or its link?", "¿Tienes foto del producto o su enlace?"],
   attachPhoto: ["Anexar foto do produto", "Attach product photo", "Adjuntar foto del producto"],
   pasteLink: ["Colar o link", "Paste the link", "Pegar el enlace"],
+  typeName: ["Escrever o nome do produto", "Type the product name", "Escribir el nombre del producto"],
+  namePh: ["Ex.: Garrafa térmica Stanley 1L", "E.g. Stanley 1L tumbler", "Ej.: Termo Stanley 1L"],
+  searchBtn: ["Buscar", "Search", "Buscar"],
+  searchingProduct: ["Buscando o produto…", "Searching for the product…", "Buscando el producto…"],
+  searchHint1: ["Pesquisando no Google…", "Searching Google…", "Buscando en Google…"],
+  searchHint2: ["Lendo o que dizem no Reddit…", "Reading what Reddit says…", "Leyendo lo que dicen en Reddit…"],
+  searchHint3: ["Escolhendo a melhor foto…", "Picking the best photo…", "Eligiendo la mejor foto…"],
+  useThis: ["Usar este produto", "Use this product", "Usar este producto"],
+  searchAgain: ["Buscar outra foto", "Try another photo", "Buscar otra foto"],
+  notFound: ["Não achei esse produto. Confira o nome ou anexe a sua foto.", "I couldn't find that product. Check the name or attach your photo.", "No encontré ese producto. Revisa el nombre o adjunta tu foto."],
   noProduct: ["Não tenho", "I don't have one", "No tengo"],
   linkPh: ["https://…", "https://…", "https://…"],
   addLink: ["Adicionar", "Add", "Añadir"],
@@ -256,6 +266,11 @@ export function InfluencerChat() {
   const [productLook, setProductLook] = useState("");
   const [productLink, setProductLink] = useState("");
   const [linkOpen, setLinkOpen] = useState(false);
+  const [nameOpen, setNameOpen] = useState(false);
+  const [productName, setProductName] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [found, setFound] = useState<{ name: string; summary: string; look: string; image: string; image_url: string } | null>(null);
+  const seenPhotos = useRef<string[]>([]);
   const productRef = useRef<HTMLInputElement>(null);
   const lookRef = useRef("");
   const attachRef = useRef<HTMLInputElement>(null);
@@ -372,6 +387,23 @@ export function InfluencerChat() {
     if (selModel) { void runBrief("", ""); return; }
     if (attached.length && skill) { setPhase("intake"); void readProduct(attached); return; }
     setPhase("intake");
+  }
+
+  async function searchProduct(again = false) {
+    const name = productName.trim();
+    if (name.length < 2) return;
+    if (!again) seenPhotos.current = [];
+    setBusy("think"); setSearching(true); setError(""); setFound(null);
+    try {
+      const response = await fetch("/api/multiplier/clone/product-search", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, skip: seenPhotos.current }),
+      });
+      if (response.status === 404) { setError(t("notFound")); return; }
+      if (!response.ok) { await fail(response); return; }
+      const data = await response.json();
+      if (typeof data.image_url === "string") seenPhotos.current.push(data.image_url);
+      setFound({ name: String(data.name ?? name), summary: String(data.summary ?? ""), look: String(data.look ?? ""), image: String(data.image ?? ""), image_url: String(data.image_url ?? "") });
+    } catch { setError(t("error")); } finally { setBusy(""); setSearching(false); }
   }
 
   async function readProduct(files: FileList | File[]) {
@@ -751,9 +783,30 @@ export function InfluencerChat() {
             onChange={(event) => { if (event.target.files?.length) void readProduct(event.target.files); event.target.value = ""; }} />
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" className="rounded-full" onClick={() => productRef.current?.click()} disabled={busy !== ""}><ImagePlus className="size-4" /> {t("attachPhoto")}</Button>
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => setLinkOpen(true)} disabled={busy !== ""}>{t("pasteLink")}</Button>
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => { setNameOpen(true); setLinkOpen(false); }} disabled={busy !== ""}><Search className="size-4" /> {t("typeName")}</Button>
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => { setLinkOpen(true); setNameOpen(false); }} disabled={busy !== ""}>{t("pasteLink")}</Button>
             <Button type="button" variant="ghost" className="rounded-full" onClick={() => void runBrief("", "")} disabled={busy !== ""}>{t("noProduct")}</Button>
           </div>
+          {nameOpen && !found && (
+            <form className="flex gap-2" onSubmit={(event) => { event.preventDefault(); void searchProduct(); }}>
+              <input value={productName} onChange={(event) => setProductName(event.target.value)} maxLength={80} aria-label={t("typeName")} placeholder={t("namePh")} className="min-w-0 flex-1 rounded-full border border-border bg-background px-4 py-2 text-sm" />
+              <Button type="submit" className="rounded-full" disabled={busy !== "" || productName.trim().length < 2}>{t("searchBtn")}</Button>
+            </form>
+          )}
+          {found && (
+            <div data-testid="product-found" className="flex gap-3 rounded-[18px] border border-white/10 bg-white/[0.03] p-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={found.image} alt={found.name} className="size-24 shrink-0 rounded-xl bg-white object-contain" />
+              <div className="min-w-0 space-y-2">
+                <p className="font-medium text-foreground">{found.name}</p>
+                {found.summary && <p className="text-xs text-muted-foreground">{found.summary}</p>}
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" size="sm" className="rounded-full" disabled={busy !== ""} onClick={() => { setProductLook(found.look); void runBrief(found.look, ""); }}>{t("useThis")}</Button>
+                  <Button type="button" size="sm" variant="outline" className="rounded-full" disabled={busy !== ""} onClick={() => void searchProduct(true)}>{t("searchAgain")}</Button>
+                </div>
+              </div>
+            </div>
+          )}
           {linkOpen && (
             <div className="flex gap-2">
               <input value={productLink} onChange={(event) => setProductLink(event.target.value)} maxLength={300} aria-label={t("pasteLink")} placeholder={t("linkPh")} className="min-w-0 flex-1 rounded-full border border-border bg-background px-4 py-2 text-sm" />
@@ -762,7 +815,8 @@ export function InfluencerChat() {
           )}
         </Msg>
       )}
-      {busy === "think" && phase === "intake" && <Working hints={[t("hint1"), t("hint2"), t("hint3")]} text={t("reading")} />}
+      {busy === "think" && phase === "intake" && searching && <Working hints={[t("searchHint1"), t("searchHint2"), t("searchHint3")]} text={t("searchingProduct")} />}
+      {busy === "think" && phase === "intake" && !searching && <Working hints={[t("hint1"), t("hint2"), t("hint3")]} text={t("reading")} />}
       {busy === "think" && phase !== "intake" && <Working hints={[t("hint1"), t("hint2"), t("hint3")]} text={t("think")} />}
       {error && <p role="alert" className="rounded-[14px] border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm">{error}</p>}
 
