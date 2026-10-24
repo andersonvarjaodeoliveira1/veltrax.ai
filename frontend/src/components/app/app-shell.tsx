@@ -34,7 +34,8 @@ const WHATSAPP_URL = "https://wa.me/5511913142143?text=" + encodeURIComponent("O
 const NAV: NavItem[] = [
   { href: "/automacao", label: "Modelar vídeo orgânico", group: "1 · Vídeo orgânico", icon: Workflow, match: (p) => p.startsWith("/automacao"), badge: "BETA" },
   { href: "/influencer", label: "Criar avatar (influencer)", group: "2 · Avatar", icon: UserRound, match: (p) => p.startsWith("/influencer"), badge: "BETA" },
-  { href: "/list", label: "Library", group: "3 · Cortes para TikTok", icon: Film, match: (p) => p.startsWith("/list") || p.startsWith("/tasks") },
+  { href: "/", label: "Novos cortes", group: "3 · Cortes para TikTok", icon: Plus, match: (p) => p === "/" },
+  { href: "/list", label: "Library", icon: Film, match: (p) => p.startsWith("/list") || p.startsWith("/tasks") },
   { href: "/folders", label: "Folders", icon: FolderOpen, match: (p) => p.startsWith("/folders") },
   { href: DOWNLOADER_URL, label: "Baixar vídeo", icon: Download, match: () => false, external: true },
   { href: "/conectar-flow", label: "Conectar ao Flow", group: "Minha conta", icon: Link2, match: (p) => p.startsWith("/conectar-flow") },
@@ -96,9 +97,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {!compact && "ClipGringa"}
         </Link>
 
-        <SidebarLink compact={compact} href="/" label="New generation" shortcut="N" className="mb-4 mt-1 justify-center rounded-full bg-gradient-to-br from-[#8b5cf6] to-[#7b3fe4] text-white shadow-[0_8px_22px_-8px_#7b3fe4] hover:text-white hover:brightness-110">
-          <Plus className="size-4" />
-        </SidebarLink>
 
         <nav aria-label="Main navigation" className="flex w-full flex-col gap-0.5">
           {items.map((item, index) => {

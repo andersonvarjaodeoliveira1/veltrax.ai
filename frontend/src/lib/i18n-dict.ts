@@ -40,6 +40,7 @@ const E: Record<string, Entry> = {
   "Could not sign out. Please try again.": { pt: "Não foi possível sair. Tente novamente.", es: "No se pudo cerrar sesión. Inténtalo de nuevo." },
   "Baixar vídeo": { pt: "Baixar vídeo", es: "Descargar video" },
   "API e Flow": { pt: "API e Flow", es: "API y Flow" },
+  "Novos cortes": { pt: "Novos cortes", es: "Nuevos cortes" },
   "Modelar vídeo orgânico": { pt: "Modelar vídeo orgânico", es: "Modelar video orgánico" },
   "Criar avatar (influencer)": { pt: "Criar avatar (influencer)", es: "Crear avatar (influencer)" },
   "1 · Vídeo orgânico": { pt: "1 · Vídeo orgânico", es: "1 · Video orgánico" },
