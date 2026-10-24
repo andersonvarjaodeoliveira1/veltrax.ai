@@ -588,6 +588,40 @@ def _page_image(html: str, base: str) -> str:
     return ""
 
 
+def _ddg_search(query: str) -> list[dict[str, str]]:
+    """Plain web search (DuckDuckGo HTML) used when no Apify token is set or it returns nothing."""
+    import html as _html
+    import re as _re
+    from urllib.parse import parse_qs, unquote, urlparse
+
+    import httpx
+
+    try:
+        resp = httpx.post("https://html.duckduckgo.com/html/", data={"q": query, "kl": "br-pt"}, timeout=12,
+                          headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124 Safari/537.36"})
+        if resp.status_code != 200:
+            return []
+        page = resp.text
+    except Exception:
+        logger.warning("duckduckgo search failed", exc_info=True)
+        return []
+    results: list[dict[str, str]] = []
+    for block in page.split('class="result__body"')[1:12]:
+        link = _re.search(r'class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>', block, _re.S)
+        if not link:
+            continue
+        href = _html.unescape(link.group(1))
+        if href.startswith("//"):
+            href = "https:" + href
+        target = parse_qs(urlparse(href).query).get("uddg")
+        url = unquote(target[0]) if target else href
+        snip = _re.search(r'class="result__snippet"[^>]*>(.*?)</a>', block, _re.S)
+        clean = lambda v: _html.unescape(_re.sub(r"<[^>]+>", "", v)).strip()
+        if url.startswith("https://"):
+            results.append({"url": url, "title": clean(link.group(2)), "text": clean(snip.group(1)) if snip else ""})
+    return results[:8]
+
+
 @router.post("/product-search")
 async def product_search(request: Request, db: AsyncSession = Depends(get_db)):
     """Looks a product up by name on Google and Reddit, picks the best photo and describes the product."""
@@ -601,8 +635,6 @@ async def product_search(request: Request, db: AsyncSession = Depends(get_db)):
     if len(name) < 2:
         raise HTTPException(status_code=400, detail="Write the product name")
     token = get_config().apify_api_token
-    if not token:
-        raise HTTPException(status_code=503, detail="Product search is not configured")
     _check_script_rate(user_id)
     from ...integrations import load_user_keys
     from ...usage import get_balance, set_server_blocked, set_usage_user
@@ -612,11 +644,14 @@ async def product_search(request: Request, db: AsyncSession = Depends(get_db)):
     set_server_blocked((await get_balance(db, user_id))["exhausted"])
 
     def search() -> tuple[list[dict[str, str]], list[dict[str, str]]]:
-        from apify_client import ApifyClient
-
-        client = ApifyClient(token)
         out: dict[str, list[dict[str, str]]] = {"web": [], "reddit": []}
+        if token:
+            from apify_client import ApifyClient
+
+            client = ApifyClient(token)
         for key, query in (("web", name), ("reddit", f"site:reddit.com {name}")):
+            if not token:
+                break
             try:
                 call = client.actor(GOOGLE_ACTOR).call(
                     run_input={"queries": query, "maxPagesPerQuery": 1, "resultsPerPage": 8, "countryCode": "br", "languageCode": "pt-BR", "saveHtmlToKeyValueStore": False},
@@ -627,6 +662,9 @@ async def product_search(request: Request, db: AsyncSession = Depends(get_db)):
                         out[key].append({"url": str(item.get("url") or ""), "title": str(item.get("title") or ""), "text": str(item.get("description") or "")})
             except Exception:
                 logger.warning("product search failed (%s)", key, exc_info=True)
+        for key, query in (("web", f"{name} comprar"), ("reddit", f"site:reddit.com {name}")):
+            if not out[key]:
+                out[key] = _ddg_search(query)
         return out["web"], out["reddit"]
 
     try:
