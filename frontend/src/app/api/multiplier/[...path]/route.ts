@@ -33,3 +33,4 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
 export const GET = proxy;
 export const POST = proxy;
 export const DELETE = proxy;
+export const PUT = proxy;

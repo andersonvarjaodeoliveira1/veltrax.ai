@@ -523,6 +523,72 @@ async def product_look(request: Request, db: AsyncSession = Depends(get_db)):
     return {"look": _text(out.description, 500)}
 
 
+# ---- saved influencer chats (kept in the database; deleting only hides them, admins can restore) ----
+MAX_CHAT_SNAP = 1_500_000
+
+
+def _chat_id(value: str) -> str:
+    import re as _re
+
+    if not _re.fullmatch(r"[0-9A-Za-z_-]{1,40}", value):
+        raise HTTPException(status_code=400, detail="Invalid chat id")
+    return value
+
+
+@router.get("/chats")
+async def list_chats(request: Request, db: AsyncSession = Depends(get_db)):
+    import json as _json
+    from sqlalchemy import text
+
+    user_id = await _user_id(request, db)
+    rows = (await db.execute(text(
+        "SELECT id, title, project, snap, updated_at FROM influencer_chats WHERE user_id = :u AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT 60"), {"u": user_id})).fetchall()
+    chats = []
+    for row in rows:
+        try:
+            snap = _json.loads(row.snap)
+        except ValueError:
+            snap = {}
+        chats.append({"id": row.id, "title": row.title, "project": row.project or "", "snap": snap, "updated_at": row.updated_at.isoformat() if row.updated_at else None})
+    return {"chats": chats}
+
+
+@router.put("/chats/{chat_id}")
+async def save_chat(chat_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    import json as _json
+    from sqlalchemy import text
+
+    user_id = await _user_id(request, db)
+    chat_id = _chat_id(chat_id)
+    raw = await request.body()
+    if len(raw) > MAX_CHAT_SNAP:
+        raise HTTPException(status_code=413, detail="Chat too large")
+    try:
+        data = _json.loads(raw)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    snap = data.get("snap") if isinstance(data, dict) else None
+    if not isinstance(snap, dict):
+        raise HTTPException(status_code=400, detail="Send the chat snapshot")
+    await db.execute(text(
+        "INSERT INTO influencer_chats (id, user_id, title, project, snap) VALUES (:id, :u, :t, :p, :s) "
+        "ON CONFLICT (user_id, id) DO UPDATE SET title = EXCLUDED.title, project = EXCLUDED.project, snap = EXCLUDED.snap, updated_at = CURRENT_TIMESTAMP "
+        "WHERE influencer_chats.deleted_at IS NULL"),
+        {"id": chat_id, "u": user_id, "t": _clip(str(data.get("title") or ""), 200), "p": _clip(str(data.get("project") or ""), 80) or None, "s": _json.dumps(snap)})
+    await db.commit()
+    return {"ok": True}
+
+
+@router.delete("/chats/{chat_id}")
+async def delete_chat(chat_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    from sqlalchemy import text
+
+    user_id = await _user_id(request, db)
+    await db.execute(text("UPDATE influencer_chats SET deleted_at = CURRENT_TIMESTAMP WHERE user_id = :u AND id = :id AND deleted_at IS NULL"), {"u": user_id, "id": _chat_id(chat_id)})
+    await db.commit()
+    return {"ok": True}
+
+
 class _Found(BaseModel):
     name: str = Field(default="", description="Short product name, up to 8 words")
     summary: str = Field(default="", description="What it is and who it is for, 1-2 short sentences in the language of the search")

@@ -19,6 +19,12 @@ type Pin = { id: string; thumb: string; full: string };
 type Board = { scenes: { line: string; what: string }[]; imagePrompts: string[]; videoPrompts: string[] };
 type Snap = Record<string, unknown>;
 type ChatItem = { id: number; title: string; project?: string; snap?: Snap };
+function saveRemote(chat: ChatItem) {
+  return fetch(`/api/multiplier/clone/chats/${chat.id}`, {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: chat.title, project: chat.project ?? "", snap: chat.snap ?? {} }),
+  }).catch(() => undefined);
+}
+
 type Phase = "home" | "intake" | "ask" | "approve" | "photos" | "prompt" | "count" | "model" | "cost" | "board";
 
 const FLOW_URL = "https://labs.google/fx/pt/tools/flow";
@@ -316,7 +322,25 @@ export function InfluencerChat() {
   const [pinnedSkills, setPinnedSkills] = useState<PinnedSkill[]>([]);
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
-    try { const saved = JSON.parse(window.localStorage.getItem("gv-influencer-chats") ?? "[]"); if (Array.isArray(saved)) setChats(saved.slice(0, 30)); } catch { /* sem armazenamento */ }
+    let local: ChatItem[] = [];
+    try { const saved = JSON.parse(window.localStorage.getItem("gv-influencer-chats") ?? "[]"); if (Array.isArray(saved)) { local = saved.slice(0, 30); setChats(local); } } catch { /* sem armazenamento */ }
+    void (async () => {
+      // Os chats ficam no banco: aqui trazemos os da conta e enviamos uma vez os que só existiam neste navegador.
+      try {
+        const response = await fetch("/api/multiplier/clone/chats", { cache: "no-store" });
+        if (!response.ok) return;
+        const data = await response.json();
+        const server: ChatItem[] = (Array.isArray(data.chats) ? data.chats : []).map((c: { id: string; title: string; project?: string; snap?: Snap }) => ({ id: Number(c.id), title: c.title, project: c.project || undefined, snap: c.snap }));
+        let migrated = false;
+        try { migrated = window.localStorage.getItem("gv-influencer-chats-synced") === "1"; } catch { /* sem armazenamento */ }
+        const known = new Set(server.map((c) => c.id));
+        const extra = migrated ? [] : local.filter((c) => !known.has(c.id));
+        extra.forEach((c) => void saveRemote(c));
+        const merged = [...server, ...extra].sort((a, b) => b.id - a.id).slice(0, 60);
+        setChats(merged);
+        try { window.localStorage.setItem("gv-influencer-chats", JSON.stringify(merged)); window.localStorage.setItem("gv-influencer-chats-synced", "1"); } catch { /* sem armazenamento */ }
+      } catch { /* sem rede: segue com os chats deste navegador */ }
+    })();
     try { const saved = JSON.parse(window.localStorage.getItem("gv-influencer-projects") ?? "[]"); if (Array.isArray(saved)) setProjects(saved); } catch { /* sem armazenamento */ }
     try {
       const params = new URLSearchParams(window.location.search);
@@ -517,7 +541,7 @@ export function InfluencerChat() {
     try { await navigator.clipboard.writeText(text); setSent(key); window.setTimeout(() => setSent(""), 1800); } catch { /* o texto continua na tela */ }
   }
 
-  const snapshot = (): Snap => ({ style, phase, prompt, skill, answers, persona, searches, copyText, pins, pin, prompts, summaries, videoCount, vary, model, boards, productLook, productLink, worked });
+  const snapshot = (): Snap => ({ style, phase, prompt, skill, answers, persona, searches, copyText, pins, pin, prompts, summaries, videoCount, vary, model, boards, productLook, productLink, worked, questions, qi, productName, found: found ? { ...found, image: "" } : null });
   const snapKey = JSON.stringify(snapshot());
   useEffect(() => {
     if (!hydrated || chatId.current === null || phase === "home") return;
@@ -527,6 +551,11 @@ export function InfluencerChat() {
       try { window.localStorage.setItem("gv-influencer-chats", JSON.stringify(next)); } catch { /* sem armazenamento */ }
       return next;
     });
+    const timer = window.setTimeout(() => {
+      const item = { id, title: prompt.slice(0, 60), project: project || undefined, snap: JSON.parse(snapKey) as Snap };
+      void saveRemote(item);
+    }, 900);
+    return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snapKey, hydrated]);
 
@@ -536,15 +565,17 @@ export function InfluencerChat() {
     setPrompt(chat.title);
     const snap = chat.snap as Record<string, never> | undefined;
     if (!snap) return;
-    const unsettled = snap.phase === "intake" || snap.phase === "ask";
     setPrompt((snap.prompt as string) || chat.title); setSkill((snap.skill as SkillId) || "");
-    if (unsettled && !(snap.persona as Persona)?.name) { chatId.current = null; return; }
+    setQuestions((snap.questions as unknown as Question[]) ?? []); setQi((snap.qi as number) ?? 0);
+    setProductName((snap.productName as string) ?? ""); setNameOpen(Boolean(snap.productName)); setFound((snap.found as never) ?? null);
     setAnswers(snap.answers ?? []); setPersona(snap.persona ?? { name: "", age: "", look: "", setting: "" }); setSearches(snap.searches ?? []); setCopyText((snap.copyText as string) ?? "");
     setPins(snap.pins ?? []); setPin(snap.pin ?? null); setPrompts(snap.prompts ?? []); setSummaries(snap.summaries ?? []); setVideoCount((snap.videoCount as number) ?? 1);
     setStyle({ ...DEFAULT_STYLE, ...((snap.style as Partial<StyleState>) ?? {}) }); setVary(snap.vary ?? { hook: true, body: false, cta: false }); setModel((snap.model as string) ?? model); setBoards(snap.boards ?? []); setProductLook((snap.productLook as string) ?? ""); setProductLink((snap.productLink as string) ?? "");
     lookRef.current = (snap.productLook as string) ?? ""; linkRef.current = (snap.productLink as string) ?? "";
     setWorked(snap.worked ?? {}); setProject(chat.project ?? "");
-    setPhase(((snap.phase as Phase) === "ask" || (snap.phase as Phase) === "intake") ? "approve" : (snap.phase as Phase));
+    const saved = (snap.phase as Phase) ?? "home";
+    // Continua exatamente de onde parou; só volta uma etapa se a pergunta atual se perdeu no meio.
+    setPhase(saved === "ask" && !((snap.questions as unknown[]) ?? []).length ? "intake" : saved === "home" ? "intake" : saved);
   }
 
   async function addFaces(files: FileList | null) {
@@ -562,7 +593,7 @@ export function InfluencerChat() {
   }
   function deleteModel(id: string) { const next = models.filter((m) => m.id !== id); setModels(next); saveModels(next); if (selModelId === id) setSelModelId(""); }
 
-  function deleteChat(id: number) { persistChats(chats.filter((c) => c.id !== id)); if (chatId.current === id) reset(); }
+  function deleteChat(id: number) { void fetch(`/api/multiplier/clone/chats/${id}`, { method: "DELETE" }).catch(() => undefined); persistChats(chats.filter((c) => c.id !== id)); if (chatId.current === id) reset(); }
   function addProject() {
     const name = newProject.trim().slice(0, 40);
     if (!name) return;

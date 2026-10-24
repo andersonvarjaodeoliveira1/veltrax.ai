@@ -27,3 +27,20 @@ it("searches a product by name and shows the photo before using it", async () =>
   expect(screen.getByRole("button", { name: "Usar este produto" })).toBeEnabled();
   await waitFor(() => expect(calls.some((c) => c.url.includes("product-search") && c.body?.includes("Garrafa Stanley"))).toBe(true));
 });
+
+it("lists chats saved in the account and reopens one where it stopped", async () => {
+  const saved = { id: "1700000000001", title: "Influencer de skincare", project: "", snap: { phase: "intake", prompt: "Influencer de skincare para vender creme", skill: "beauty" }, updated_at: null };
+  const calls: { url: string; method?: string }[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+    calls.push({ url: String(url), method: init?.method });
+    if (String(url).endsWith("/clone/chats") && !init?.method) return new Response(JSON.stringify({ chats: [saved] }), { status: 200 });
+    return new Response(JSON.stringify({}), { status: 200 });
+  }));
+  window.localStorage.clear();
+  const user = userEvent.setup();
+  render(<InfluencerChat />);
+  await user.click(await screen.findByRole("button", { name: "Influencer de skincare" }));
+  expect(await screen.findByText("Você tem foto do produto ou o link dele?")).toBeInTheDocument();
+  await user.click(screen.getAllByRole("button").find((b) => b.getAttribute("aria-label")?.includes("Influencer de skincare"))!);
+  await waitFor(() => expect(calls.some((c) => c.method === "DELETE" && c.url.endsWith("/chats/1700000000001"))).toBe(true));
+});

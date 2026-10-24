@@ -467,3 +467,28 @@ async def mark_help_report(report_id: str, request: Request, db: AsyncSession = 
     await db.execute(text("UPDATE help_reports SET handled = :h WHERE id = :id"), {"h": bool(body.get("handled")), "id": report_id})
     await db.commit()
     return {"ok": True}
+
+
+@router.get("/deleted-chats")
+async def list_deleted_chats(request: Request, db: AsyncSession = Depends(get_db)):
+    """Chats the members deleted. They stay in the database so an admin can read or restore them."""
+    await require_admin_user(request, db, get_config())
+    rows = (
+        await db.execute(
+            text("SELECT c.id, c.user_id, c.title, c.snap, c.created_at, c.deleted_at, u.name AS user_name, u.email AS user_email "
+                 "FROM influencer_chats c LEFT JOIN users u ON u.id = c.user_id WHERE c.deleted_at IS NOT NULL ORDER BY c.deleted_at DESC LIMIT 200")
+        )
+    ).fetchall()
+    return {"chats": [
+        {"id": r.id, "user_id": r.user_id, "title": r.title, "snap": r.snap, "user_name": r.user_name, "user_email": r.user_email,
+         "created_at": r.created_at.isoformat() if r.created_at else None, "deleted_at": r.deleted_at.isoformat() if r.deleted_at else None}
+        for r in rows
+    ]}
+
+
+@router.post("/deleted-chats/{user_id}/{chat_id}/restore")
+async def restore_deleted_chat(user_id: str, chat_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    await require_admin_user(request, db, get_config())
+    await db.execute(text("UPDATE influencer_chats SET deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE user_id = :u AND id = :id"), {"u": user_id, "id": chat_id})
+    await db.commit()
+    return {"ok": True}

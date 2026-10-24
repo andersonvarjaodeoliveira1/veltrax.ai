@@ -316,6 +316,10 @@ export default async function AdminPage({
         <div className="px-5 py-4 text-sm"><Link href="/admin/relatos" className="underline underline-offset-4">Abrir os relatos</Link></div>
       </Panel>
 
+      <Panel title="Chats excluídos" description="Conversas do avatar que os clientes apagaram, para ler ou devolver.">
+        <div className="px-5 py-4 text-sm"><Link href="/admin/chats-excluidos" className="underline underline-offset-4">Abrir os chats excluídos</Link></div>
+      </Panel>
+
       <Panel title="Em processamento agora" description="Fila ao vivo de todos os usuários.">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y">
