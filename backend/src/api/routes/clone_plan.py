@@ -759,6 +759,48 @@ async def _claude_search(name: str, key: str) -> tuple[list[dict[str, str]], lis
     return web, reddit, summary.strip()
 
 
+PRODUCT_CREATE_SYSTEM = f"""The person has no product yet. Invent ONE realistic product that fits what they asked for, using only the info they gave.
+Return a short product name (up to 6 words, generic, no real brand names), a summary in the language of the request (1-2 sentences: what it is, who it is for, the main benefit) and a visual description in English (20-50 words: shape, size, colors, material, packaging, no brand names or readable text).
+{SAFETY}"""
+
+
+@router.post("/product-create")
+async def product_create(request: Request, db: AsyncSession = Depends(get_db)):
+    """Creates a product from what the person told us (used when they have none): name, summary, look and an AI photo."""
+    user_id = await _user_id(request, db)
+    try:
+        data = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    info = _clip(str((data or {}).get("prompt") or ""), 600).strip()
+    skill = _clip(str((data or {}).get("skill") or ""), 40)
+    if len(info) < 3:
+        raise HTTPException(status_code=400, detail="Tell us what you want to sell")
+    _check_script_rate(user_id)
+    from ...integrations import load_user_keys
+    from ...usage import get_balance, set_server_blocked, set_usage_user
+
+    await load_user_keys(db, user_id)
+    set_usage_user(user_id)
+    set_server_blocked((await get_balance(db, user_id))["exhausted"])
+    out = await _run(PRODUCT_CREATE_SYSTEM, _Found, f"Niche: {skill or 'any'}\nWhat the person told us: {info}")
+    name = _text(out.name, 80)
+    body, kind = b"", ""
+    try:
+        from .clone_render import google_image
+
+        body, kind = await asyncio.wait_for(
+            google_image(f"Clean e-commerce studio photo of one product: {name}. {_text(out.look, 300)}. White background, soft light, centered, no people, no text, no logo."), timeout=90)
+    except Exception:
+        logger.warning("product image generation failed", exc_info=True)
+    import base64
+
+    return {
+        "generated": True, "name": name, "summary": _text(out.summary, 300), "look": _text(out.look, 500),
+        "image": f"data:{kind};base64,{base64.b64encode(body).decode()}" if body else "", "image_url": "", "sources": [],
+    }
+
+
 @router.post("/product-search")
 async def product_search(request: Request, db: AsyncSession = Depends(get_db)):
     """Looks a product up by name on Google and Reddit, picks the best photo and describes the product."""

@@ -170,6 +170,13 @@ const S = {
   searchHint3: ["Escolhendo a melhor foto…", "Picking the best photo…", "Eligiendo la mejor foto…"],
   photoMissing: ["Não achei foto. Anexe a sua se puder.", "No photo found. Attach yours if you can.", "No encontré foto. Adjunta la tuya si puedes."],
   aiPhoto: ["Foto criada por IA (não achei uma real).", "AI-made photo (no real one found).", "Foto creada por IA (no encontré una real)."],
+  creatingProduct: ["Criando o produto com IA…", "Creating the product with AI…", "Creando el producto con IA…"],
+  createHint1: ["Usando as informações que você deu…", "Using the info you gave…", "Usando la información que diste…"],
+  createHint2: ["Inventando nome e descrição…", "Making up a name and description…", "Inventando nombre y descripción…"],
+  createHint3: ["Criando a foto do produto…", "Creating the product photo…", "Creando la foto del producto…"],
+  editBtn: ["Editar", "Edit", "Editar"],
+  editLabel: ["Cole mais informações para ajustar a influencer e o prompt", "Paste more info to adjust the influencer and the prompt", "Pega más información para ajustar la influencer y el prompt"],
+  editApply: ["Refazer com isso", "Redo with this", "Rehacer con esto"],
   useThis: ["Usar este produto", "Use this product", "Usar este producto"],
   searchAgain: ["Buscar outra foto", "Try another photo", "Buscar otra foto"],
   notFound: ["Não achei esse produto. Confira o nome ou anexe a sua foto.", "I couldn't find that product. Check the name or attach your photo.", "No encontré ese producto. Revisa el nombre o adjunta tu foto."],
@@ -277,6 +284,9 @@ export function InfluencerChat() {
   const [nameOpen, setNameOpen] = useState(false);
   const [productName, setProductName] = useState("");
   const [searching, setSearching] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editText, setEditText] = useState("");
   const [found, setFound] = useState<{ name: string; summary: string; look: string; image: string; image_url: string; generated?: boolean } | null>(null);
   const seenPhotos = useRef<string[]>([]);
   const productRef = useRef<HTMLInputElement>(null);
@@ -334,11 +344,14 @@ export function InfluencerChat() {
         let migrated = false;
         try { migrated = window.localStorage.getItem("gv-influencer-chats-synced") === "1"; } catch { /* sem armazenamento */ }
         const known = new Set(server.map((c) => c.id));
-        const extra = migrated ? [] : local.filter((c) => !known.has(c.id));
-        extra.forEach((c) => void saveRemote(c));
-        const merged = [...server, ...extra].sort((a, b) => b.id - a.id).slice(0, 60);
-        setChats(merged);
-        try { window.localStorage.setItem("gv-influencer-chats", JSON.stringify(merged)); window.localStorage.setItem("gv-influencer-chats-synced", "1"); } catch { /* sem armazenamento */ }
+        setChats((current) => {
+          // Só ficam fora do banco o chat aberto agora e, na primeira vez, os que existiam só neste navegador.
+          const extra = current.filter((c) => !known.has(c.id) && (!migrated || c.id === chatId.current));
+          if (!migrated) extra.forEach((c) => void saveRemote(c));
+          const merged = [...server, ...extra].sort((x, y) => y.id - x.id).slice(0, 60);
+          try { window.localStorage.setItem("gv-influencer-chats", JSON.stringify(merged)); window.localStorage.setItem("gv-influencer-chats-synced", "1"); } catch { /* sem armazenamento */ }
+          return merged;
+        });
       } catch { /* sem rede: segue com os chats deste navegador */ }
     })();
     try { const saved = JSON.parse(window.localStorage.getItem("gv-influencer-projects") ?? "[]"); if (Array.isArray(saved)) setProjects(saved); } catch { /* sem armazenamento */ }
@@ -384,7 +397,7 @@ export function InfluencerChat() {
     chatId.current = null; setSkillSaved(false);
     setPhase("home"); setPrompt(""); setSkill(""); setBusy(""); setError(""); setQuestions([]); setQi(0); setPicked(null); setAnswers([]);
     setPersona({ name: "", age: "", look: "", setting: "" }); setSearches([]); setCopyText(""); setPins([]); setPin(null); setPhoto(null);
-    setPrompts([]); setSummaries([]); setVideoCount(1); setBoards([]); setActive(0); setProductLook(""); setProductLink(""); setLinkOpen(false); setAttached([]);
+    setPrompts([]); setSummaries([]); setVideoCount(1); setBoards([]); setActive(0); setProductLook(""); setProductLink(""); setLinkOpen(false); setAttached([]); setFound(null); setNameOpen(false); setProductName(""); setEditOpen(false); setEditText("");
   }
 
   const fullPrompt = () => [prompt, selModel && `Persona fixa (já existe, não mude): ${selModel.persona.name}, ${selModel.persona.age}, ${selModel.persona.look}, ${selModel.persona.setting}`, lookRef.current && `Produto: ${lookRef.current}`, linkRef.current && `Link do produto: ${linkRef.current}`].filter(Boolean).join("\n");
@@ -430,6 +443,33 @@ export function InfluencerChat() {
       if (typeof data.image_url === "string") seenPhotos.current.push(data.image_url);
       setFound({ name: String(data.name ?? name), summary: String(data.summary ?? ""), look: String(data.look ?? ""), image: String(data.image ?? ""), image_url: String(data.image_url ?? ""), generated: Boolean(data.generated) });
     } catch { setError(t("error")); } finally { setBusy(""); setSearching(false); }
+  }
+
+  async function createProduct() {
+    setBusy("think"); setCreating(true); setError("");
+    let look = "";
+    try {
+      const response = await fetch("/api/multiplier/clone/product-create", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt, skill: skill && (skill as string) !== "other" ? skill : undefined }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        look = typeof data.look === "string" ? data.look : "";
+        setFound({ name: String(data.name ?? ""), summary: String(data.summary ?? ""), look, image: String(data.image ?? ""), image_url: "", generated: true });
+      }
+    } catch { /* segue sem produto criado */ }
+    setCreating(false);
+    void runBrief(look, "");
+  }
+
+  async function editBrief() {
+    const extra = editText.trim().slice(0, 600);
+    if (!extra) return;
+    setEditOpen(false); setEditText(""); setError("");
+    const next = [...answers, { question: t("editLabel"), answer: extra }];
+    setAnswers(next); setPrompt((current) => `${current}\n${extra}`.slice(0, 1200));
+    setPhase("ask"); setBusy("build");
+    try { const data = await brief(next); if (data) takeBrief(data); else setPhase("approve"); } catch { setError(t("error")); setPhase("approve"); } finally { setBusy(""); }
   }
 
   async function readProduct(files: FileList | File[]) {
@@ -818,7 +858,7 @@ export function InfluencerChat() {
             <Button type="button" variant="outline" className="rounded-full" onClick={() => productRef.current?.click()} disabled={busy !== ""}><ImagePlus className="size-4" /> {t("attachPhoto")}</Button>
             <Button type="button" variant="outline" className="rounded-full" onClick={() => { setNameOpen(true); setLinkOpen(false); }} disabled={busy !== ""}><Search className="size-4" /> {t("typeName")}</Button>
             <Button type="button" variant="outline" className="rounded-full" onClick={() => { setLinkOpen(true); setNameOpen(false); }} disabled={busy !== ""}>{t("pasteLink")}</Button>
-            <Button type="button" variant="ghost" className="rounded-full" onClick={() => void runBrief("", "")} disabled={busy !== ""}>{t("noProduct")}</Button>
+            <Button type="button" variant="ghost" className="rounded-full" onClick={() => void createProduct()} disabled={busy !== ""}>{t("noProduct")}</Button>
           </div>
           {nameOpen && !found && (
             <form className="flex gap-2" onSubmit={(event) => { event.preventDefault(); void searchProduct(); }}>
@@ -851,8 +891,9 @@ export function InfluencerChat() {
           )}
         </Msg>
       )}
+      {busy === "think" && phase === "intake" && creating && <Working hints={[t("createHint1"), t("createHint2"), t("createHint3")]} text={t("creatingProduct")} />}
       {busy === "think" && phase === "intake" && searching && <Working hints={[t("searchHint1"), t("searchHint2"), t("searchHint3")]} text={t("searchingProduct")} />}
-      {busy === "think" && phase === "intake" && !searching && <Working hints={[t("hint1"), t("hint2"), t("hint3")]} text={t("reading")} />}
+      {busy === "think" && phase === "intake" && !searching && !creating && <Working hints={[t("hint1"), t("hint2"), t("hint3")]} text={t("reading")} />}
       {busy === "think" && phase !== "intake" && <Working hints={[t("hint1"), t("hint2"), t("hint3")]} text={t("think")} />}
       {error && <p role="alert" className="rounded-[14px] border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm">{error}</p>}
 
@@ -891,13 +932,20 @@ export function InfluencerChat() {
         <div className="space-y-3 rounded-[20px] border border-[#A98BFF]/40 bg-card p-4" data-testid="chat-approval">
           <p className="font-semibold">{t("approveT")}</p>
           <ul className="space-y-1 text-sm">
-            {[persona.name, [persona.age, persona.look].filter(Boolean).join(", "), persona.setting].filter(Boolean).map((line) => (
+            {[persona.name, [persona.age, persona.look].filter(Boolean).join(", "), persona.setting, found?.name ? `${found.name}${found.generated ? " · IA" : ""}` : ""].filter(Boolean).map((line) => (
               <li key={line} className="flex gap-2"><Check className="mt-0.5 size-4 shrink-0 text-[#5BD69A]" /> {line}</li>
             ))}
           </ul>
           <p className="text-xs text-muted-foreground">{t("approveCost")}</p>
+          {editOpen && (
+            <div className="space-y-2">
+              <textarea value={editText} onChange={(event) => setEditText(event.target.value)} maxLength={600} rows={3} aria-label={t("editLabel")} placeholder={t("editLabel")} className="w-full rounded-[14px] border border-border bg-background px-3 py-2 text-sm" />
+              <div className="flex justify-end"><Button type="button" size="sm" className="rounded-full" disabled={!editText.trim() || busy !== ""} onClick={() => void editBrief()}>{t("editApply")}</Button></div>
+            </div>
+          )}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" className="rounded-full" onClick={reset}><X className="size-4" /> {t("stop")}</Button>
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => setEditOpen((open) => !open)}>{t("editBtn")}</Button>
             <Button type="button" className="rounded-full" onClick={() => void approve()}>{t("approve")} <ArrowRight className="size-4" /></Button>
           </div>
         </div>

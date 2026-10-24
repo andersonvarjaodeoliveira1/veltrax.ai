@@ -44,3 +44,28 @@ it("lists chats saved in the account and reopens one where it stopped", async ()
   await user.click(screen.getAllByRole("button").find((b) => b.getAttribute("aria-label")?.includes("Influencer de skincare"))!);
   await waitFor(() => expect(calls.some((c) => c.method === "DELETE" && c.url.endsWith("/chats/1700000000001"))).toBe(true));
 });
+
+it("without a product the AI creates one, and Editar redoes the brief with the new info", async () => {
+  const bodies: Record<string, unknown>[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+    const u = String(url);
+    if (u.includes("/product-create")) return new Response(JSON.stringify({ generated: true, name: "Creme Lumi", summary: "Hidrata.", look: "white jar", image: "", image_url: "" }), { status: 200 });
+    if (u.includes("/influencer-brief")) {
+      bodies.push(JSON.parse(String(init?.body)));
+      return new Response(JSON.stringify({ persona: { name: "Bia", age: "22", look: "loira", setting: "casa" }, searches: [], copy: "texto" }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ chats: [] }), { status: 200 });
+  }));
+  window.localStorage.clear();
+  const user = userEvent.setup();
+  render(<InfluencerChat />);
+  await user.click((await screen.findAllByRole("button", { name: /Skill/ }))[0]);
+  await user.click(screen.getAllByRole("button", { name: "Criar a influencer" }).slice(-1)[0]);
+  await user.click(await screen.findByRole("button", { name: "Não tenho" }));
+  expect(await screen.findByTestId("chat-approval")).toHaveTextContent("Creme Lumi");
+  await user.click(screen.getByRole("button", { name: "Editar" }));
+  await user.type(screen.getByLabelText("Cole mais informações para ajustar a influencer e o prompt"), "mais morena");
+  await user.click(screen.getByRole("button", { name: "Refazer com isso" }));
+  await waitFor(() => expect(bodies.length).toBe(2));
+  expect(JSON.stringify(bodies[1])).toContain("mais morena");
+});
