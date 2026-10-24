@@ -5,7 +5,7 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowRight, CornerDownLeft, Download, Film, FolderOpen, LogOut, KeyRound, Link2, MessageCircle, Plus, Search, Shield, UserRound, Workflow,
+  ArrowRight, CornerDownLeft, Download, Film, FolderOpen, LogOut, KeyRound, Link2, MessageCircle, Plus, Scissors, Search, Shield, UserRound, Workflow,
 } from "lucide-react";
 import { toast } from "sonner";
 import { signOut, useSession } from "@/lib/auth-client";
@@ -25,19 +25,19 @@ import { cn } from "@/lib/utils";
 import { DISPLAY_NAME } from "@/lib/site";
 import { LanguageSwitcher } from "@/lib/i18n";
 
-type NavItem = { href: string; label: string; icon: typeof Film; match: (path: string) => boolean; external?: boolean; badge?: string; group?: string };
+type NavItem = { href: string; label: string; icon: typeof Film; match: (path: string) => boolean; external?: boolean; badge?: string; group?: string; sub?: string; tile?: boolean; primary?: boolean };
 
 const DOWNLOADER_URL = "https://turboscribe.ai/pt/downloader/youtube/video";
 
 const WHATSAPP_URL = "https://wa.me/5511913142143?text=" + encodeURIComponent("Olá! Quero comprar API ou conta do Flow para usar no ClipGringa.");
 
 const NAV: NavItem[] = [
-  { href: "/automacao", label: "Modelar vídeo orgânico", group: "1 · Vídeo orgânico", icon: Workflow, match: (p) => p.startsWith("/automacao"), badge: "BETA" },
-  { href: "/influencer", label: "Criar avatar (influencer)", group: "2 · Avatar", icon: UserRound, match: (p) => p.startsWith("/influencer"), badge: "BETA" },
-  { href: "/", label: "Novos cortes", group: "3 · Cortes para TikTok", icon: Plus, match: (p) => p === "/" },
-  { href: "/list", label: "Library", icon: Film, match: (p) => p.startsWith("/list") || p.startsWith("/tasks") },
-  { href: "/folders", label: "Folders", icon: FolderOpen, match: (p) => p.startsWith("/folders") },
-  { href: DOWNLOADER_URL, label: "Baixar vídeo", icon: Download, match: () => false, external: true },
+  { href: "/automacao", label: "Vídeo orgânico", group: "Criar", tile: true, icon: Workflow, match: (p) => p.startsWith("/automacao"), badge: "BETA" },
+  { href: "/influencer", label: "Avatar influencer", tile: true, icon: UserRound, match: (p) => p.startsWith("/influencer"), badge: "BETA" },
+  { href: "/", label: "Novos cortes", sub: "Cortes para TikTok", primary: true, icon: Plus, match: (p) => p === "/" },
+  { href: "/list", label: "Library", sub: "Cortes para TikTok", icon: Film, match: (p) => p.startsWith("/list") || p.startsWith("/tasks") },
+  { href: "/folders", label: "Folders", sub: "Cortes para TikTok", icon: FolderOpen, match: (p) => p.startsWith("/folders") },
+  { href: DOWNLOADER_URL, label: "Baixar vídeo", sub: "Cortes para TikTok", icon: Download, match: () => false, external: true },
   { href: "/conectar-flow", label: "Conectar ao Flow", group: "Minha conta", icon: Link2, match: (p) => p.startsWith("/conectar-flow") },
   { href: "/minhas-apis", label: "Minhas APIs", icon: KeyRound, match: (p) => p.startsWith("/minhas-apis") },
   { href: WHATSAPP_URL, label: "API e Flow", icon: MessageCircle, match: () => false, external: true },
@@ -101,15 +101,35 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <nav aria-label="Main navigation" className="flex w-full flex-col gap-0.5">
           {items.map((item, index) => {
             const active = item.match(pathname);
-            const header = !compact && item.group && item.group !== items[index - 1]?.group ? (
-              <p key={`g-${item.group}`} data-no-translate className="mb-1 mt-4 px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70 first:mt-0">{item.group}</p>
+            const prev = items[index - 1];
+            const header = !compact && item.group && item.group !== prev?.group ? (
+              <p key={`g-${item.group}`} data-no-translate className="mb-1.5 mt-5 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/70 first:mt-1">{item.group}</p>
             ) : null;
+            const subHeader = !compact && item.sub && item.sub !== prev?.sub ? (
+              <p key={`s-${item.sub}`} className="mb-1 mt-4 flex items-center gap-2 px-3 text-xs font-semibold text-foreground/85">
+                <span aria-hidden className="grid size-7 place-items-center rounded-lg bg-[#7b3fe4]/15 text-[#a98bff]"><Scissors className="size-3.5" /></span>
+                {item.sub}
+              </p>
+            ) : null;
+            const icon = item.tile && !compact
+              ? <span className={cn("grid size-7 shrink-0 place-items-center rounded-lg", active ? "bg-[#7b3fe4]/35" : "bg-[#7b3fe4]/15")}><item.icon className="size-4" /></span>
+              : <item.icon className="size-4" />;
             return (
               <div key={item.href} className="contents">
-              {header}
-              <SidebarLink key={item.href} compact={compact} href={item.href} label={item.label} active={active} external={item.external} badge={item.badge}>
-                <item.icon className="size-4" />
-              </SidebarLink>
+                {header}
+                {subHeader}
+                <div className={cn(item.sub && !compact && "ml-6 border-l border-sidebar-border pl-2")}>
+                  <SidebarLink
+                    compact={compact} href={item.href} label={item.label} active={active} external={item.external} badge={item.badge}
+                    className={cn(
+                      item.tile && !compact && "h-11",
+                      item.sub && !compact && "h-9 rounded-xl text-[13px]",
+                      item.primary && "mb-0.5 bg-gradient-to-br from-[#8b5cf6] to-[#7b3fe4] text-white shadow-[0_8px_22px_-10px_#7b3fe4] ring-0 hover:bg-transparent hover:text-white hover:brightness-110 [&_svg]:text-white",
+                    )}
+                  >
+                    {icon}
+                  </SidebarLink>
+                </div>
               </div>
             );
           })}
