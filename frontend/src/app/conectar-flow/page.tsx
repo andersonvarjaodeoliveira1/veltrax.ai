@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Check, Download, ExternalLink, Film, Link2 } from "lucide-react";
 import { useSession } from "@/lib/auth-client";
+import { FacebookConnectCard } from "@/components/app/facebook-connect-card";
 import { useFlowConnection } from "@/hooks/use-flow-connection";
 import { FLOW_CHOICES, defaultFlowCategory, saveFlowCategory } from "@/lib/flow-models";
 import { cn } from "@/lib/utils";
@@ -94,7 +95,7 @@ export default function ConnectFlowPage() {
       <section className="space-y-3 rounded-[18px] border border-border bg-card p-5" data-testid="step-extension">
         <p className="flex items-center gap-2 font-medium">
           <span className="grid size-6 place-items-center rounded-full bg-[#7B3FE4]/25 text-xs">{done.extension ? <Check className="size-3.5 text-[#5BD69A]" /> : "2"}</span>
-          Instale a extensão do ClipGringa
+          Instale a extensão do ClipGringa (versão 1.1.0)
         </p>
         <p className="text-xs text-muted-foreground">É ela que gera as imagens e os vídeos sozinha dentro do seu Flow.</p>
         <a href="/extensao/clipgringa-flow.zip" download onClick={() => mark({ extension: true })}
@@ -117,6 +118,8 @@ export default function ConnectFlowPage() {
           </a>
         </section>
       )}
+
+      <FacebookConnectCard />
 
       <p role="status" className={ready ? "rounded-[14px] border border-[#5BD69A]/40 bg-[#5BD69A]/10 p-3 text-sm text-[#5BD69A]" : "text-xs text-muted-foreground"}>
         {ready ? "Tudo certo! Agora é só criar os vídeos na Automação. Quando chegar o momento de gerar, o app leva você ao Flow." : "Faça os dois passos para liberar a geração no seu Flow."}
