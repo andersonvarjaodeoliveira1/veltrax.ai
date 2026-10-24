@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "ClipGringa · Flow",
-  "version": "1.3.0",
-  "description": "Gera sozinho as imagens e os vídeos do seu pacote do ClipGringa no Google Flow e publica o vídeo final na sua página do Facebook.",
+  "version": "1.3.1",
+  "description": "Gera sozinho as imagens e os vídeos do seu pacote do ClipGringa no Google Flow.",
   "permissions": [
     "storage",
     "unlimitedStorage",
@@ -11,9 +11,7 @@
   ],
   "host_permissions": [
     "https://flow.google.com/*",
-    "https://labs.google/fx/*/tools/flow/*",
-    "https://www.facebook.com/*",
-    "https://web.facebook.com/*"
+    "https://labs.google/fx/*/tools/flow/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -36,16 +34,6 @@
       ],
       "js": [
         "site.js"
-      ],
-      "run_at": "document_idle"
-    },
-    {
-      "matches": [
-        "https://www.facebook.com/*",
-        "https://web.facebook.com/*"
-      ],
-      "js": [
-        "fb.js"
       ],
       "run_at": "document_idle"
     }
