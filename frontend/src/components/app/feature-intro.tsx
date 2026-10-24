@@ -6,12 +6,13 @@ import { cn } from "@/lib/utils";
 
 type Props = { image: string; title: string; tagline: string; steps: [string, string, string]; children: React.ReactNode };
 
-const DURATION = 2600;
+const DURATION = 5600;
 
 /** Tela de entrada de cada parte do funil: capa, barra e 3 etapas antes de abrir a ferramenta. */
 export function FeatureIntro({ image, title, tagline, steps, children }: Props) {
   const [progress, setProgress] = useState(0);
   const [done, setDone] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     const reduce = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -22,7 +23,7 @@ export function FeatureIntro({ image, title, tagline, steps, children }: Props) 
       const p = Math.min(1, (now - start) / total);
       setProgress(p);
       if (p < 1) frame = requestAnimationFrame(tick);
-      else setTimeout(() => setDone(true), 250);
+      else setTimeout(() => setDone(true), 600);
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
@@ -40,7 +41,7 @@ export function FeatureIntro({ image, title, tagline, steps, children }: Props) 
         <div className="relative mx-auto grid size-[220px] place-items-center overflow-hidden rounded-[24px] bg-black">
           <div aria-hidden className="absolute inset-0 animate-pulse bg-[radial-gradient(60%_60%_at_50%_45%,rgba(123,63,228,.35),transparent)]" />
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={image} alt="" width={220} height={220} className="relative size-full object-cover opacity-95" />
+          <img src={image} alt="" width={220} height={220} loading="eager" decoding="async" onLoad={() => setLoaded(true)} className={cn("relative size-full object-cover transition-opacity duration-700", loaded ? "opacity-100" : "opacity-0")} />
         </div>
         <p className="mt-5 font-mono text-[10px] uppercase tracking-[0.3em] text-[#A98BFF]">ClipGringa</p>
         <h2 className="mt-1 font-display text-2xl font-bold tracking-tight text-white">{title}</h2>
