@@ -1569,6 +1569,26 @@ async def help_report(request: Request, db: AsyncSession = Depends(get_db)):
         {"id": str(uuid.uuid4()), "u": user_id, "k": kind, "m": message, "e": email, "p": phone or None, "pg": page or None},
     )
     await db.commit()
+    try:
+        # Avisa por e-mail todos os administradores, com o contato da pessoa para responder.
+        from html import escape
+        from sqlalchemy import select
+        from ...models import User
+        from ...services.email_service import EmailContent, SesEmailService
+
+        admins = (await db.execute(select(User.email).where(User.is_admin.is_(True), User.email.is_not(None)))).scalars().all()
+        label = "Erro" if kind == "bug" else "Sugestão"
+        rows = [("Tipo", label), ("Mensagem", message), ("E-mail da pessoa", email), ("Telefone", phone or "-"), ("Página", page or "-")]
+        content = EmailContent(
+            subject=f"ClipGringa · {label} enviado por um cliente",
+            html="<p>" + "<br>".join(f"<strong>{escape(k)}:</strong> {escape(v)}" for k, v in rows) + "</p><p>Veja todos em Admin &gt; Relatos dos clientes.</p>",
+            text="\n".join(f"{k}: {v}" for k, v in rows) + "\n\nVeja todos em Admin > Relatos dos clientes.\n",
+        )
+        service = SesEmailService(get_config())
+        for admin_email in admins:
+            await service.send_email(admin_email, content)
+    except Exception:
+        logger.warning("help report email failed", exc_info=True)
     webhook = get_config().discord_feedback_webhook_url
     if webhook:
         try:
