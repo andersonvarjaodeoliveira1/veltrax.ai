@@ -993,6 +993,13 @@ async def influencer_storyboard(request: Request, db: AsyncSession = Depends(get
     if camera in CAMERAS:
         ctx["camera_note"] = f"\nCAMERA: every scene is shot as {CAMERAS[camera]}. Keep the same camera style in all scenes."
         ctx["delivery"] = (ctx.get("delivery") or "") + ctx["camera_note"]
+    if str(data.get("format") or "") == "recipe":
+        ctx["delivery"] = (ctx.get("delivery") or "") + "\nFORMAT: faceless recipe video. Never show the person's face: only hands, ingredients and the preparation, in first-person POV, with the voice speaking over it."
+    ctx["delivery"] = (ctx.get("delivery") or "") + (
+        "\nSCRIPT RULES: each scene's spoken line has 18 to 22 words, in plain everyday speech like a real person talking. "
+        "Never use em dashes and never write words in ALL CAPS. Structure across the scenes: hook, the problem, a short mechanism without giving the full solution, "
+        "a line that the usual options are fake or do not work, the product or brand reveal, then the call to action in the last scene."
+    )
     TONES = {
         "calm": "calm, warm and reassuring",
         "lively": "energetic, upbeat and enthusiastic",

@@ -24,6 +24,16 @@ type Phase = "home" | "intake" | "ask" | "approve" | "photos" | "prompt" | "coun
 const FLOW_URL = "https://labs.google/fx/pt/tools/flow";
 const SCENES = 4;
 const ANGLES = ["curiosity", "problem", "proof", "question"];
+type StyleState = { captions: boolean; voice: string; tone: string; custom: string; camera: string; product: boolean | null; format: string; cta: string; setting: string; avatarMix: boolean };
+const DEFAULT_STYLE: StyleState = { captions: false, voice: "", tone: "", custom: "", camera: "selfie", product: null, format: "talk", cta: "bio", setting: "", avatarMix: false };
+const SETTINGS: Record<string, string> = { home: "in a real home kitchen", farm: "on a farm with a barn behind", office: "in a plain home office", car: "sitting inside a parked car", outdoor: "outdoors in natural daylight" };
+/** Aparências que se alternam entre os vídeos (80/20: muda a pessoa, mantém o roteiro). */
+const AVATAR_MIX = ["woman in her 50s, light skin, short grey hair, cardigan", "Black man in his 40s, short beard, plain t-shirt", "Latina woman in her 30s, dark wavy hair, casual blouse", "white farmer in his 60s, cap and flannel shirt", "Asian woman in her 40s, ponytail, simple sweater", "heavyset man in his 50s, glasses, polo shirt"];
+const CTA_STYLE: Record<Lang3, Record<string, string>> = {
+  pt: { bio: "Toque no link da bio e veja agora.", comment: "O link está nos comentários, toque e veja agora.", keyword: "Comente QUERO e eu te envio o link." },
+  en: { bio: "Tap the link in my bio and see it now.", comment: "The link is in the comments, tap it and see it now.", keyword: "Comment WANT and I will send you the link." },
+  es: { bio: "Toca el enlace de mi bio y velo ahora.", comment: "El enlace está en los comentarios, tócalo y velo ahora.", keyword: "Comenta QUIERO y te envío el enlace." },
+};
 const BODIES = ["story", "demo", "list", "proof"];
 const CTAS: Record<Lang3, string[]> = {
   pt: ["Comente QUERO para receber o link.", "Toque no link da bio e veja agora.", "Comente INFO e eu te mando os detalhes.", "Salve este vídeo e comente QUERO."],
@@ -47,6 +57,23 @@ const S = {
   styleAsk: ["Como você quer os vídeos?", "How do you want the videos?", "¿Cómo quieres los videos?"],
   styCaptions: ["Legenda no vídeo", "Subtitles", "Subtítulos"],
   styVoice: ["Idioma da voz", "Voice language", "Idioma de la voz"],
+  yesWord: ["Sim", "Yes", "Sí"],
+  noWord: ["Não", "No", "No"],
+  styFormat: ["Formato do vídeo", "Video format", "Formato del video"],
+  fmtTalk: ["Avatar falando", "Avatar talking", "Avatar hablando"],
+  fmtPov: ["POV (mãos e produto)", "POV (hands and product)", "POV (manos y producto)"],
+  fmtRecipe: ["Receita sem rosto", "Faceless recipe", "Receta sin rostro"],
+  styCta: ["Chamada final (CTA)", "Call to action", "Llamada final (CTA)"],
+  ctaBio: ["Link da bio", "Link in bio", "Enlace de la bio"],
+  ctaComment: ["Link nos comentários", "Link in comments", "Enlace en los comentarios"],
+  ctaKeyword: ["Comente a palavra", "Comment a keyword", "Comenta la palabra"],
+  stySetting: ["Cenário", "Setting", "Escenario"],
+  setHome: ["Cozinha de casa", "Home kitchen", "Cocina de casa"],
+  setFarm: ["Fazenda", "Farm", "Granja"],
+  setOffice: ["Escritório", "Office", "Oficina"],
+  setCar: ["Dentro do carro", "In the car", "Dentro del coche"],
+  setOutdoor: ["Ao ar livre", "Outdoors", "Al aire libre"],
+  styAvatarMix: ["Variar o avatar a cada vídeo", "Vary the avatar in each video", "Variar el avatar en cada video"],
   styCamera: ["Tipo de câmera", "Camera", "Cámara"],
   styProduct: ["Mostrar o produto", "Show the product", "Mostrar el producto"],
   styYes: ["Com", "With", "Con"],
@@ -222,7 +249,7 @@ export function InfluencerChat() {
   const [prompts, setPrompts] = useState<string[]>([]);
   const [summaries, setSummaries] = useState<string[]>([]);
   const [videoCount, setVideoCount] = useState(1);
-  const [style, setStyle] = useState<{ captions: boolean; voice: string; tone: string; custom: string; camera: string; product: boolean | null }>({ captions: false, voice: "", tone: "", custom: "", camera: "selfie", product: null });
+  const [style, setStyle] = useState<StyleState>(DEFAULT_STYLE);
   const [vary, setVary] = useState<{ hook: boolean; body: boolean; cta: boolean }>({ hook: true, body: false, cta: false });
   const [model, setModel] = useState<string>(FLOW_CHOICES[1].id);
   const [boards, setBoards] = useState<Board[]>([]);
@@ -423,10 +450,10 @@ export function InfluencerChat() {
         const response = await fetch("/api/multiplier/clone/influencer-storyboard", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            copy: copyText, scene_count: SCENES, persona: { ...persona, look: persona.look + (selModel?.voice ? `. Voice: ${selModel.voice}` : ""), extra: "" }, language: style.voice || LANG_CODE[lang], camera: style.camera, captions: style.captions, voice_tone: style.tone, voice_custom: style.custom, cadence: "natural", energy: "calm",
+            copy: copyText, scene_count: SCENES, persona: { ...persona, look: persona.look + (style.avatarMix && videoCount > 1 ? `. Appearance for this video: ${AVATAR_MIX[i % AVATAR_MIX.length]}` : "") + (SETTINGS[style.setting] ? `. Setting: ${SETTINGS[style.setting]}` : "") + (selModel?.voice ? `. Voice: ${selModel.voice}` : ""), extra: "" }, language: style.voice || LANG_CODE[lang], camera: style.format === "pov" || style.format === "recipe" ? "pov" : style.camera, format: style.format, captions: style.captions, voice_tone: style.tone, voice_custom: style.custom, cadence: "natural", energy: "calm",
             angle: videoCount > 1 && vary.hook ? ANGLES[i % ANGLES.length] : "",
             body_style: videoCount > 1 && vary.body ? BODIES[i % BODIES.length] : "",
-            cta: videoCount > 1 && vary.cta ? CTAS[lang][i % CTAS[lang].length] : "",
+            cta: videoCount > 1 && vary.cta ? CTAS[lang][i % CTAS[lang].length] : (CTA_STYLE[lang][style.cta] ?? ""),
             product: "", product_look: productLook, show_product: style.product ?? Boolean(productLook || productLink),
           }),
         });
@@ -480,7 +507,7 @@ export function InfluencerChat() {
     if (unsettled && !(snap.persona as Persona)?.name) { chatId.current = null; return; }
     setAnswers(snap.answers ?? []); setPersona(snap.persona ?? { name: "", age: "", look: "", setting: "" }); setSearches(snap.searches ?? []); setCopyText((snap.copyText as string) ?? "");
     setPins(snap.pins ?? []); setPin(snap.pin ?? null); setPrompts(snap.prompts ?? []); setSummaries(snap.summaries ?? []); setVideoCount((snap.videoCount as number) ?? 1);
-    setStyle((snap.style as typeof style) ?? { captions: false, voice: "", tone: "", custom: "", camera: "selfie", product: null }); setVary(snap.vary ?? { hook: true, body: false, cta: false }); setModel((snap.model as string) ?? model); setBoards(snap.boards ?? []); setProductLook((snap.productLook as string) ?? ""); setProductLink((snap.productLink as string) ?? "");
+    setStyle({ ...DEFAULT_STYLE, ...((snap.style as Partial<StyleState>) ?? {}) }); setVary(snap.vary ?? { hook: true, body: false, cta: false }); setModel((snap.model as string) ?? model); setBoards(snap.boards ?? []); setProductLook((snap.productLook as string) ?? ""); setProductLink((snap.productLink as string) ?? "");
     lookRef.current = (snap.productLook as string) ?? ""; linkRef.current = (snap.productLink as string) ?? "";
     setWorked(snap.worked ?? {}); setProject(chat.project ?? "");
     setPhase(((snap.phase as Phase) === "ask" || (snap.phase as Phase) === "intake") ? "approve" : (snap.phase as Phase));
@@ -841,6 +868,10 @@ export function InfluencerChat() {
         <Msg testid="chat-style">
           <p>{t("styleAsk")}</p>
           {([
+            ["format", t("styFormat"), [["talk", t("fmtTalk")], ["pov", t("fmtPov")], ["recipe", t("fmtRecipe")]]],
+            ["setting", t("stySetting"), [["", t("styAuto")], ["home", t("setHome")], ["farm", t("setFarm")], ["office", t("setOffice")], ["car", t("setCar")], ["outdoor", t("setOutdoor")]]],
+            ["avatarMix", t("styAvatarMix"), [[false, t("noWord")], [true, t("yesWord")]]],
+            ["cta", t("styCta"), [["bio", t("ctaBio")], ["comment", t("ctaComment")], ["keyword", t("ctaKeyword")]]],
             ["captions", t("styCaptions"), [[false, t("styNo")], [true, t("styYes")]]],
             ["voice", t("styVoice"), [["", `${t("styAuto")} (${LANG_NAMES[LANG_CODE[lang]]})`], ["pt-BR", "Português (Brasil)"], ["pt-PT", "Português (Portugal)"], ["en", "English"], ["es", "Español"], ["fr", "Français"], ["de", "Deutsch"], ["it", "Italiano"]]],
             ["tone", t("styTone"), [["", t("styAuto")], ["calm", t("toneCalm")], ["lively", t("toneLively")], ["deep", t("toneDeep")], ["soft", t("toneSoft")], ["young", t("toneYoung")], ["mature", t("toneMature")]]],

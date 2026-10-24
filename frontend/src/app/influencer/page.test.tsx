@@ -117,8 +117,11 @@ describe("Criar influencer em chat", () => {
     fireEvent.click(within(screen.getByRole("radiogroup", { name: "Legenda no vídeo" })).getByRole("radio", { name: "Com" }));
     fireEvent.click(within(screen.getByRole("radiogroup", { name: "Idioma da voz" })).getByRole("radio", { name: "Español" }));
     fireEvent.click(within(screen.getByRole("radiogroup", { name: "Tipo de câmera" })).getByRole("radio", { name: /POV/ }));
+    fireEvent.click(within(screen.getByRole("radiogroup", { name: "Formato do vídeo" })).getByRole("radio", { name: /Receita sem rosto/ }));
+    fireEvent.click(within(screen.getByRole("radiogroup", { name: "Cenário" })).getByRole("radio", { name: "Fazenda" }));
+    fireEvent.click(within(screen.getByRole("radiogroup", { name: "Variar o avatar a cada vídeo" })).getByRole("radio", { name: "Sim" }));
+    fireEvent.click(within(screen.getByRole("radiogroup", { name: "Chamada final (CTA)" })).getByRole("radio", { name: /Link nos comentários/ }));
     fireEvent.click(screen.getByRole("button", { name: /^Corpo/ }));
-    fireEvent.click(screen.getByRole("button", { name: /^CTA/ }));
     fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
     fireEvent.click(await screen.findByRole("radio", { name: /Lite · 10 créditos por cena/ }));
     expect(await screen.findByTestId("video-approval")).toHaveTextContent("80 créditos");
@@ -133,7 +136,10 @@ describe("Criar influencer em chat", () => {
     expect(boards[0].angle).toBe("curiosity");
     expect(boards[1].angle).toBe("problem");
     expect(boards[0].body_style).not.toBe(boards[1].body_style);
-    expect(boards[0].cta).not.toBe(boards[1].cta);
+    expect(boards[0].format).toBe("recipe");
+    expect((boards[0].persona as { look: string }).look).toContain("on a farm");
+    expect((boards[0].persona as { look: string }).look).not.toBe((boards[1].persona as { look: string }).look);
+    expect(boards[0].cta).toMatch(/comentários/);
   });
 
   it("mostra erro simples quando a IA falha", async () => {
