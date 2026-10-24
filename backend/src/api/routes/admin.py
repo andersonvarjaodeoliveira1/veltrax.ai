@@ -442,3 +442,28 @@ async def grant_tokens(user_id: str, body: TokenGrant, request: Request, db: Asy
     await db.commit()
     used = (await db.execute(text("SELECT COALESCE(SUM(input_tokens + output_tokens), 0) FROM llm_usage WHERE user_id = :u AND NOT own_key"), {"u": user_id})).scalar()
     return balance_from(bool(exists["is_admin"]), new_total, int(used or 0))
+
+
+@router.get("/reports")
+async def list_help_reports(request: Request, db: AsyncSession = Depends(get_db)):
+    await require_admin_user(request, db, get_config())
+    rows = (
+        await db.execute(
+            text("SELECT r.id, r.kind, r.message, r.email, r.phone, r.page, r.handled, r.created_at, u.name AS user_name "
+                 "FROM help_reports r LEFT JOIN users u ON u.id = r.user_id ORDER BY r.handled ASC, r.created_at DESC LIMIT 200")
+        )
+    ).fetchall()
+    return {"reports": [
+        {"id": r.id, "kind": r.kind, "message": r.message, "email": r.email, "phone": r.phone, "page": r.page,
+         "handled": r.handled, "created_at": r.created_at.isoformat() if r.created_at else None, "user_name": r.user_name}
+        for r in rows
+    ]}
+
+
+@router.patch("/reports/{report_id}")
+async def mark_help_report(report_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    await require_admin_user(request, db, get_config())
+    body = await request.json()
+    await db.execute(text("UPDATE help_reports SET handled = :h WHERE id = :id"), {"h": bool(body.get("handled")), "id": report_id})
+    await db.commit()
+    return {"ok": True}

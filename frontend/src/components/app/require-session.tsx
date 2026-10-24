@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { getServerSession } from "@/server/session";
+import { HelpBubbles } from "@/components/app/help-bubbles";
 
 /**
  * Trava no servidor: quem não está logado (ex.: janela anônima) nunca recebe a tela do app,
@@ -9,5 +10,5 @@ import { getServerSession } from "@/server/session";
 export async function RequireSession({ children }: { children: React.ReactNode }) {
   const session = await getServerSession();
   if (!session?.user?.id) redirect("/sign-in");
-  return <>{children}</>;
+  return <>{children}<HelpBubbles email={session.user.email ?? ""} /></>;
 }

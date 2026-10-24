@@ -312,6 +312,10 @@ export default async function AdminPage({
         <div className="px-5 py-4 text-sm"><Link href="/admin/uso" className="underline underline-offset-4">Abrir o painel de uso</Link></div>
       </Panel>
 
+      <Panel title="Relatos dos clientes" description="Erros e sugestões com e-mail e telefone.">
+        <div className="px-5 py-4 text-sm"><Link href="/admin/relatos" className="underline underline-offset-4">Abrir os relatos</Link></div>
+      </Panel>
+
       <Panel title="Em processamento agora" description="Fila ao vivo de todos os usuários.">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y">
