@@ -722,7 +722,7 @@ def _ddg_search(query: str) -> list[dict[str, str]]:
     return results[:8]
 
 
-async def _claude_search(name: str, key: str) -> tuple[list[dict[str, str]], list[dict[str, str]], str, str]:
+async def _claude_search(name: str, key: str, custom_prompt: str = "") -> tuple[list[dict[str, str]], list[dict[str, str]], str, str]:
     """Searches the web (Google-like, plus Reddit) through Claude's server-side web_search tool.
     Returns (web hits, reddit hits, a short written summary). Empty results on any failure."""
     import httpx
@@ -733,6 +733,7 @@ async def _claude_search(name: str, key: str) -> tuple[list[dict[str, str]], lis
         "Then write 2-3 short sentences saying what the product is and who it is for, in Portuguese. "
         "Then, on a last line, write 'PAGES:' followed by up to 5 https links to pages that show the product photo (the brand's own site first, then stores like Mercado Livre, Shopee, Amazon, Magalu), separated by spaces."
     )
+    prompt = custom_prompt or prompt
     body = {
         "model": "claude-sonnet-5-5", "max_tokens": 700,
         "tools": [{"type": "web_search_20250305", "name": "web_search", "max_uses": 3, "user_location": {"type": "approximate", "country": "BR"}}],
@@ -780,6 +781,80 @@ async def _claude_search(name: str, key: str) -> tuple[list[dict[str, str]], lis
 PRODUCT_CREATE_SYSTEM = f"""The person has no product yet. Invent ONE realistic product that fits what they asked for, using only the info they gave.
 Return a short product name (up to 6 words, generic, no real brand names), a summary in the language of the request (1-2 sentences: what it is, who it is for, the main benefit) and a visual description in English (20-50 words: shape, size, colors, material, packaging, no brand names or readable text).
 {SAFETY}"""
+
+
+@router.post("/influencer-reference")
+async def influencer_reference(request: Request, db: AsyncSession = Depends(get_db)):
+    """Picks a reference portrait for the influencer when the person has no photo.
+    Tries pages found by Claude's web search, then Pexels, then an AI-made portrait. Returns the picture as a data URL."""
+    import base64
+
+    import httpx
+
+    user_id = await _user_id(request, db)
+    try:
+        data = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    look = _clip(str((data or {}).get("look") or ""), 300)
+    age = _clip(str((data or {}).get("age") or ""), 20)
+    setting = _clip(str((data or {}).get("setting") or ""), 120)
+    if not look:
+        raise HTTPException(status_code=400, detail="Describe the influencer")
+    _check_script_rate(user_id)
+    from ...integrations import current_keys, load_user_keys
+    from ...usage import get_balance, set_server_blocked, set_usage_user
+
+    await load_user_keys(db, user_id)
+    set_usage_user(user_id)
+    set_server_blocked((await get_balance(db, user_id))["exhausted"])
+    cfg = get_config()
+    headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36", "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.7"}
+
+    def reply(body: bytes, kind: str, source: str) -> dict[str, str]:
+        return {"image": f"data:{kind};base64,{base64.b64encode(body).decode()}", "source": source}
+
+    async with httpx.AsyncClient(timeout=8, headers=headers) as http:
+        claude_key = current_keys().get("anthropic") or cfg.anthropic_api_key or ""
+        if claude_key:
+            web, _, _, _ = await _claude_search("", claude_key, custom_prompt=(
+                f"Find popular AI influencer / virtual model portrait photos that match this person: {age} {look}. Prefer Pinterest pins and AI model galleries showing one face clearly, front or three-quarter view. "
+                "Reply with one short sentence, then on a last line write 'PAGES:' followed by up to 6 https links of pages that show such a portrait, separated by spaces."))
+
+            async def grab(hit: dict[str, str]) -> tuple[bytes, str] | None:
+                try:
+                    page, _ = await _safe_get(http, hit["url"], 500_000)
+                    image_url = _page_image(page.decode("utf-8", "ignore"), hit["url"])
+                    if not image_url:
+                        return None
+                    body, kind = await _safe_get(http, image_url, MAX_PHOTO_BYTES)
+                    return (body, kind) if kind in PHOTO_TYPES and len(body) > 30_000 else None
+                except Exception:
+                    return None
+
+            for result in await asyncio.gather(*(grab(h) for h in web[:6])):
+                if result:
+                    return reply(result[0], result[1], "web")
+        if cfg.pexels_api_key:
+            try:
+                resp = await http.get("https://api.pexels.com/v1/search", params={"query": f"portrait {look}"[:80], "orientation": "portrait", "per_page": 8}, headers={"Authorization": cfg.pexels_api_key})
+                for item in (resp.json().get("photos") or []) if resp.status_code == 200 else []:
+                    src = (item.get("src") or {}).get("large") or ""
+                    if src.startswith("https://images.pexels.com/"):
+                        body, kind = await _safe_get(http, src, MAX_PHOTO_BYTES)
+                        if kind in PHOTO_TYPES and len(body) > 30_000:
+                            return reply(body, kind, "pexels")
+            except Exception:
+                logger.warning("pexels reference failed", exc_info=True)
+    try:
+        from .clone_render import google_image
+
+        body, kind = await asyncio.wait_for(google_image(
+            f"Photorealistic portrait of one {age} {look}. {setting}. Face clearly visible, looking at the camera, natural light, phone-camera realism, no text, no watermark."), timeout=90)
+        return reply(body, kind, "ai")
+    except Exception:
+        logger.warning("reference generation failed", exc_info=True)
+    raise HTTPException(status_code=404, detail="REFERENCE_NOT_FOUND")
 
 
 @router.post("/product-create")

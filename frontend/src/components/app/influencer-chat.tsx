@@ -114,7 +114,7 @@ const S = {
   hint1: ["Isso pode levar até 1 minuto", "This can take up to 1 minute", "Esto puede tardar hasta 1 minuto"],
   hint2: ["Pode deixar esta aba aberta, eu aviso quando terminar", "Keep this tab open, I will tell you when it is done", "Deja esta pestaña abierta, te aviso al terminar"],
   hint3: ["Quase lá…", "Almost there…", "Casi listo…"],
-  noPhotoHint: ["Sem foto, o Flow cria o rosto sozinho, com o modelo mais barato (Lower Priority se a sua conta tiver).", "Without a photo, Flow creates the face itself with the cheapest model (Lower Priority if your account has it).", "Sin foto, Flow crea el rostro con el modelo más barato (Lower Priority si tu cuenta lo tiene)."],
+  noPhotoHint: ["Sem foto, eu escolho uma modelo de IA como referência e crio com ela.", "Without a photo, I pick an AI model as reference and create with it.", "Sin foto, elijo una modelo de IA como referencia y creo con ella."],
   estimate: ["Estimativa de gasto", "Estimated cost", "Gasto estimado"],
   estFree: ["Sem custo no Lower Priority. Se a sua conta não tiver, usa o Lite (~40 créditos por vídeo).", "Free with Lower Priority. If your account has none, it uses Lite (~40 credits per video).", "Sin costo con Lower Priority. Si tu cuenta no lo tiene, usa Lite (~40 créditos por video)."],
   seeMore: ["Ver mais", "See more", "Ver más"],
@@ -133,7 +133,7 @@ const S = {
   approve: ["Aprovar", "Approve", "Aprobar"],
   stop: ["Parar", "Stop", "Detener"],
   created: ["Criei a influencer. Escolha a foto que mais parece com ela:", "Influencer created. Pick the photo that looks most like her:", "Creé a la influencer. Elige la foto que más se parece a ella:"],
-  searching: ["Buscando fotos…", "Finding photos…", "Buscando fotos…"],
+  searching: ["Buscando fotos e modelos de referência…", "Finding photos and reference models…", "Buscando fotos y modelos de referencia…"],
   noPhotos: ["Não achei fotos. Envie uma sua ou siga sem foto.", "No photos found. Upload yours or continue without one.", "No encontré fotos. Sube la tuya o sigue sin foto."],
   upload: ["Enviar minha foto", "Upload my photo", "Subir mi foto"],
   noPhoto: ["Seguir sem foto", "Continue without photo", "Seguir sin foto"],
@@ -540,6 +540,29 @@ export function InfluencerChat() {
       });
       if (response.ok) { const data = await response.json(); setPins(Array.isArray(data.pins) ? data.pins : []); }
     } catch { /* sem fotos: o membro envia a sua ou segue sem foto */ } finally { setBusy(""); }
+  }
+
+  // Sem foto da pessoa: busca uma modelo de referência (web, banco de fotos ou criada por IA) e cria com ela.
+  async function autoReference() {
+    setBusy("pins"); setError("");
+    try {
+      const response = await fetch("/api/multiplier/clone/influencer-reference", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ look: persona.look, age: persona.age, setting: persona.setting }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (typeof data.image === "string" && data.image.startsWith("data:image/")) {
+          const file = await dataUrlToFile(data.image, "modelo.jpg");
+          setPin({ id: "auto", thumb: data.image, full: data.image });
+          setBusy("");
+          void writePrompt(file, null, true);
+          return;
+        }
+      }
+    } catch { /* sem modelo: segue sem foto */ }
+    setBusy("");
+    void writePrompt(null, null);
   }
 
   async function writePrompt(file: File | null, chosenPin: Pin | null, keepPin = false, opts?: { persona?: Persona; extra?: string }) {
@@ -1040,7 +1063,7 @@ export function InfluencerChat() {
             <div className="flex flex-wrap gap-2">
               <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" aria-label={t("upload")} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void writePrompt(file, null); }} />
               <Button type="button" variant="outline" className="rounded-full" onClick={() => fileRef.current?.click()}><ImagePlus className="size-4" /> {t("upload")}</Button>
-              <Button type="button" variant="ghost" className="rounded-full" onClick={() => void writePrompt(null, null)}>{t("noPhoto")}</Button>
+              <Button type="button" variant="ghost" className="rounded-full" onClick={() => void autoReference()}>{t("noPhoto")}</Button>
             </div>
           )}
           {phase === "photos" && busy !== "pins" && (
