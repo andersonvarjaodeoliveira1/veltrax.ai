@@ -164,10 +164,55 @@
     }
   }
 
+  /* ---------- views dos vídeos (para saber qual página está viralizando) ---------- */
+  function parseCount(raw) {
+    const m = String(raw).toLowerCase().replace(/\s+/g, " ").match(/([\d.,]+)\s*(mil|mi|k|m)?/);
+    if (!m) return 0;
+    let num = m[1];
+    const unit = m[2] || "";
+    if (unit) num = num.replace(",", ".");
+    else num = num.replace(/[.,]/g, "");
+    let n = parseFloat(num);
+    if (!isFinite(n)) return 0;
+    if (unit === "mil" || unit === "k") n *= 1000;
+    else if (unit === "mi" || unit === "m") n *= 1000000;
+    return Math.round(n);
+  }
+  const VIEWS_RE = /([\d.,]+\s*(?:mil|mi|k|m)?)\s*(?:visualiza[cç][õo]es|visualiza[cç][aã]o|views|reproduc[cç][õo]es|reproducciones|vistas)/gi;
+  const dayKey = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+  async function scanViews() {
+    const acc = await getAcc();
+    const here = location.origin + location.pathname;
+    const page = (acc.pages || []).find((p) => here.startsWith(p.url.split("?")[0]) || location.href.startsWith(p.url));
+    if (!page) return;
+    const found = [];
+    const text = document.body ? document.body.innerText || "" : "";
+    let m;
+    VIEWS_RE.lastIndex = 0;
+    while ((m = VIEWS_RE.exec(text)) !== null) { const n = parseCount(m[1]); if (n > 0) found.push(n); }
+    if (!found.length) return;
+    const top = found.sort((x, y) => y - x).slice(0, 12);
+    const views = top.reduce((sum, n) => sum + n, 0);
+    const key = dayKey();
+    const pages = (acc.pages || []).map((p) => {
+      if (p.url !== page.url) return p;
+      const stats = { ...(p.stats || {}) };
+      const prev = stats[key] || { views: 0, videos: 0 };
+      stats[key] = { views: Math.max(prev.views, views), videos: Math.max(prev.videos, top.length) };
+      const keep = Object.keys(stats).sort().slice(-60);
+      const trimmed = {};
+      keep.forEach((k) => { trimmed[k] = stats[k]; });
+      return { ...p, stats: trimmed };
+    });
+    await saveAcc({ pages });
+  }
+
   async function tick() {
     await saveAcc({ loggedIn: isLoggedIn(), seenAt: Date.now() });
     refreshChip();
   }
+  setInterval(() => { if (isLoggedIn()) scanViews().catch(() => undefined); }, 15000);
+  setTimeout(() => { if (isLoggedIn()) scanViews().catch(() => undefined); }, 6000);
   tick();
   setInterval(tick, 5000);
   runJob();

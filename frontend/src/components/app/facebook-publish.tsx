@@ -6,9 +6,10 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { getClipUrl } from "@/lib/clip-actions";
+import { insights, restrictionLabel, type FbPage } from "@/lib/fb-insights";
 import { useI18n } from "@/lib/i18n";
 
-type Page = { name: string; url: string };
+type Page = FbPage;
 type Status = { loggedIn: boolean; pages: Page[]; version: string } | "none" | null;
 type Lang3 = "pt" | "en" | "es";
 const T = {
@@ -112,7 +113,7 @@ export function FacebookPublish({ clip, className }: { clip: { filename: string;
               <label className="block space-y-1 text-sm">
                 <span className="text-xs text-muted-foreground">{t("page")}</span>
                 <select value={pageUrl} onChange={(event) => setPageUrl(event.target.value)} className="w-full rounded-full border border-border bg-background px-4 py-2 text-sm">
-                  {status.pages.map((p) => <option key={p.url} value={p.url}>{p.name}</option>)}
+                  {status.pages.map((p) => <option key={p.url} value={p.url}>{insights(status.pages).best?.page.url === p.url ? "🔥 " : ""}{p.name} · {restrictionLabel(p.restriction)}</option>)}
                 </select>
               </label>
               <div className="space-y-1 text-sm">

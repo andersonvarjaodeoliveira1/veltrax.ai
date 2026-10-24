@@ -22,7 +22,7 @@ describe("Publicar no Facebook", () => {
     render(<FacebookPublish clip={clip} />);
     fireEvent.click(screen.getByRole("button", { name: "Publicar no Facebook" }));
     answer({ type: "fb-status", loggedIn: true, version: "1.1.0", pages: [{ name: "Minha Página", url: "https://www.facebook.com/minhapagina" }] });
-    expect(await screen.findByRole("option", { name: "Minha Página" })).toBeInTheDocument();
+    expect(await screen.findByRole("option", { name: /Minha Página/ })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Escrever com IA/ }));
     expect(await screen.findByDisplayValue("Legenda pronta #ok")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Publicar agora/ }));
