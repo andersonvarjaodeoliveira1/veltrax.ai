@@ -622,6 +622,46 @@ def _ddg_search(query: str) -> list[dict[str, str]]:
     return results[:8]
 
 
+async def _claude_search(name: str, key: str) -> tuple[list[dict[str, str]], list[dict[str, str]], str]:
+    """Searches the web (Google-like, plus Reddit) through Claude's server-side web_search tool.
+    Returns (web hits, reddit hits, a short written summary). Empty results on any failure."""
+    import httpx
+
+    prompt = (
+        f'Search the web for the product "{name}" (Brazilian Portuguese results first) and also look at Reddit discussions about it. '
+        "Reply with 2-3 short sentences saying what the product is and who it is for, in Portuguese. No lists."
+    )
+    body = {
+        "model": "claude-sonnet-5-5", "max_tokens": 700,
+        "tools": [{"type": "web_search_20250305", "name": "web_search", "max_uses": 3, "user_location": {"type": "approximate", "country": "BR"}}],
+        "messages": [{"role": "user", "content": prompt}],
+    }
+    try:
+        async with httpx.AsyncClient(timeout=60) as http:
+            resp = await http.post("https://api.anthropic.com/v1/messages", json=body,
+                                   headers={"x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"})
+        if resp.status_code != 200:
+            logger.warning("claude web search failed: %s", resp.status_code)
+            return [], [], ""
+        blocks = resp.json().get("content") or []
+    except Exception:
+        logger.warning("claude web search failed", exc_info=True)
+        return [], [], ""
+    web: list[dict[str, str]] = []
+    reddit: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for block in blocks:
+        if block.get("type") != "web_search_tool_result" or not isinstance(block.get("content"), list):
+            continue
+        for item in block["content"]:
+            url = str(item.get("url") or "")
+            if url and url not in seen and url.startswith("https://"):
+                seen.add(url)
+                (reddit if "reddit.com" in url else web).append({"url": url, "title": str(item.get("title") or ""), "text": ""})
+    summary = " ".join(str(b.get("text") or "") for b in blocks if b.get("type") == "text").strip()
+    return web, reddit, summary
+
+
 @router.post("/product-search")
 async def product_search(request: Request, db: AsyncSession = Depends(get_db)):
     """Looks a product up by name on Google and Reddit, picks the best photo and describes the product."""
@@ -667,8 +707,17 @@ async def product_search(request: Request, db: AsyncSession = Depends(get_db)):
                 out[key] = _ddg_search(query)
         return out["web"], out["reddit"]
 
+    from ...integrations import current_keys
+
+    claude_key = current_keys().get("anthropic") or get_config().anthropic_api_key or ""
+    web: list[dict[str, str]] = []
+    reddit: list[dict[str, str]] = []
+    claude_summary = ""
+    if claude_key:
+        web, reddit, claude_summary = await _claude_search(name, claude_key)
     try:
-        web, reddit = await asyncio.wait_for(asyncio.to_thread(search), timeout=150)
+        if not web and not reddit:
+            web, reddit = await asyncio.wait_for(asyncio.to_thread(search), timeout=150)
     except asyncio.TimeoutError:
         raise HTTPException(status_code=504, detail="The search took too long. Try again.")
     if not web and not reddit:
@@ -695,7 +744,7 @@ async def product_search(request: Request, db: AsyncSession = Depends(get_db)):
     if not candidates:
         raise HTTPException(status_code=404, detail="PRODUCT_PHOTO_NOT_FOUND")
     body, kind, image_url = max(candidates, key=lambda c: len(c[0]))
-    snippets = "\n".join(f"[{'Reddit' if h in reddit else 'Google'}] {h['title']} - {h['text']}" for h in (web[:6] + reddit[:4]))
+    snippets = (f"[Claude web search] {claude_summary}\n" if claude_summary else "") + "\n".join(f"[{'Reddit' if h in reddit else 'Google'}] {h['title']} - {h['text']}" for h in (web[:6] + reddit[:4]))
     from pydantic_ai import BinaryContent
 
     found = await _run_parts(PRODUCT_FIND_SYSTEM, _Found, [f"Search: {name}\n{_clip(snippets, 3000)}", BinaryContent(data=body, media_type=kind)])
