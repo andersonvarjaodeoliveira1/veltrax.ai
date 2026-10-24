@@ -5,7 +5,7 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowRight, CornerDownLeft, Download, Film, FolderOpen, LogOut, KeyRound, Link2, MessageCircle, Plus, Scissors, Search, Shield, UserRound, Workflow,
+  ArrowRight, Coins, CornerDownLeft, Download, Film, FolderOpen, LogOut, KeyRound, Link2, MessageCircle, Plus, Scissors, Search, Shield, ShoppingCart, UserRound, Workflow,
 } from "lucide-react";
 import { toast } from "sonner";
 import { signOut, useSession } from "@/lib/auth-client";
@@ -31,6 +31,8 @@ const DOWNLOADER_URL = "https://turboscribe.ai/pt/downloader/youtube/video";
 
 const WHATSAPP_URL = "https://wa.me/5511913142143?text=" + encodeURIComponent("Olá! Quero comprar API ou conta do Flow para usar no ClipGringa.");
 
+const PLAN_WHATSAPP_URL = "https://wa.me/5511913142143?text=" + encodeURIComponent("Olá! Quero assinar um plano do ClipGringa.");
+
 const NAV: NavItem[] = [
   { href: "/automacao", label: "Vídeo orgânico", group: "Criar", tile: true, icon: Workflow, match: (p) => p.startsWith("/automacao"), badge: "BETA" },
   { href: "/influencer", label: "Avatar influencer", tile: true, icon: UserRound, match: (p) => p.startsWith("/influencer"), badge: "BETA" },
@@ -40,7 +42,9 @@ const NAV: NavItem[] = [
   { href: DOWNLOADER_URL, label: "Baixar vídeo", sub: "Cortes para TikTok", icon: Download, match: () => false, external: true },
   { href: "/conectar-flow", label: "Conectar ao Flow", group: "Minha conta", icon: Link2, match: (p) => p.startsWith("/conectar-flow") },
   { href: "/minhas-apis", label: "Minhas APIs", icon: KeyRound, match: (p) => p.startsWith("/minhas-apis") },
-  { href: WHATSAPP_URL, label: "API e Flow", icon: MessageCircle, match: () => false, external: true },
+  { href: WHATSAPP_URL, label: "API e Flow", group: "Comprar", icon: ShoppingCart, match: () => false, external: true },
+  { href: ADMIN_WHATSAPP_URL, label: "Mais tokens", icon: Coins, match: () => false, external: true },
+  { href: PLAN_WHATSAPP_URL, label: "Assinar um plano", icon: MessageCircle, match: () => false, external: true },
 ];
 
 function initials(name?: string | null, email?: string | null) {
