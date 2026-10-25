@@ -767,26 +767,42 @@ export function InfluencerChat() {
     setPrompt(item.prompt[lang]); setSkill(item.skill);
     setAttachedFx((n) => n + 1);
     if (typeof window === "undefined") return;
-    const box = document.querySelector<HTMLElement>('[data-testid="chat-composer"]');
+    const box = orbitRef.current; // o wrapper não remonta, ao contrário do campo
     const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
     if (!box || !card || reduce) return;
     const img = card.querySelector("img");
     const from = (img ?? card).getBoundingClientRect();
-    box.scrollIntoView?.({ behavior: "smooth", block: "center" });
-    window.setTimeout(() => {
-      const to = box.getBoundingClientRect();
-      const chip = document.createElement("div");
-      chip.setAttribute("aria-hidden", "true");
-      chip.style.cssText = `position:fixed;z-index:80;left:${from.left}px;top:${from.top}px;width:${from.width}px;height:${from.height}px;border-radius:20px;overflow:hidden;pointer-events:none;box-shadow:0 20px 60px -10px #7B3FE4;background:#17161b url(${img?.getAttribute("src") ?? ""}) center top/cover`;
-      document.body.appendChild(chip);
-      const dx = to.left + 28 - from.left, dy = to.top + 30 - from.top;
-      const anim = chip.animate?.([
-        { transform: "translate(0,0) scale(1)", opacity: 1 },
-        { transform: `translate(${dx}px,${dy}px) scale(${Math.min(0.14, 90 / from.width)})`, opacity: 0.2 },
-      ], { duration: 650, easing: "cubic-bezier(.6,.05,.3,1)" });
-      if (anim) anim.onfinish = () => chip.remove(); else chip.remove();
-      window.setTimeout(() => chip.remove(), 900);
-    }, 250);
+    // Sobe devagar até o campo do prompt (rolagem própria, mais lenta que a do navegador).
+    const DURATION = 1300, TOP_GAP = 110;
+    let scroller: HTMLElement | null = box.parentElement;
+    while (scroller && scroller !== document.body && !(scroller.scrollHeight > scroller.clientHeight && /(auto|scroll)/.test(getComputedStyle(scroller).overflowY))) scroller = scroller.parentElement;
+    const useWindow = !scroller || scroller === document.body;
+    const startTop = useWindow ? window.scrollY : scroller!.scrollTop;
+    const boxTop = box.getBoundingClientRect().top;
+    const containerTop = useWindow ? 0 : scroller!.getBoundingClientRect().top;
+    const endTop = Math.max(0, startTop + (boxTop - containerTop) - TOP_GAP);
+    const started = performance.now();
+    const ease = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+    const step = (now: number) => {
+      const k = Math.min(1, (now - started) / DURATION);
+      const y = startTop + (endTop - startTop) * ease(k);
+      if (useWindow) window.scrollTo(0, y); else scroller!.scrollTop = y;
+      if (k < 1) window.requestAnimationFrame(step);
+    };
+    window.requestAnimationFrame(step);
+    // A miniatura do card acompanha a subida e pousa onde o prompt aparece.
+    const toLeft = box.getBoundingClientRect().left + 28, toTop = (useWindow ? 0 : containerTop) + TOP_GAP + 30;
+    const chip = document.createElement("div");
+    chip.setAttribute("aria-hidden", "true");
+    chip.style.cssText = `position:fixed;z-index:80;left:${from.left}px;top:${from.top}px;width:${from.width}px;height:${from.height}px;border-radius:20px;overflow:hidden;pointer-events:none;box-shadow:0 20px 60px -10px #7B3FE4;background:#17161b url(${img?.getAttribute("src") ?? ""}) center top/cover`;
+    document.body.appendChild(chip);
+    const dx = toLeft - from.left, dy = toTop - from.top;
+    const anim = chip.animate?.([
+      { transform: "translate(0,0) scale(1)", opacity: 1 },
+      { transform: `translate(${dx}px,${dy}px) scale(${Math.min(0.14, 90 / from.width)})`, opacity: 0.2 },
+    ], { duration: DURATION, easing: "cubic-bezier(.6,.05,.3,1)" });
+    if (anim) anim.onfinish = () => chip.remove(); else chip.remove();
+    window.setTimeout(() => chip.remove(), DURATION + 300);
   };
 
   const composer = (
