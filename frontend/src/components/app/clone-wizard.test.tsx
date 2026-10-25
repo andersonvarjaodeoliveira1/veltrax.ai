@@ -586,3 +586,16 @@ test("a video already uploaded and transcribed is not sent again", async () => {
   await screen.findByRole("button", { name: "Preparar meus vídeos" });
   expect(drafts).toHaveBeenCalledTimes(1);
 }, 20000);
+
+test("tells whether the Flow account is connected and has a plan", async () => {
+  window.localStorage.removeItem("gv-clonagem-view");
+  render(<CloneWizard />);
+  await act(async () => {
+    window.postMessage({ source: "clipgringa-flow", type: "status", loggedIn: true, plan: null, credits: null, seenAt: Date.now() }, window.location.origin);
+  });
+  expect(await screen.findByTestId("flow-account")).toHaveTextContent(/não achei um plano do Flow/);
+  await act(async () => {
+    window.postMessage({ source: "clipgringa-flow", type: "status", loggedIn: true, plan: "Pro", credits: 250, seenAt: Date.now() }, window.location.origin);
+  });
+  await waitFor(() => expect(screen.getByTestId("flow-account")).toHaveTextContent(/plano Pro · 250 créditos/));
+});

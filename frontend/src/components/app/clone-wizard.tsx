@@ -10,6 +10,7 @@ import { ReferenceSummary } from "@/components/app/reference-summary";
 import { useSession } from "@/lib/auth-client";
 import { ADMIN_WHATSAPP_URL } from "@/lib/token-balance";
 import { flowUploadInfo } from "@/lib/flow-upload";
+import { useFlowConnection } from "@/hooks/use-flow-connection";
 import { announceTokens, readTokenBalance } from "@/lib/token-alert";
 
 // BETA — Clonagem de Vídeo, seguindo o Protocolo Árvore.
@@ -957,6 +958,24 @@ export function CloneWizard() {
     }, () => { arm(); try { window.postMessage({ source: "clipgringa-page", type: "flow-package", raw, upload: null }, window.location.origin); } catch { /* sem janela */ } });
   });
   const extensionGotIt = useRef<Promise<boolean>>(Promise.resolve(false));
+  // Quem tem Flow (conta conectada, plano e créditos) e quem não tem: o funil se adapta.
+  const { state: flowState, account: flowAccount } = useFlowConnection(true, false);
+  const flowStateRef = useRef(flowState);
+  flowStateRef.current = flowState;
+  const flowBanner = (() => {
+    if (flowState === "unknown") return null;
+    const base = "rounded-[14px] border p-3 text-sm";
+    if (flowState === "connected" && flowAccount.plan) {
+      return <p role="status" data-testid="flow-account" className={`${base} border-[#5BD69A]/40 bg-[#5BD69A]/10`}>Conta do Flow conectada · plano {flowAccount.plan}{flowAccount.credits !== null ? ` · ${flowAccount.credits} créditos` : ""}.</p>;
+    }
+    if (flowState === "connected") {
+      return <p role="status" data-testid="flow-account" className={`${base} border-[#F5B454]/40 bg-[#F5B454]/10`}>Conta do Flow conectada, mas não achei um plano do Flow nela. Sem plano, o Flow pode não liberar a geração de vídeos nem o Lower Priority. Abra o <a className="underline" href={FLOW_HOME_URL} target="_blank" rel="noopener noreferrer">Flow</a> e confira. Quando você assinar, o ClipGringa libera tudo sozinho.</p>;
+    }
+    if (flowState === "logged-out") {
+      return <p role="status" data-testid="flow-account" className={`${base} border-[#F5B454]/40 bg-[#F5B454]/10`}>Sua conta do Flow não está conectada. <a className="underline" href={FLOW_HOME_URL} target="_blank" rel="noopener noreferrer">Abra o Flow</a> e entre com a conta Google que tem o Flow. Enquanto isso você já pode preparar os roteiros e prompts.</p>;
+    }
+    return <p role="status" data-testid="flow-account" className={`${base} border-[#F5B454]/40 bg-[#F5B454]/10`}>Não encontrei a extensão do Flow neste navegador. <a className="underline" href="/conectar-flow">Conectar ao Flow</a> (leva 2 minutos). Sem ela, você usa os prompts à mão.</p>;
+  })();
   const [flowProg, setFlowProg] = useState<FlowProgress | null>(null);
   useEffect(() => {
     const onMsg = (event: MessageEvent) => {
@@ -1104,7 +1123,7 @@ export function CloneWizard() {
   const readyToFlow = simple && p.videos.length > 0 && p.ctaLocked;
   const redirectSig = readyToFlow ? p.variations.map((v) => v.title).join("|") : "";
   useEffect(() => {
-    if (!redirectSig) { setRedirectIn(null); return; }
+    if (!redirectSig || flowStateRef.current === "logged-out") { setRedirectIn(null); return; }
     try { if (window.sessionStorage.getItem("gv-flow-redirected") === redirectSig) return; } catch { /* storage unavailable */ }
     try { void navigator.clipboard.writeText(flowPackage()); } catch { /* o botão Copiar pacote continua disponível */ }
     extensionGotIt.current = pushPackage(flowPackage());
@@ -1185,6 +1204,7 @@ export function CloneWizard() {
     const assembling_ = Object.values(built).some((b) => b.state === "running");
     return (
       <div className="space-y-5">
+        {flowBanner}
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-xl font-semibold">Clonar um vídeo</h2>
