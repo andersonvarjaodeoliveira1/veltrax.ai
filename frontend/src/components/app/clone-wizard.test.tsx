@@ -392,7 +392,7 @@ it("simple mode: upload one video and everything is prepared automatically, read
   expect(await screen.findByRole("heading", { name: "Clonar um vídeo" })).toBeInTheDocument();
   await user.upload(screen.getByLabelText("Escolher o vídeo para clonar"), new File(["x"], "ref.mp4", { type: "video/mp4" }));
 
-  await user.click(await screen.findByRole("button", { name: "Pular, continuar sem produto" }));
+  await user.click(await screen.findByRole("button", { name: "Preparar meus vídeos" }));
   expect(await screen.findByText(/Tudo pronto: 2 vídeos × 3 cenas/)).toBeInTheDocument();
   expect(await screen.findByTestId("flow-redirect")).toHaveTextContent(/Direcionando para o Flow/);
   expect(screen.getAllByRole("button", { name: "Copiar prompt da imagem" })).toHaveLength(6);
@@ -434,6 +434,7 @@ it("simple mode: product name, one sentence and photos reach the prompts", async
   expect((photoForm as unknown as FormData).getAll("images")).toHaveLength(1);
 
   await user.upload(screen.getByLabelText("Escolher o vídeo para clonar"), new File(["x"], "ref.mp4", { type: "video/mp4" }));
+  await user.click(await screen.findByRole("button", { name: "Preparar meus vídeos" }));
   expect(await screen.findByText(/Tudo pronto/)).toBeInTheDocument();
   const images = calls.find((c) => c.stage === "images");
   expect(images?.body).toMatchObject({ product: "Creme Sol", product_info: "hidrata a pele", product_look: "white round jar with a green lid" });
@@ -499,16 +500,12 @@ it("when the tokens run out it says so and links the administrator's WhatsApp", 
   expect(screen.getByRole("link", { name: /Chamar o administrador no WhatsApp/ })).toHaveAttribute("href", expect.stringContaining("wa.me/5511913142143"));
 });
 
-describe("Missões do começo", () => {
-  it("guia em 4 passos até escolher o vídeo", async () => {
+describe("Passos do começo", () => {
+  it("começa pela escolha do vídeo, uma vez só, e depois mostra idioma, palavra-chave e frase final", async () => {
     window.localStorage.clear();
     render(<CloneWizard />);
     const quest = await screen.findByTestId("start-quest");
-    expect(quest).toHaveTextContent("Missão 1 de 4");
-    fireEvent.click(screen.getByRole("button", { name: "Avançar" }));
-    fireEvent.click(screen.getByRole("button", { name: "Avançar" }));
-    fireEvent.click(screen.getByRole("button", { name: "Avançar" }));
-    expect(screen.getByTestId("quest-xp")).toHaveTextContent("30 XP");
+    expect(quest).toHaveTextContent("Passo 1 de 4");
     expect(screen.getByRole("button", { name: /Escolher o vídeo que quero clonar/ })).toBeInTheDocument();
   });
 });
@@ -536,4 +533,14 @@ it("opens the video picker when the main button signals it", async () => {
   rerender(<CloneWizard pickSignal={1} />);
   await waitFor(() => expect(click).toHaveBeenCalled());
   click.mockRestore();
+});
+
+it("does not ask for the video again once it was sent, and offers to retry", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ detail: "Could not create the captions. Try again." }), { status: 502 })));
+  window.localStorage.setItem("gv-clonagem-view", "simple");
+  const user = userEvent.setup();
+  render(<CloneWizard />);
+  await user.upload(await screen.findByLabelText("Escolher o vídeo para clonar"), new File(["x"], "ref.mp4", { type: "video/mp4" }));
+  expect(await screen.findByRole("button", { name: "Tentar de novo" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /Escolher o vídeo que quero clonar/ })).not.toBeInTheDocument();
 });

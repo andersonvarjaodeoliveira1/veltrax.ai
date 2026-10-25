@@ -171,6 +171,7 @@ function ptError(detail: unknown, fallback = "Não foi possível gerar esta etap
   if (/too long \(max/i.test(detail)) return "O vídeo é longo demais (máximo 10 minutos).";
   if (/No speech/i.test(detail)) return "Não encontrei fala nesse vídeo. Descreva o vídeo no campo de notas.";
   if (/Could not read/i.test(detail)) return "Não foi possível ler esse vídeo.";
+  if (/Could not create the captions/i.test(detail)) return "Não consegui transcrever o vídeo agora. Use “Tentar de novo” (não precisa enviar outra vez).";
   if (/not enabled yet/i.test(detail)) return "A geração dentro da ferramenta ainda não está ligada.";
   if (/not enabled on the Google/i.test(detail)) return "A geração não está liberada na conta do Google. Avise o administrador.";
   if (/Daily (image|scene) limit/i.test(detail)) return "Você chegou ao limite de hoje. Tente de novo amanhã.";
@@ -371,7 +372,6 @@ export function CloneWizard({ pickSignal = 0 }: { pickSignal?: number } = {}) {
   const [mode, setMode] = useState<"free" | "auto">("free");
   const [simple, setSimple] = useState(true);
   const [askProduct, setAskProduct] = useState(false);
-  const [qStep, setQStep] = useState(1);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [productPhotos, setProductPhotos] = useState<{ url: string; name: string }[]>([]);
   const [lookState, setLookState] = useState<"idle" | "reading" | "done" | "failed">("idle");
@@ -1180,80 +1180,60 @@ export function CloneWizard({ pickSignal = 0 }: { pickSignal?: number } = {}) {
         {!ready && !working && !askProduct && (
           <section className="space-y-4 rounded-[18px] border border-border bg-card p-5">
             <input ref={fileRef} type="file" accept="video/*" className="sr-only" aria-label="Escolher o vídeo para clonar"
-              onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) begin(file); }} />
-            {hasReference ? (
+              onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void readReference(file); }} />
+            {hasReference || refFile ? (
               <>
-                <p className="text-sm text-muted-foreground">O vídeo já foi lido. Falta preparar as cenas, as variações e os prompts.</p>
+                <p className="text-sm text-muted-foreground">{hasReference ? "O vídeo já foi lido. Falta preparar as cenas, as variações e os prompts." : `Recebi o seu vídeo${refFile ? ` (${refFile.name})` : ""}, mas ainda não consegui ler a fala. Se quiser tentar de novo, escolha outro vídeo.`}</p>
                 <div className="flex flex-wrap gap-2">
-                  <Button type="button" size="lg" className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white" onClick={() => (p.scenes.length > 0 || canResume ? void runAll(true) : begin(null))}>
-                    {canResume || p.scenes.length > 0 ? "Continuar de onde parou" : "Preparar meus vídeos"}
-                  </Button>
+                  {!hasReference && refFile && <Button type="button" size="lg" className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white" onClick={() => void run(refFile)}>Tentar de novo</Button>}
+                  
                   <Button type="button" size="lg" variant="outline" className="rounded-full" onClick={() => fileRef.current?.click()}>Escolher outro vídeo</Button>
                 </div>
               </>
             ) : null}
-            {hasReference ? (
+            {hasReference || refFile ? (
             <section className="space-y-4 rounded-[18px] border border-border bg-card p-5">
-              <p className="font-medium">Como o vídeo termina</p>
-              <Group label="Idioma da fala" hint="A voz e os textos do vídeo saem neste idioma.">
+              <p className="font-medium">Passos 2 a 4 · Como o vídeo termina</p>
+              <Group label="2 · Idioma da fala" hint="A voz e os textos do vídeo saem neste idioma.">
                 <Chips label="Idioma da fala" value={p.language} onPick={chooseLanguage} options={LANGUAGES.map((l) => ({ value: l.value, text: l.text }))} />
               </Group>
-              <Group label="Palavra-chave da CTA (o que a pessoa comenta)">
+              <Group label="3 · Palavra-chave da CTA (o que a pessoa comenta)">
                 <KeywordPicker keyword={p.keyword} keepCase={p.keepCase} placeholder="Ou escreva outra palavra" onChange={(keyword) => patch({ keyword })} onKeepCase={(keepCase) => patch({ keepCase, keyword: keepCase ? p.keyword : p.keyword.toUpperCase() })} />
               </Group>
-              <Group label="Frase final (o que a pessoa ouve no fim)" hint="Escolha uma pronta ou escreva a sua. Use {KEYWORD} onde vai a palavra-chave.">
+              <Group label="4 · Frase final (o que a pessoa ouve no fim)" hint="Escolha uma pronta ou escreva a sua. Use {KEYWORD} onde vai a palavra-chave.">
                 <Chips label="Frases prontas" value={p.cta} onPick={(cta) => patch({ cta })} options={(CTA_BY_LANG[p.language] ?? CTA_PRESETS).map((c) => ({ value: c, text: c.replace("{KEYWORD}", "…") }))} />
                 <input value={p.cta} onChange={(event) => patch({ cta: event.target.value })} maxLength={200} aria-label="Escreva a sua frase final" placeholder="Ou escreva a sua frase, ex.: Comente {KEYWORD} e receba o guia" className={inputClass} />
               </Group>
               <p className="rounded-[12px] bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
                 No final o vídeo diz: <span className="text-foreground">“{p.cta.replace("{KEYWORD}", p.keyword.trim() || "PALAVRA")}”</span>
               </p>
+              {hasReference && (
+                <Button type="button" size="lg" className="gt-btn3d w-full rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] py-7 text-base text-white" onClick={() => (p.scenes.length > 0 || canResume ? void runAll(true) : void run(null))}>
+                  {canResume || p.scenes.length > 0 ? "Continuar de onde parou" : "Preparar meus vídeos"}
+                </Button>
+              )}
             </section>
             ) : (
               <div className="space-y-4" data-testid="start-quest">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-xs font-semibold">
-                    <span className="text-[#A98BFF]">Missão {qStep} de 4</span>
-                    <span data-testid="quest-xp">⭐ {(qStep - 1) * 10} XP</span>
+                    <span className="text-[#A98BFF]">Passo 1 de 4 · Escolher o vídeo</span>
+                    <span>Depois: idioma, palavra-chave e frase final</span>
                   </div>
-                  <div role="progressbar" aria-label="Missões" aria-valuemin={0} aria-valuemax={4} aria-valuenow={qStep - 1} className="h-2.5 overflow-hidden rounded-full bg-border">
-                    <div className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A98BFF] transition-[width] duration-500" style={{ width: `${((qStep - 1) / 4) * 100}%` }} />
+                  <div role="progressbar" aria-label="Passos" aria-valuemin={0} aria-valuemax={4} aria-valuenow={0} className="h-2.5 overflow-hidden rounded-full bg-border">
+                    <div className="h-full w-[6%] rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A98BFF]" />
                   </div>
                 </div>
-                {qStep === 1 && (<div className="gt-pop space-y-3"><p className="font-medium">Em que idioma o vídeo fala?</p>
-              <Group label="Idioma da fala" hint="A voz e os textos do vídeo saem neste idioma.">
-                <Chips label="Idioma da fala" value={p.language} onPick={chooseLanguage} options={LANGUAGES.map((l) => ({ value: l.value, text: l.text }))} />
-              </Group>
-                </div>)}
-                {qStep === 2 && (<div className="gt-pop space-y-3"><p className="font-medium">O que a pessoa comenta?</p>
-              <Group label="Palavra-chave da CTA (o que a pessoa comenta)">
-                <KeywordPicker keyword={p.keyword} keepCase={p.keepCase} placeholder="Ou escreva outra palavra" onChange={(keyword) => patch({ keyword })} onKeepCase={(keepCase) => patch({ keepCase, keyword: keepCase ? p.keyword : p.keyword.toUpperCase() })} />
-              </Group>
-                </div>)}
-                {qStep === 3 && (<div className="gt-pop space-y-3"><p className="font-medium">Como o vídeo termina?</p>
-              <Group label="Frase final (o que a pessoa ouve no fim)" hint="Escolha uma pronta ou escreva a sua. Use {KEYWORD} onde vai a palavra-chave.">
-                <Chips label="Frases prontas" value={p.cta} onPick={(cta) => patch({ cta })} options={(CTA_BY_LANG[p.language] ?? CTA_PRESETS).map((c) => ({ value: c, text: c.replace("{KEYWORD}", "…") }))} />
-                <input value={p.cta} onChange={(event) => patch({ cta: event.target.value })} maxLength={200} aria-label="Escreva a sua frase final" placeholder="Ou escreva a sua frase, ex.: Comente {KEYWORD} e receba o guia" className={inputClass} />
-              </Group>
-                  <p className="rounded-[12px] bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-                    No final o vídeo diz: <span className="text-foreground">“{p.cta.replace("{KEYWORD}", p.keyword.trim() || "PALAVRA")}”</span>
-                  </p>
-                </div>)}
-                {qStep === 4 && (
-                  <div className="gt-pop space-y-3">
-                    <Button type="button" size="lg" className="gt-btn3d w-full rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] py-7 text-base text-white" onClick={() => fileRef.current?.click()}>
-                      <Upload className="size-5" /> Escolher o vídeo que quero clonar
-                    </Button>
-                    <ol className="space-y-1 text-sm text-muted-foreground">
-                      <li>1. Você escolhe o vídeo.</li>
-                      <li>2. O ClipGringa lê, separa em cenas e escreve tudo sozinho.</li>
-                      <li>3. Você clica em “Enviar para o Flow” e gera.</li>
-                    </ol>
-                  </div>
-                )}
-                <div className="flex justify-between gap-2">
-                  <Button type="button" variant="ghost" className="rounded-full" onClick={() => setQStep((n) => Math.max(1, n - 1))} disabled={qStep === 1}>Voltar</Button>
-                  {qStep < 4 && <Button type="button" className="gt-btn3d rounded-full" onClick={() => setQStep((n) => Math.min(4, n + 1))}>Avançar</Button>}
+                <div className="gt-pop space-y-3">
+                  <Button type="button" size="lg" className="gt-btn3d w-full rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] py-7 text-base text-white" onClick={() => fileRef.current?.click()}>
+                    <Upload className="size-5" /> Escolher o vídeo que quero clonar
+                  </Button>
+                  <ol className="space-y-1 text-sm text-muted-foreground">
+                    <li>1. Você escolhe o vídeo (só uma vez).</li>
+                    <li>2. Confere idioma, palavra-chave e frase final.</li>
+                    <li>3. Clica em “Preparar meus vídeos”: o ClipGringa separa as cenas e escreve tudo sozinho.</li>
+                    <li>4. Você clica em “Enviar para o Flow” e gera.</li>
+                  </ol>
                 </div>
               </div>
             )}
