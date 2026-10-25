@@ -58,7 +58,7 @@ type Task = { id: string; label: string; state: "running" | "done" | "error"; st
 
 const KEY = "gv-clonagem-v2";
 const MODE_KEY = "gv-clonagem-mode";
-const VIEW_KEY = "gv-clonagem-view";
+const VIEW_KEY = "gv-clonagem-view-v2";
 const TOUCH_KEY = "gv-clonagem-touch";
 const SENT_KEY = "gv-clonagem-sent";
 const IDLE_MS = 10 * 60 * 1000; // projeto parado: some e começa um novo
@@ -486,6 +486,19 @@ export function CloneWizard() {
     setImgs({});
     setBuilt({});
     setP((cur) => ({ ...cur, sceneCount: count, scenes: [], mix: NO_MIX, variations: [], images: [], videos: [], approved: {}, checks: {}, gen: {}, final: {} }));
+    startAuto();
+  };
+  // Modo avançado: escolher a quantidade de cenas ou de vídeos já faz todo o resto sozinho (cenas, variações, prompts) e abre o Flow.
+  const [autoGo, setAutoGo] = useState(0);
+  const startAuto = () => {
+    if (p.reference.trim().length < 20 && p.notes.trim().length < 20) return;
+    if (!simple) chooseView("simple");
+    setAutoGo((n) => n + 1);
+  };
+  const chooseCount = (count: number) => {
+    if (count === p.count) return;
+    setP((cur) => ({ ...cur, count, variations: [], images: [], videos: [], approved: {}, checks: {}, gen: {}, final: {} }));
+    startAuto();
   };
   const chooseLanguage = (language: string) => {
     if (language === p.language) return;
@@ -1121,6 +1134,7 @@ export function CloneWizard() {
   // Quando tudo fica pronto (modo simples), leva a pessoa ao Flow sozinho, com uma barra avisando.
   const [redirectIn, setRedirectIn] = useState<number | null>(null);
   const [redirectBlocked, setRedirectBlocked] = useState(false);
+  useEffect(() => { if (autoGo > 0) void runAll(!paid); }, [autoGo]); // eslint-disable-line react-hooks/exhaustive-deps
   const readyToFlow = simple && p.videos.length > 0 && p.ctaLocked;
   const redirectSig = readyToFlow ? p.variations.map((v) => v.title).join("|") : "";
   useEffect(() => {
@@ -1660,6 +1674,9 @@ export function CloneWizard() {
               </Group>
               <Group label="Quantas cenas" hint="Cada cena tem cerca de 8 segundos. Com 4 cenas o vídeo fica com cerca de 32 segundos, tempo de sobra para mostrar e falar do produto.">
                 <Chips label="Quantas cenas" value={p.sceneCount} onPick={chooseScenes} disabled={working} options={[1, 2, 3, 4, 5, 6].map((n) => ({ value: n, text: n === 1 ? "1 cena" : `${n} cenas` }))} />
+              </Group>
+              <Group label="Quantos vídeos" hint="Ao escolher, o ClipGringa separa as cenas, cria as variações e os prompts sozinho e abre o Flow.">
+                <Chips label="Quantos vídeos" value={p.count} onPick={chooseCount} disabled={working} options={COUNT_OPTIONS.map((n) => ({ value: n, text: String(n) }))} />
               </Group>
               {paid && (
                 <div className="space-y-4 rounded-[18px] border border-[#A98BFF]/40 bg-gradient-to-br from-[#7B3FE4]/25 via-[#7B3FE4]/10 to-transparent p-5 shadow-[0_18px_40px_-24px_#7B3FE4]">
