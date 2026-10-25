@@ -912,10 +912,11 @@ export function InfluencerChat() {
             <div className="grid gap-x-4 gap-y-6 sm:grid-cols-2 xl:grid-cols-3">
               {shown.map((item) => (
                 <button key={item.id} type="button" onClick={() => { setPrompt(item.prompt[lang]); setSkill(item.skill); }} className="group text-left">
-                  <div className="relative aspect-[16/10] overflow-hidden rounded-[20px] ring-1 ring-white/10" style={{ background: `radial-gradient(120% 90% at 20% 0%, ${item.from}66, transparent 60%), radial-gradient(100% 90% at 100% 100%, ${item.to}55, transparent 60%), #17161b` }} aria-hidden>
-                    <span className="absolute left-1/2 top-1/2 size-28 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/[0.06] blur-sm transition group-hover:scale-110" />
-                    <span className="absolute inset-0 grid place-items-center text-5xl transition group-hover:scale-110">{item.emoji}</span>
-                    <span className="absolute bottom-3 left-3 rounded-full bg-black/45 px-2.5 py-0.5 text-[10px] font-medium text-white/90">{SKILLS.find((x) => x.id === item.skill)?.name[lang]}</span>
+                  <div className="relative aspect-[16/10] overflow-hidden rounded-[20px] ring-1 ring-white/10" style={{ background: `radial-gradient(120% 90% at 20% 0%, ${item.from}66, transparent 60%), radial-gradient(100% 90% at 100% 100%, ${item.to}55, transparent 60%), #17161b` }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={`/influencers/${item.id}.jpg`} alt={item.title[lang]} loading="lazy" className="absolute inset-0 size-full object-cover object-top transition duration-500 group-hover:scale-105" />
+                    <span aria-hidden className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/70 to-transparent" />
+                    <span className="absolute bottom-3 left-3 rounded-full bg-black/55 px-2.5 py-0.5 text-[10px] font-medium text-white/90">{SKILLS.find((x) => x.id === item.skill)?.name[lang]}</span>
                   </div>
                   <span className="mt-3 flex items-center gap-3">
                     <span aria-hidden className="grid size-7 shrink-0 place-items-center rounded-[9px] bg-white/10 text-sm">{item.emoji}</span>

@@ -1,0 +1,152 @@
+{
+ "nutra-1": {
+  "preset": "AI Influencer 01",
+  "id": "15ae2b44-44d5-4b95-b942-e74fd2c54bd5",
+  "gender": [
+   "female"
+  ],
+  "age": [
+   "mature"
+  ],
+  "aesthetic": [
+   "retro"
+  ],
+  "brief": "",
+  "seed": 860447
+ },
+ "nutra-2": {
+  "preset": "AI Influencer 19",
+  "id": "ca20a74c-7c73-46b4-ac8a-293cba50cbc5",
+  "gender": [
+   "male"
+  ],
+  "age": [
+   "adult"
+  ],
+  "aesthetic": [
+   "retro"
+  ],
+  "brief": "",
+  "seed": 695297
+ },
+ "drop-1": {
+  "preset": "AI Influencer 42",
+  "id": "8dc7c2e4-b9b4-4c20-a1bb-50cebc9c13a8",
+  "gender": [
+   "female"
+  ],
+  "age": [
+   "adult"
+  ],
+  "aesthetic": [
+   "streetstyle"
+  ],
+  "brief": "Fashion-editorial freak casting photo of an odd-looking but photoreal person, contemporary club/streetwear styling. Two-panel sheet: left a tight frontal close-up portrait with the entire head and hair in frame, right a full-body standing shot; arms down, blank deadpan expression. PURE WHITE seamless background, bright soft light. Slim, not overweight. Signature: bleached eyebrows, platinum wet-look hair slicked straight back, huge pouty lips, multiple silver facial piercings on brow and lip. Outfit: black latex top, oversized grey pinstripe blazer, baggy dark jeans, pointed silver metallic boots. Hyper-realistic, natural uniform skin tone, crisp texture, sharp focus.",
+  "seed": 62265
+ },
+ "drop-2": {
+  "preset": "AI Influencer 43",
+  "id": "0805b749-9fee-4734-9736-2065f4e64567",
+  "gender": [
+   "male"
+  ],
+  "age": [
+   "adult"
+  ],
+  "aesthetic": [
+   "streetstyle"
+  ],
+  "brief": "Fashion-editorial freak casting photo of an odd-looking but photoreal person, contemporary workwear/streetwear styling. Two-panel sheet: left a tight frontal close-up portrait with the entire head and hair in frame, right a full-body standing shot; arms down, blank deadpan expression. PURE WHITE seamless background, bright soft light. Signature: caveman skull with a massive protruding brow ridge, wide flat nose, black curly high-top fade. Outfit: bright orange canvas work jacket over a black hoodie, baggy olive cargo pants, tan construction boots, chain wallet. Hyper-realistic, natural uniform skin tone, crisp texture, sharp focus.",
+  "seed": 671790
+ },
+ "ml-1": {
+  "preset": "AI Influencer 16",
+  "id": "9d62f679-faf2-46e7-9736-1a6de5e2de89",
+  "gender": [
+   "female"
+  ],
+  "age": [
+   "adult"
+  ],
+  "aesthetic": [
+   "goth"
+  ],
+  "brief": "",
+  "seed": 671172
+ },
+ "ml-2": {
+  "preset": "AI Influencer 44",
+  "id": "a617c588-67be-4816-a111-bbcb371ff6c4",
+  "gender": [
+   "male"
+  ],
+  "age": [
+   "adult"
+  ],
+  "aesthetic": [
+   "y2k"
+  ],
+  "brief": "Fashion-editorial freak casting photo of an odd-looking but photoreal person, contemporary y2k streetwear styling. Two-panel sheet: left a tight frontal close-up portrait with the entire head in frame, right a full-body standing shot; arms down, blank deadpan expression. PURE WHITE seamless background, bright soft light. Slim, not overweight. Signature: shaved head with a tiny bleached micro-fringe, huge hooked nose, prominent ears, metal braces. Outfit: purple satin bomber jacket, white ribbed tank, grey sweatpants, black slides with white socks, silver chains. Hyper-realistic, natural uniform skin tone, crisp texture, sharp focus.",
+  "seed": 318842
+ },
+ "shopee-1": {
+  "preset": "AI Influencer 35",
+  "id": "f1754b73-119c-4959-af7c-45dd1ec9ba64",
+  "gender": [
+   "female"
+  ],
+  "age": [
+   "adult"
+  ],
+  "aesthetic": [
+   "streetstyle"
+  ],
+  "brief": "Fashion-editorial freak casting photo of an odd-looking but photoreal person, contemporary trendy 2026 runway styling (not retro). Two-panel sheet: left a tight close-up portrait with the entire head and hair in frame, right a full-body standing shot; both front-facing, arms down, blank expression. PURE WHITE seamless background, bright soft light. Slim, not overweight. Signature: extremely long thin neck, tall bleached-blonde flat-top haircut like a box. Outfit: lime-green fuzzy mohair cropped cardigan, brown leather midi skirt, white knee socks, chunky black loafers. Hyper-realistic, natural uniform skin tone, crisp texture, 85mm, sharp focus.",
+  "seed": 918241
+ },
+ "shopee-2": {
+  "preset": "AI Influencer 47",
+  "id": "7ab45ed9-0722-4ee2-a985-2f69590a5c2e",
+  "gender": [
+   "female"
+  ],
+  "age": [
+   "adult"
+  ],
+  "aesthetic": [
+   "streetstyle"
+  ],
+  "brief": "Fashion-editorial freak casting photo of an odd-looking but photoreal person, contemporary streetwear styling. Two-panel sheet: left a tight frontal close-up portrait with the entire head and hair in frame, right a full-body standing shot; arms down, blank deadpan expression. PURE WHITE seamless background, bright soft light. Not overweight. Signature: hyper-muscular woman, tight cornrows pulled into a high bun, bold drawn-on brows, gold grill teeth. Outfit: cropped black leather jacket, black mesh top, baggy camo cargo pants, chunky white sneakers. Hyper-realistic, natural uniform skin tone, crisp texture, sharp focus.",
+  "seed": 905384
+ },
+ "info-1": {
+  "preset": "AI Influencer 12",
+  "id": "778bc86d-e2d8-4951-8a82-7d9f30f65d72",
+  "gender": [
+   "female"
+  ],
+  "age": [
+   "senior"
+  ],
+  "aesthetic": [
+   "theatrical"
+  ],
+  "brief": "Stern elderly salon owner with an enormous towering white beehive twice the height of her head, thin arched high brows, one blue and one brown eye, long false lashes, beauty mark. Fitted purple hairdresser tunic with combs and scissors in the chest pocket, holding silver scissors in one hand and a round brush in the other, black cigarette trousers, plum horsebit loafers. Hyperreal practical-prosthetic character, deadpan expression, standing straight, pure white seamless studio backdrop, high-end fashion lookbook photo, extremely exaggerated but photoreal.",
+  "seed": 167765
+ },
+ "info-2": {
+  "preset": "AI Influencer 52",
+  "id": "ea7885fc-8739-4817-ae2d-3f430a980f4e",
+  "gender": [
+   "male"
+  ],
+  "age": [
+   "adult"
+  ],
+  "aesthetic": [
+   "sporty"
+  ],
+  "brief": "",
+  "seed": 329596
+ }
+}
