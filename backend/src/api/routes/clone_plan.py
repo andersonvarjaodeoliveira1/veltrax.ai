@@ -347,8 +347,9 @@ async def _run(system: str, output_type: type[BaseModel], prompt: str, model: An
             raise
         except Exception as exc:
             last_error = exc
-            if _is_quota_error(exc) and index + 1 < len(candidates):
-                logger.warning("clone plan: quota reached on %s, trying the next model", candidate)
+            if index + 1 < len(candidates):
+                # Qualquer falha de um modelo (cota, chave sem saldo, modelo indisponível) passa para o próximo.
+                logger.warning("clone plan: %s failed (%s: %s), trying the next model", candidate, type(exc).__name__, str(exc)[:300])
                 continue
             logger.exception("clone plan stage failed")
             if _is_quota_error(exc):
@@ -1120,7 +1121,7 @@ async def _run_parts(system: str, output_type: type[BaseModel], parts: list[Any]
         except Exception as exc:
             last_error = exc
             # Cota esgotada, modelo fora do ar ou que não aceita imagem: tenta o próximo da lista.
-            if index + 1 < len(candidates) and (_is_quota_error(exc) or "image" in str(exc).lower() or "400" in str(exc)):
+            if index + 1 < len(candidates):
                 logger.warning("clone product look: %s failed (%s), trying the next model", candidate, type(exc).__name__)
                 continue
             logger.exception("clone product look failed")
