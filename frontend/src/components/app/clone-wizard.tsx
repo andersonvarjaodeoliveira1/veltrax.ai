@@ -5,7 +5,7 @@ import { Check, ClipboardCopy, Download, ExternalLink, Loader2, Lock, Plus, Refr
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
-import { FLOW_CHOICES, FLOW_MODELS, defaultFlowCategory, saveFlowCategory } from "@/lib/flow-models";
+import { FLOW_CHOICES, FLOW_MODELS, defaultFlowCategory, effectiveFlowId, saveFlowCategory, visibleFlowChoices } from "@/lib/flow-models";
 import { ReferenceSummary } from "@/components/app/reference-summary";
 import { useSession } from "@/lib/auth-client";
 import { ADMIN_WHATSAPP_URL } from "@/lib/token-balance";
@@ -1034,7 +1034,8 @@ export function CloneWizard() {
   const [refFile, setRefFile] = useState<File | null>(null);
   const { data: authSession } = useSession();
   const isAdminUser = Boolean((authSession?.user as { is_admin?: boolean } | undefined)?.is_admin);
-  const lowPriority = p.flowModel === "lower";
+  const flowModelId = effectiveFlowId(p.flowModel, flowAccount.plan);
+  const lowPriority = flowModelId === "lower";
   useEffect(() => {
     const saved = defaultFlowCategory(isAdminUser);
     setP((cur) => (cur.flowModel === saved ? cur : { ...cur, flowModel: saved }));
@@ -1053,8 +1054,8 @@ export function CloneWizard() {
     language: p.language,
     product: p.product || p.productInfo || p.productLook ? { name: p.product, info: p.productInfo, look: p.productLook } : undefined,
     sceneCount: p.sceneCount,
-    model: (FLOW_CHOICES.find((m) => m.id === p.flowModel) ?? FLOW_MODELS[0]).name,
-    flowModel: (FLOW_CHOICES.find((m) => m.id === p.flowModel) ?? FLOW_MODELS[0]).needle,
+    model: (FLOW_CHOICES.find((m) => m.id === flowModelId) ?? FLOW_MODELS[0]).name,
+    flowModel: (FLOW_CHOICES.find((m) => m.id === flowModelId) ?? FLOW_MODELS[0]).needle,
     lowerPriority: lowPriority,
     videos: p.variations.map((variation, vi) => ({
       title: variation.title,
@@ -1069,14 +1070,14 @@ export function CloneWizard() {
   // Só quem NÃO tem Lower Priority escolhe o modelo, vendo quantos créditos cada vídeo gasta.
   const modelChooser = () => {
     const low = lowPriority;
-    const model = FLOW_CHOICES.find((m) => m.id === p.flowModel) ?? FLOW_MODELS[0];
+    const model = FLOW_CHOICES.find((m) => m.id === flowModelId) ?? FLOW_MODELS[0];
     const perVideo = model.credits * p.sceneCount;
     return (
       <div className="space-y-2" data-testid="flow-model-chooser">
         <div className="space-y-2 rounded-[12px] border border-[#F5B454]/40 bg-[#F5B454]/10 p-3">
             <p className="text-xs">{low ? "Lower Priority: não gasta créditos do seu Flow. Se não for o seu caso, escolha outro modelo (ele fica salvo como a sua categoria):" : "Cada cena gasta créditos do seu Flow. Escolha o modelo (ele fica salvo como a sua categoria):"}</p>
             <div className="flex flex-wrap gap-2">
-              {FLOW_CHOICES.map((m) => (
+              {visibleFlowChoices(flowAccount.plan).map((m) => (
                 <button key={m.id} type="button" aria-pressed={m.id === model.id} onClick={() => chooseModel(m.id)} className={cn("rounded-[12px] border px-3 py-2 text-left text-xs", m.id === model.id ? "border-[#7B3FE4] bg-[#7B3FE4]/20" : "border-border text-muted-foreground")}>
                   <span className="block font-medium text-foreground">{m.name}</span>
                   <span className="block">{m.credits === 0 ? "0 créditos" : `${m.credits} créditos por cena`} · {m.note}</span>
@@ -1127,7 +1128,7 @@ export function CloneWizard() {
     try { if (window.sessionStorage.getItem("gv-flow-redirected") === redirectSig) return; } catch { /* storage unavailable */ }
     try { void navigator.clipboard.writeText(flowPackage()); } catch { /* o botão Copiar pacote continua disponível */ }
     extensionGotIt.current = pushPackage(flowPackage());
-    setRedirectIn(3);
+    setRedirectIn(1);
     const timer = window.setInterval(() => {
       setRedirectIn((n) => {
         if (n === null) return null;
@@ -1201,6 +1202,50 @@ export function CloneWizard() {
       void copy("flow-send", flowPackage());
       void pushPackage(flowPackage()).then((ok) => { if (!ok) window.open(FLOW_HOME_URL, "_blank", "noopener"); });
     };
+    const adjustSections = (
+      <div className="space-y-4">
+              {([
+                ["2", "Idioma da fala", "A voz e os textos do vídeo saem neste idioma.",
+                  <Chips key="l" label="Idioma da fala" value={p.language} onPick={chooseLanguage} options={LANGUAGES.map((l) => ({ value: l.value, text: l.text }))} />],
+                ["3", "Quantos vídeos e quantas cenas", "Cada cena tem cerca de 8 segundos. Mais vídeos e cenas demoram mais no Flow.",
+                  <div key="q" className="space-y-4">
+                    <Group label="Quantos vídeos">
+                      <Chips label="Quantos vídeos" value={p.count} onPick={(count) => patch({ count })} options={COUNT_OPTIONS.map((n) => ({ value: n, text: String(n) }))} />
+                    </Group>
+                    <Group label="Quantas cenas por vídeo">
+                      <Chips label="Quantas cenas" value={p.sceneCount} onPick={chooseScenes} options={[1, 2, 3, 4, 5, 6].map((n) => ({ value: n, text: n === 1 ? "1 cena" : `${n} cenas` }))} />
+                    </Group>
+                    <Group label="Modelo do Flow" hint="Lower Priority não gasta créditos. Os outros modelos gastam créditos do seu Flow.">
+                      {modelChooser()}
+                    </Group>
+                    <p className="rounded-[12px] bg-[#7B3FE4]/10 px-4 py-3 text-sm text-muted-foreground" data-testid="qty-summary">
+                      <span className="font-medium text-foreground">{p.count} {p.count === 1 ? "vídeo" : "vídeos"} × {p.sceneCount} {p.sceneCount === 1 ? "cena" : "cenas"} = {p.count * p.sceneCount} cenas</span> · cada vídeo fica com cerca de {p.sceneCount * 8} segundos.
+                    </p>
+                  </div>],
+                ["4", "Palavra-chave da CTA", "O que a pessoa comenta para receber o link.",
+                  <KeywordPicker key="k" keyword={p.keyword} keepCase={p.keepCase} placeholder="Ou escreva outra palavra" onChange={(keyword) => patch({ keyword })} onKeepCase={(keepCase) => patch({ keepCase, keyword: keepCase ? p.keyword : p.keyword.toUpperCase() })} />],
+                ["5", "Frase final", "O que a pessoa ouve no fim. Use {KEYWORD} onde vai a palavra-chave.",
+                  <div key="c" className="space-y-3">
+                    <Chips label="Frases prontas" value={p.cta} onPick={(cta) => patch({ cta })} options={(CTA_BY_LANG[p.language] ?? CTA_PRESETS).map((c) => ({ value: c, text: c.replace("{KEYWORD}", "…") }))} />
+                    <input value={p.cta} onChange={(event) => patch({ cta: event.target.value })} maxLength={200} aria-label="Escreva a sua frase final" placeholder="Ou escreva a sua frase, ex.: Comente {KEYWORD} e receba o guia" className={inputClass} />
+                    <p className="rounded-[12px] bg-[#7B3FE4]/10 px-4 py-3 text-sm text-muted-foreground">
+                      No final o vídeo diz: <span className="font-medium text-foreground">“{p.cta.replace("{KEYWORD}", p.keyword.trim() || "PALAVRA")}”</span>
+                    </p>
+                  </div>],
+              ] as [string, string, string, React.ReactNode][]).map(([number, title, hint, body]) => (
+                <section key={number} aria-label={`${number} · ${title}`} className="space-y-3 rounded-[22px] border border-white/10 bg-card p-5">
+                  <div className="flex items-center gap-3">
+                    <span aria-hidden className="grid size-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-sm font-semibold text-white">{number}</span>
+                    <div>
+                      <p className="font-semibold">{title}</p>
+                      <p className="text-xs text-muted-foreground">{hint}</p>
+                    </div>
+                  </div>
+                  {body}
+                </section>
+              ))}
+      </div>
+    );
     const assembling_ = Object.values(built).some((b) => b.state === "running");
     return (
       <div className="space-y-5">
@@ -1268,7 +1313,7 @@ export function CloneWizard() {
         {!ready && !working && !askProduct && (
           <section className="space-y-4 rounded-[18px] border border-border bg-card p-5">
             <input ref={fileRef} type="file" accept="video/*" className="sr-only" aria-label="Escolher o vídeo para clonar"
-              onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void readReference(file); }} />
+              onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void startSimple(file); }} />
             {hasReference || refFile ? (
               <>
                 <p className="text-sm text-muted-foreground">{hasReference ? "O vídeo já foi lido. Falta preparar as cenas, as variações e os prompts." : `Recebi o seu vídeo${refFile ? ` (${refFile.name})` : ""}, mas ainda não consegui ler a fala. Se quiser tentar de novo, escolha outro vídeo.`}</p>
@@ -1287,61 +1332,35 @@ export function CloneWizard() {
                   <textarea value={p.reference} onChange={(event) => patch({ reference: event.target.value })} rows={4} maxLength={4000} aria-label="O que o vídeo diz" className={inputClass} placeholder="Cole o texto do vídeo aqui (mínimo 20 letras)" />
                 </label>
               )}
-              {([
-                ["2", "Idioma da fala", "A voz e os textos do vídeo saem neste idioma.",
-                  <Chips key="l" label="Idioma da fala" value={p.language} onPick={chooseLanguage} options={LANGUAGES.map((l) => ({ value: l.value, text: l.text }))} />],
-                ["3", "Quantos vídeos e quantas cenas", "Cada cena tem cerca de 8 segundos. Mais vídeos e cenas demoram mais no Flow.",
-                  <div key="q" className="space-y-4">
-                    <Group label="Quantos vídeos">
-                      <Chips label="Quantos vídeos" value={p.count} onPick={(count) => patch({ count })} options={COUNT_OPTIONS.map((n) => ({ value: n, text: String(n) }))} />
-                    </Group>
-                    <Group label="Quantas cenas por vídeo">
-                      <Chips label="Quantas cenas" value={p.sceneCount} onPick={chooseScenes} options={[1, 2, 3, 4, 5, 6].map((n) => ({ value: n, text: n === 1 ? "1 cena" : `${n} cenas` }))} />
-                    </Group>
-                    <Group label="Modelo do Flow" hint="Lower Priority não gasta créditos. Os outros modelos gastam créditos do seu Flow.">
-                      {modelChooser()}
-                    </Group>
-                    <p className="rounded-[12px] bg-[#7B3FE4]/10 px-4 py-3 text-sm text-muted-foreground" data-testid="qty-summary">
-                      <span className="font-medium text-foreground">{p.count} {p.count === 1 ? "vídeo" : "vídeos"} × {p.sceneCount} {p.sceneCount === 1 ? "cena" : "cenas"} = {p.count * p.sceneCount} cenas</span> · cada vídeo fica com cerca de {p.sceneCount * 8} segundos.
-                    </p>
-                  </div>],
-                ["4", "Palavra-chave da CTA", "O que a pessoa comenta para receber o link.",
-                  <KeywordPicker key="k" keyword={p.keyword} keepCase={p.keepCase} placeholder="Ou escreva outra palavra" onChange={(keyword) => patch({ keyword })} onKeepCase={(keepCase) => patch({ keepCase, keyword: keepCase ? p.keyword : p.keyword.toUpperCase() })} />],
-                ["5", "Frase final", "O que a pessoa ouve no fim. Use {KEYWORD} onde vai a palavra-chave.",
-                  <div key="c" className="space-y-3">
-                    <Chips label="Frases prontas" value={p.cta} onPick={(cta) => patch({ cta })} options={(CTA_BY_LANG[p.language] ?? CTA_PRESETS).map((c) => ({ value: c, text: c.replace("{KEYWORD}", "…") }))} />
-                    <input value={p.cta} onChange={(event) => patch({ cta: event.target.value })} maxLength={200} aria-label="Escreva a sua frase final" placeholder="Ou escreva a sua frase, ex.: Comente {KEYWORD} e receba o guia" className={inputClass} />
-                    <p className="rounded-[12px] bg-[#7B3FE4]/10 px-4 py-3 text-sm text-muted-foreground">
-                      No final o vídeo diz: <span className="font-medium text-foreground">“{p.cta.replace("{KEYWORD}", p.keyword.trim() || "PALAVRA")}”</span>
-                    </p>
-                  </div>],
-              ] as [string, string, string, React.ReactNode][]).map(([number, title, hint, body]) => (
-                <section key={number} aria-label={`${number} · ${title}`} className="space-y-3 rounded-[22px] border border-white/10 bg-card p-5">
-                  <div className="flex items-center gap-3">
-                    <span aria-hidden className="grid size-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-sm font-semibold text-white">{number}</span>
-                    <div>
-                      <p className="font-semibold">{title}</p>
-                      <p className="text-xs text-muted-foreground">{hint}</p>
-                    </div>
-                  </div>
-                  {body}
-                </section>
-              ))}
-              <div className="cg-orbit relative w-full" style={{ "--cg-r": "22px" } as React.CSSProperties}>
-                <button type="button" disabled={!hasReference && !refFile}
-                  onClick={() => (!hasReference && refFile ? void run(refFile) : p.scenes.length > 0 || canResume ? void runAll(true) : void run(null))}
-                  className="relative flex w-full items-center justify-center gap-3 rounded-[22px] bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-6 py-5 text-lg font-semibold text-white shadow-[0_14px_36px_-14px_#7B3FE4] transition-transform hover:-translate-y-0.5 disabled:opacity-60">
-                  <Sparkles className="size-5" />
-                  {!hasReference ? "Tentar de novo" : canResume || p.scenes.length > 0 ? "Continuar de onde parou" : "Preparar meus vídeos"}
-                </button>
-              </div>
+              {!hasReference ? (
+                <div className="cg-orbit relative w-full" style={{ "--cg-r": "22px" } as React.CSSProperties}>
+                  <button type="button" disabled={!refFile} onClick={() => (refFile ? void run(refFile) : undefined)}
+                    className="relative flex w-full items-center justify-center gap-3 rounded-[22px] bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-6 py-5 text-lg font-semibold text-white shadow-[0_14px_36px_-14px_#7B3FE4] transition-transform hover:-translate-y-0.5 disabled:opacity-60">
+                    <Sparkles className="size-5" /> Tentar de novo
+                  </button>
+                </div>
+              ) : (canResume || p.scenes.length > 0) ? (
+                <div className="cg-orbit relative w-full" style={{ "--cg-r": "22px" } as React.CSSProperties}>
+                  <button type="button" onClick={() => void runAll(true)}
+                    className="relative flex w-full items-center justify-center gap-3 rounded-[22px] bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-6 py-5 text-lg font-semibold text-white shadow-[0_14px_36px_-14px_#7B3FE4] transition-transform hover:-translate-y-0.5">
+                    <Sparkles className="size-5" /> Continuar de onde parou
+                  </button>
+                </div>
+              ) : (
+                <div className="cg-orbit relative w-full" style={{ "--cg-r": "22px" } as React.CSSProperties}>
+                  <button type="button" onClick={() => void run(null)}
+                    className="relative flex w-full items-center justify-center gap-3 rounded-[22px] bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-6 py-5 text-lg font-semibold text-white shadow-[0_14px_36px_-14px_#7B3FE4] transition-transform hover:-translate-y-0.5">
+                    <Sparkles className="size-5" /> Preparar meus vídeos
+                  </button>
+                </div>
+              )}
             </div>
             ) : (
               <div className="space-y-4" data-testid="start-quest">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-xs font-semibold">
-                    <span className="text-[#A98BFF]">Passo 1 de 5 · Escolher o vídeo</span>
-                    <span>Depois: idioma, palavra-chave e frase final</span>
+                    <span className="text-[#A98BFF]">Escolha o vídeo · o resto é automático</span>
+                    <span>Leitura, cenas, textos e Flow</span>
                   </div>
                   <div role="progressbar" aria-label="Passos" aria-valuemin={0} aria-valuemax={4} aria-valuenow={0} className="h-2.5 overflow-hidden rounded-full bg-border">
                     <div className="h-full w-[6%] rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A98BFF]" />
@@ -1360,10 +1379,12 @@ export function CloneWizard() {
                   </div>
                   <ol className="space-y-1 text-sm text-muted-foreground">
                     <li>1. Você escolhe o vídeo (só uma vez).</li>
-                    <li>2. Confere idioma, palavra-chave e frase final.</li>
-                    <li>3. Clica em “Preparar meus vídeos”: o ClipGringa separa as cenas e escreve tudo sozinho.</li>
-                    <li>4. Você clica em “Enviar para o Flow” e gera.</li>
+                    <li>2. O ClipGringa lê, separa as cenas, escreve tudo e já abre o Flow sozinho.</li>
                   </ol>
+                  <details className="group rounded-[18px] border border-white/10 bg-card p-4 text-sm" data-testid="quest-adjust">
+                    <summary className="cursor-pointer list-none font-medium">Ajustes (opcional): idioma, quantidade, palavra-chave e frase final <span aria-hidden className="text-muted-foreground">⌄</span></summary>
+                    <div className="mt-4 border-t border-white/10 pt-4">{adjustSections}</div>
+                  </details>
                 </div>
               </div>
             )}
@@ -1421,7 +1442,7 @@ export function CloneWizard() {
         {ready && (redirectIn !== null || redirectBlocked) && (
           <section role="status" className="space-y-2 rounded-[18px] border border-[#7B3FE4]/60 bg-[#7B3FE4]/15 p-4" data-testid="flow-redirect">
             <p className="text-sm font-semibold">{redirectBlocked ? "A extensão não respondeu. Recarregue esta página (F5) e confira se a extensão 1.8.1 está ligada; ou abra o Flow pelo botão abaixo." : `Abrindo o Flow e enviando tudo em ${redirectIn}s…`}</p>
-            <div className="h-1.5 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A98BFF] transition-all duration-1000" style={{ width: `${redirectBlocked ? 100 : ((3 - (redirectIn ?? 3)) / 3) * 100}%` }} /></div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A98BFF] transition-all duration-1000" style={{ width: `${redirectBlocked ? 100 : ((1 - (redirectIn ?? 1)) / 1) * 100}%` }} /></div>
             <p className="text-xs text-muted-foreground">Tudo pronto. A extensão recebe o pacote, abre um projeto novo e gera as imagens e os vídeos sozinha. Você não precisa copiar nem colar nada.</p>
             <div className="flex gap-2">
               <a href={FLOW_HOME_URL} target="_blank" rel="noopener noreferrer" className="inline-flex items-center rounded-full border border-border px-3 py-1.5 text-xs hover:text-foreground" onClick={() => { markSent(); setRedirectIn(null); setRedirectBlocked(false); }}>Abrir o Flow agora</a>
@@ -1457,7 +1478,7 @@ export function CloneWizard() {
               <div className="mt-3 rounded-[12px] border border-border bg-card p-3">{modelChooser()}</div>
               <ol className="mt-3 list-decimal space-y-1 pl-5 text-muted-foreground">
                 <li>Abra o <a href="https://labs.google/fx/pt/tools/flow" target="_blank" rel="noopener noreferrer" className="text-[#A98BFF] underline">Flow</a> e, para cada cena, cole o <b>prompt da imagem</b> (Nano Banana, 9:16, x1).</li>
-                <li>Depois anime a imagem: modelo {lowPriority ? <><b>Veo 3.1 - Lite [Lower Priority]</b> (o Flow mostra “A geração vai usar 0 créditos”)</> : <b>{(FLOW_CHOICES.find((m) => m.id === p.flowModel) ?? FLOW_MODELS[0]).name}</b>}, 8s, x1, e cole o <b>prompt da animação</b>.</li>
+                <li>Depois anime a imagem: modelo {lowPriority ? <><b>Veo 3.1 - Lite [Lower Priority]</b> (o Flow mostra “A geração vai usar 0 créditos”)</> : <b>{(FLOW_CHOICES.find((m) => m.id === flowModelId) ?? FLOW_MODELS[0]).name}</b>}, 8s, x1, e cole o <b>prompt da animação</b>.</li>
                 <li>Baixe com o nome indicado (Video01_Cena01.mp4…) e envie todos aqui embaixo.</li>
               </ol>
               <div className="mt-4 rounded-[12px] border border-border bg-card p-3" data-testid="flow-extension">
@@ -1626,7 +1647,7 @@ export function CloneWizard() {
               <Field label="Notas sobre o vídeo (opcional)" hint="Ritmo, estilo, o que funcionou nele. A IA lê a transcrição e as notas, não as imagens do vídeo.">
                 <textarea value={p.notes} onChange={(event) => patch({ notes: event.target.value })} rows={2} maxLength={600} className={inputClass} />
               </Field>
-              {render?.enabled && (
+              {render?.enabled && flowAccount.plan && /ultra/i.test(flowAccount.plan) && (
                 <Group label="Como gerar as imagens e as cenas" hint={mode === "free" ? "Você gera no Flow com Veo 3.1 Lite [Lower Priority]. O Flow mostra “A geração vai usar 0 créditos”." : "A ferramenta gera sozinha pela API do Google. Esse modo é cobrado por uso."}>
                   <Chips label="Como gerar" value={mode} onPick={chooseMode} options={[{ value: "free" as const, text: "Flow · Lower Priority (sem custo)" }]} />
                 </Group>

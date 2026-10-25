@@ -1,5 +1,5 @@
 import { afterEach, expect, it } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import ConnectFlowPage from "./page";
 
@@ -40,11 +40,13 @@ it("says the extension was not found when nobody answers", async () => {
   expect(await screen.findByText("Extensão do Flow não encontrada", {}, { timeout: 4000 })).toBeInTheDocument();
 });
 
-it("shows Lower Priority to everyone but only preselects it when the member picks it", async () => {
+it("shows Lower Priority only to Ultra accounts, and only preselects it when the member picks it", async () => {
   window.localStorage.clear();
   const user = userEvent.setup();
   render(<ConnectFlowPage />);
-  const lower = screen.getByRole("button", { name: /Lower Priority\]/ });
+  expect(screen.queryByRole("button", { name: /Lower Priority\]/ })).not.toBeInTheDocument();
+  await act(async () => { window.postMessage({ source: "clipgringa-flow", type: "status", loggedIn: true, plan: "Ultra", credits: 100, seenAt: Date.now() }, window.location.origin); });
+  const lower = await screen.findByRole("button", { name: /Lower Priority\]/ });
   expect(lower).toHaveAttribute("aria-pressed", "false");
   await user.click(lower);
   expect(lower).toHaveAttribute("aria-pressed", "true");

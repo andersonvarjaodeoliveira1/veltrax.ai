@@ -29,3 +29,15 @@ export function readFlowCategory(): string | null {
 export function saveFlowCategory(id: string): void {
   try { window.localStorage.setItem(KEY, id); } catch { /* storage unavailable */ }
 }
+
+/** Lower Priority (0 créditos) só existe no plano Ultra: só aparece quando a extensão leu "Ultra" na conta do Flow. */
+export function hasLowerPriority(plan: string | null | undefined): boolean {
+  return /ultra/i.test(plan ?? "");
+}
+export function visibleFlowChoices(plan: string | null | undefined) {
+  return hasLowerPriority(plan) ? FLOW_CHOICES : FLOW_CHOICES.filter((m) => m.id !== LOWER_PRIORITY.id);
+}
+/** Se a categoria salva é Lower Priority mas a conta não tem, usa o Lite (o mais barato). */
+export function effectiveFlowId(id: string, plan: string | null | undefined): string {
+  return id === LOWER_PRIORITY.id && !hasLowerPriority(plan) ? FLOW_MODELS[0].id : id;
+}

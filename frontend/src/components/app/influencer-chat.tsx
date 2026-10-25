@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowRight, ArrowUp, Check, ClipboardCopy, ImagePlus, Loader2, Plus, Search, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth-client";
-import { FLOW_CHOICES, defaultFlowCategory, saveFlowCategory } from "@/lib/flow-models";
+import { FLOW_CHOICES, defaultFlowCategory, effectiveFlowId, saveFlowCategory, visibleFlowChoices } from "@/lib/flow-models";
+import { useFlowConnection } from "@/hooks/use-flow-connection";
 import { LanguageSwitcher, useI18n } from "@/lib/i18n";
 import { flowUploadInfo } from "@/lib/flow-upload";
 import { EXAMPLES, SKILLS, type Lang3, type SkillId } from "@/lib/influencer-examples";
@@ -294,6 +295,7 @@ export function InfluencerChat() {
   const [style, setStyle] = useState<StyleState>(DEFAULT_STYLE);
   const [vary, setVary] = useState<{ hook: boolean; body: boolean; cta: boolean }>({ hook: true, body: false, cta: false });
   const [model, setModel] = useState<string>(FLOW_CHOICES[1].id);
+  const { account: flowAcct } = useFlowConnection(true, false);
   const [boards, setBoards] = useState<Board[]>([]);
   const [productLook, setProductLook] = useState("");
   const [productLink, setProductLink] = useState("");
@@ -405,7 +407,7 @@ export function InfluencerChat() {
     return () => window.clearTimeout(timer);
   }, [prompt, phase, lang]);
 
-  const chosen = FLOW_CHOICES.find((item) => item.id === model) ?? FLOW_CHOICES[1];
+  const chosen = FLOW_CHOICES.find((item) => item.id === effectiveFlowId(model, flowAcct.plan)) ?? FLOW_CHOICES[1];
   const lower = chosen.id === "lower";
 
   async function fail(response: Response) {
@@ -832,9 +834,9 @@ export function InfluencerChat() {
           {attached.length > 0 && <span className="absolute -right-0.5 -top-0.5 grid size-4 place-items-center rounded-full bg-[#7B3FE4] text-[10px] text-white">{attached.length}</span>}
         </button>
         {attached.length > 0 && !started && <button type="button" aria-label={t("stop")} onClick={() => setAttached([])} className="text-muted-foreground hover:text-foreground"><X className="size-3.5" /></button>}
-        <select aria-label={t("modelLabel")} value={model} onChange={(event) => { setModel(event.target.value); saveFlowCategory(event.target.value); setModelChosen(true); }} disabled={started}
+        <select aria-label={t("modelLabel")} value={effectiveFlowId(model, flowAcct.plan)} onChange={(event) => { setModel(event.target.value); saveFlowCategory(event.target.value); setModelChosen(true); }} disabled={started}
           className="max-w-[14rem] truncate rounded-full bg-white/5 px-3 py-1.5 text-xs font-medium text-foreground disabled:opacity-60 [&>option]:bg-[#1a191d] [&>option]:text-white">
-          {FLOW_CHOICES.map((item) => <option key={item.id} value={item.id}>{item.id === "lower" ? "Lower Priority" : item.name} · {item.credits === 0 ? `0 ${t("creditsWord")}` : `~${item.credits * SCENES} ${t("creditsWord")}/${t("video")}`}</option>)}
+          {visibleFlowChoices(flowAcct.plan).map((item) => <option key={item.id} value={item.id}>{item.id === "lower" ? "Lower Priority" : item.name} · {item.credits === 0 ? `0 ${t("creditsWord")}` : `~${item.credits * SCENES} ${t("creditsWord")}/${t("video")}`}</option>)}
         </select>
         {projects.length > 0 && (
           <select aria-label={t("projects")} value={project} onChange={(event) => setProject(event.target.value)} disabled={started}
@@ -1202,7 +1204,7 @@ export function InfluencerChat() {
         <Msg testid="chat-model">
           <p>{t("whichModel")}</p>
           <div role="radiogroup" aria-label={t("whichModel")} className="flex flex-wrap gap-2">
-            {FLOW_CHOICES.map((item) => (
+            {visibleFlowChoices(flowAcct.plan).map((item) => (
               <Chip key={item.id} role="radio" on={model === item.id} onClick={() => { if (phase === "model") { setModel(item.id); saveFlowCategory(item.id); setPhase("cost"); } }}>
                 {item.id === "lower" ? "Lower Priority" : item.name} · {item.credits === 0 ? t("zero") : `${item.credits} ${t("credits")}`}
               </Chip>

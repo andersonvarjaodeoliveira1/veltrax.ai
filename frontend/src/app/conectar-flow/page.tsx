@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Check, Download, ExternalLink, Film, Link2 } from "lucide-react";
 import { useSession } from "@/lib/auth-client";
 import { useFlowConnection } from "@/hooks/use-flow-connection";
-import { FLOW_CHOICES, defaultFlowCategory, saveFlowCategory } from "@/lib/flow-models";
+import { FLOW_CHOICES, defaultFlowCategory, saveFlowCategory, visibleFlowChoices } from "@/lib/flow-models";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/app/page-header";
 
@@ -64,9 +64,9 @@ export default function ConnectFlowPage() {
 
       <section className="space-y-3 rounded-[18px] border border-border bg-card p-5" data-testid="step-category">
         <p className="font-medium">Sua categoria no Flow</p>
-        <p className="text-xs text-muted-foreground">Escolha o modelo que você quer usar. Ele vira o padrão em todos os seus vídeos. Quem tem o plano com <b>Lower Priority</b> no Flow escolhe a primeira opção e não gasta créditos; nas demais, cada cena gasta créditos da sua conta do Flow.</p>
+        <p className="text-xs text-muted-foreground">Escolha o modelo que você quer usar. Ele vira o padrão em todos os seus vídeos. O <b>Lower Priority</b> (0 créditos) só aparece para o plano <b>Ultra</b>, lido da sua conta quando você entra no Flow; nas demais, cada cena gasta créditos da sua conta do Flow.</p>
         <div className="flex flex-wrap gap-2">
-          {FLOW_CHOICES.map((m) => (
+          {visibleFlowChoices(account.plan).map((m) => (
             <button key={m.id} type="button" aria-pressed={m.id === category} onClick={() => chooseCategory(m.id)}
               className={cn("rounded-[12px] border px-3 py-2 text-left text-xs", m.id === category ? "border-[#7B3FE4] bg-[#7B3FE4]/20" : "border-border text-muted-foreground")}>
               <span className="block font-medium text-foreground">{m.name}</span>

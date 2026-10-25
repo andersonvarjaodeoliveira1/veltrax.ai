@@ -329,6 +329,8 @@ it("offers only the free Flow Lower Priority mode", async () => {
   const user = userEvent.setup();
   window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ sceneCount: 3, step: 1, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora." }));
   render(<CloneWizard />);
+  expect(screen.queryByRole("radio", { name: /Flow · Lower Priority/ })).not.toBeInTheDocument();
+  await act(async () => { window.postMessage({ source: "clipgringa-flow", type: "status", loggedIn: true, plan: "Ultra", credits: 100, seenAt: Date.now() }, window.location.origin); });
   const free = await screen.findByRole("radio", { name: /Flow · Lower Priority/ });
   expect(free).toHaveAttribute("aria-checked", "true");
   expect(screen.queryByRole("button", { name: "Criar meus vídeos automaticamente" })).not.toBeInTheDocument();
@@ -505,7 +507,7 @@ describe("Passos do começo", () => {
     window.localStorage.clear();
     render(<CloneWizard />);
     const quest = await screen.findByTestId("start-quest");
-    expect(quest).toHaveTextContent("Passo 1 de 5");
+    expect(quest).toHaveTextContent("o resto é automático");
     expect(screen.getByRole("button", { name: /Escolher o vídeo que quero clonar/ })).toBeInTheDocument();
   });
 });
