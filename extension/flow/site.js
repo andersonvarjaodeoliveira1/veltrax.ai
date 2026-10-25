@@ -16,8 +16,21 @@
         ? { url: up.url, token: up.token, package: String(up.package || "").slice(0, 120) } : null;
       await chrome.storage.local.set({ [PENDING]: { raw: String(event.data.raw || ""), at: Date.now(), upload } });
       ok = true;
+      try { chrome.runtime.sendMessage({ type: "clipgringa-open-flow" }, () => void chrome.runtime.lastError); } catch (_e) { /* ignore */ }
     } catch (_e) { /* extensão recarregada */ }
     window.postMessage({ source: "clipgringa-flow", type: "package-ack", ok }, window.location.origin);
+  });
+
+  // Andamento da geração no Flow, repassado para a página do ClipGringa.
+  const PROGRESS = "clipgringa-flow-progress-v1";
+  try {
+    chrome.storage.onChanged.addListener((changes) => {
+      if (changes[PROGRESS] && changes[PROGRESS].newValue) window.postMessage({ source: "clipgringa-flow", type: "progress", data: changes[PROGRESS].newValue }, window.location.origin);
+    });
+  } catch (_e) { /* extensão recarregada */ }
+  window.addEventListener("message", async (event) => {
+    if (event.source !== window || !event.data || event.data.source !== "clipgringa-page" || event.data.type !== "progress?") return;
+    try { const d = (await chrome.storage.local.get(PROGRESS))[PROGRESS]; if (d) window.postMessage({ source: "clipgringa-flow", type: "progress", data: d }, window.location.origin); } catch (_e) { /* ignore */ }
   });
 
   window.addEventListener("message", async (event) => {

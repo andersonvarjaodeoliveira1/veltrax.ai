@@ -466,7 +466,30 @@
   let state = { jobs: [], done: {}, errors: {}, cloud: {} };
   let uploadInfo = null; // destino no ClipGringa (token curto enviado pelo site junto com o pacote)
 
-  function setNow(msg) { el("now").textContent = msg; }
+  let nowText = "";
+  function setNow(msg) { nowText = msg; el("now").textContent = msg; publish(); }
+  // Conta o andamento ao site do ClipGringa (barra de progresso, tempo de cada vídeo, o que está fazendo).
+  const PROGRESS_KEY = "clipgringa-flow-progress-v1";
+  let lastPublish = 0;
+  function publish(force) {
+    if (!force && Date.now() - lastPublish < 800) return;
+    lastPublish = Date.now();
+    try {
+      const jobs = state.jobs || [];
+      const cur = jobs.find((j) => j.key === state.current);
+      chrome.storage.local.set({ [PROGRESS_KEY]: {
+        at: Date.now(), running: !!running, total: jobs.length,
+        done: jobs.filter((j) => state.done[j.key]).length,
+        errors: Object.keys(state.errors || {}).length,
+        phase: state.phase || "", now: nowText,
+        current: cur ? { vi: cur.vi, si: cur.si } : null,
+        startedAt: runAt || 0, jobStartedAt: jobAt || 0,
+        dur: state.dur || {},
+        jobs: jobs.map((j) => ({ key: j.key, vi: j.vi, si: j.si, file: j.file, done: !!state.done[j.key], error: state.errors[j.key] || "" })),
+      } });
+    } catch (_e) { /* extensão recarregada */ }
+  }
+  window.setInterval(() => publish(true), 2000);
   function setRunning(on) {
     const box = el("box"); box.classList.toggle("run", on); box.classList.toggle("idle", !on);
     el("chipst").textContent = on ? "TRABALHANDO" : "PRONTO";
@@ -522,8 +545,9 @@
     }).join("");
   }
 
+  let autoRun = false;
   async function persist() {
-    await storage.set({ jobs: state.jobs, done: state.done, errors: state.errors, cloud: state.cloud, dur: state.dur || {}, upload: uploadInfo, raw: el("pkg").value });
+    await storage.set({ jobs: state.jobs, done: state.done, errors: state.errors, cloud: state.cloud, dur: state.dur || {}, upload: uploadInfo, raw: el("pkg").value, auto: autoRun });
   }
 
   async function withRetry(label, fn) {
@@ -625,7 +649,7 @@
         el("pkg").value = raw;
       }
     } catch (e) { setError(e.message); return; }
-    running = true; stopFlag = false; runAt = Date.now(); setRunning(true);
+    running = true; autoRun = true; stopFlag = false; runAt = Date.now(); setRunning(true);
     el("go").disabled = true; el("stop").disabled = false;
     const onlyFirst = el("test").checked;
     await persist(); render();
@@ -642,7 +666,7 @@
         render();
       }
       const left = state.jobs.filter((j) => !state.done[j.key]).length;
-      state.current = null; state.phase = "";
+      state.current = null; state.phase = ""; if (!left || stopFlag) autoRun = false; await persist();
       setNow(left === 0 ? `Tudo pronto em ${fmt((Date.now() - runAt) / 1000)}! Os vídeos foram baixados na pasta Downloads/ClipGringa e enviados ao ClipGringa.` : stopFlag ? "Parado. Clique em Começar para continuar de onde parou." : `Terminou com ${left} cena(s) pendente(s). Clique em Começar para tentar de novo.`);
     } finally {
       running = false; setRunning(false); el("go").disabled = false; el("stop").disabled = true; state.phase = ""; tickClock(); render();
@@ -656,7 +680,7 @@
     window.clearTimeout(pasteTimer);
     pasteTimer = window.setTimeout(() => { try { parsePackage(el("pkg").value); if (!running) start(); } catch (_e) { /* ainda não é um pacote válido */ } }, 800);
   });
-  el("stop").addEventListener("click", () => { stopFlag = true; setNow("Parando assim que a etapa atual terminar…"); });
+  el("stop").addEventListener("click", () => { stopFlag = true; autoRun = false; setNow("Parando assim que a etapa atual terminar…"); });
   el("clear").addEventListener("click", async () => {
     if (running) return;
     state = { jobs: [], done: {}, errors: {}, cloud: {} };
@@ -707,6 +731,8 @@
       await persist();
       await chrome.storage.local.remove(PENDING_KEY);
       setError(""); lastGuide = ""; render(); updateGuide();
+      setNow("Pacote recebido do ClipGringa. Começando sozinho…");
+      window.setTimeout(() => { if (!running) start(); }, 1500);
     } catch (e) { setError(e && e.message ? e.message : ""); }
   }
   try { chrome.storage.onChanged.addListener((changes) => { if (changes[PENDING_KEY]) takePending(); }); } catch (_e) { /* ignore */ }
@@ -731,9 +757,11 @@
       state = { jobs: saved.jobs, done: saved.done || {}, errors: saved.errors || {}, cloud: saved.cloud || {}, dur: saved.dur || {}, raw: (saved.raw || "").trim() };
       uploadInfo = saved.upload || null;
       el("pkg").value = saved.raw || "";
+      autoRun = saved.auto === true;
       const left = state.jobs.filter((j) => !state.done[j.key]).length;
       setNow(left ? `Pacote carregado: ${left} cena(s) faltando. Clique em Começar para continuar.` : "Pacote concluído. Clique em Limpar para começar outro.");
       render();
+      if (autoRun && left) window.setTimeout(() => { if (!running) start(); }, 2500);
     }
   }).then(takePending).then(updateGuide);
 })();

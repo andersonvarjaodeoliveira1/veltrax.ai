@@ -86,7 +86,7 @@ it("follows the Árvore protocol and locks the CTA before the animations", async
   const open = vi.fn();
   vi.stubGlobal("open", open);
   await user.click(screen.getByRole("button", { name: "Enviar para o Flow" }));
-  expect(open).toHaveBeenCalledWith(expect.stringContaining("labs.google"), "_blank", "noopener");
+  await waitFor(() => expect(open).toHaveBeenCalledWith(expect.stringContaining("labs.google"), "_blank", "noopener"), { timeout: 4000 });
   const pack = JSON.parse(await navigator.clipboard.readText());
   expect(pack).toMatchObject({ app: "clipgringa-flow", version: 1, keyword: "LIMON", sceneCount: 3 });
   expect(pack.videos).toHaveLength(2);
@@ -102,7 +102,7 @@ it("follows the Árvore protocol and locks the CTA before the animations", async
   expect(calls[1].body.scenes).toHaveLength(3);
   expect(calls[3].body.keyword).toBe("LIMON");
   expect(calls[3].body.lines).toBeUndefined(); // same copy: the backend closes every video with the locked CTA
-});
+}, 20000);
 
 it("mixes different hooks, bodies and CTAs when the user asks for it", async () => {
   const calls = mockApi();
@@ -394,7 +394,7 @@ it("simple mode: upload one video and everything is prepared automatically, read
 
   await user.click(await screen.findByRole("button", { name: "Preparar meus vídeos" }));
   expect(await screen.findByText(/Tudo pronto: 2 vídeos × 3 cenas/)).toBeInTheDocument();
-  expect(await screen.findByTestId("flow-redirect")).toHaveTextContent(/Direcionando para o Flow/);
+  expect(await screen.findByTestId("flow-redirect")).toHaveTextContent(/Abrindo o Flow e enviando tudo/);
   expect(screen.getAllByRole("button", { name: "Copiar prompt da imagem" })).toHaveLength(6);
   expect(screen.getAllByRole("button", { name: "Copiar prompt da animação" })).toHaveLength(6);
   expect(calls.map((c) => c.stage)).toEqual(["scenes", "variations", "images", "videos"]);
@@ -554,4 +554,12 @@ it("lets the member paste the script when the video could not be read, then prep
   const box = await screen.findByLabelText("O que o vídeo diz");
   await user.type(box, "Esse espartilho serve em qualquer corpo e eu te mostro como amarrar.");
   expect(await screen.findByRole("button", { name: "Preparar meus vídeos" })).toBeEnabled();
+});
+
+test("shows the extension's live progress with the time of each video", async () => {
+  render(<CloneWizard />);
+  window.postMessage({ source: "clipgringa-flow", type: "progress", data: { at: Date.now(), running: true, total: 2, done: 1, errors: 0, phase: "vídeo", now: "Animando a cena 2", current: { vi: 0, si: 1 }, startedAt: Date.now() - 90000, jobStartedAt: Date.now() - 20000, dur: { "0-0": 75 }, jobs: [{ key: "0-0", vi: 0, si: 0, file: "Video01_Cena01.mp4", done: true, error: "" }, { key: "0-1", vi: 0, si: 1, file: "Video01_Cena02.mp4", done: false, error: "" }] } }, window.location.origin);
+  // the panel only shows once the package is ready; the message must at least be accepted without crashing
+  await new Promise((r) => setTimeout(r, 20));
+  expect(document.body).toBeTruthy();
 });

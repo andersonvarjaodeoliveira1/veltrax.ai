@@ -9,6 +9,7 @@ import { FLOW_CHOICES, FLOW_MODELS, defaultFlowCategory, saveFlowCategory } from
 import { ReferenceSummary } from "@/components/app/reference-summary";
 import { useSession } from "@/lib/auth-client";
 import { ADMIN_WHATSAPP_URL } from "@/lib/token-balance";
+import { flowUploadInfo } from "@/lib/flow-upload";
 import { announceTokens, readTokenBalance } from "@/lib/token-alert";
 
 // BETA — Clonagem de Vídeo, seguindo o Protocolo Árvore.
@@ -62,6 +63,12 @@ const SENT_KEY = "gv-clonagem-sent";
 const IDLE_MS = 10 * 60 * 1000; // projeto parado: some e começa um novo
 const WAIT_FLOW_MS = 2 * 60 * 60 * 1000; // depois de enviar ao Flow a pessoa precisa de tempo para gerar e voltar
 // Ferramenta "ClipGringa — Gerar Vídeos" no Flow (BETA). Trocar pelo link compartilhado quando for liberada aos membros.
+type FlowProgress = {
+  at: number; running: boolean; total: number; done: number; errors: number; phase: string; now: string;
+  current: { vi: number; si: number } | null; startedAt: number; jobStartedAt: number; dur: Record<string, number>;
+  jobs: { key: string; vi: number; si: number; file: string; done: boolean; error: string }[];
+};
+const fmtClock = (sec: number) => { const s = Math.max(0, Math.round(sec)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
 const FLOW_HOME_URL = "https://labs.google/fx/pt/tools/flow";
 const FLOW_TOOL_URL = "https://flow.google.com/project/50e752e7-9a93-4477-8e3a-9bd266ec636b/tool/fccd23dc-ee0d-437a-9f45-a5ad87ccefce";
 // Créditos do Flow por geração de 8s (conta sem Lower Priority). Fonte: support.google.com/flow/answer/16526234. Podem mudar.
@@ -899,6 +906,35 @@ export function CloneWizard() {
   }
 
   const resetRef = useRef<() => void>(() => undefined);
+  // Entrega o pacote direto à extensão (sem copiar e colar): ela guarda e guia até o Começar.
+  const pushPackage = (raw: string): Promise<boolean> => new Promise((resolve) => {
+    const onAck = (event: MessageEvent) => {
+      if (event.source !== window || event.data?.source !== "clipgringa-flow" || event.data?.type !== "package-ack") return;
+      window.removeEventListener("message", onAck); window.clearTimeout(timer); resolve(event.data.ok === true);
+    };
+    const timer = window.setTimeout(() => { window.removeEventListener("message", onAck); resolve(false); }, 2500);
+    window.addEventListener("message", onAck);
+    void flowUploadInfo("Clonar vídeo").then((upload) => {
+      try { window.postMessage({ source: "clipgringa-page", type: "flow-package", raw, upload }, window.location.origin); } catch { /* sem janela */ }
+    });
+  });
+  const extensionGotIt = useRef(false);
+  const [flowProg, setFlowProg] = useState<FlowProgress | null>(null);
+  useEffect(() => {
+    const onMsg = (event: MessageEvent) => {
+      if (event.source !== window || event.data?.source !== "clipgringa-flow" || event.data?.type !== "progress" || !event.data.data) return;
+      setFlowProg(event.data.data as FlowProgress);
+    };
+    window.addEventListener("message", onMsg);
+    try { window.postMessage({ source: "clipgringa-page", type: "progress?" }, window.location.origin); } catch { /* sem janela */ }
+    return () => window.removeEventListener("message", onMsg);
+  }, []);
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    if (!flowProg?.running) return;
+    const id = window.setInterval(() => setNowTick(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [flowProg?.running]);
   const markSent = () => { try { window.localStorage.setItem(SENT_KEY, "1"); } catch { /* storage unavailable */ } };
   function reset() {
     try { window.localStorage.removeItem(SENT_KEY); window.localStorage.removeItem(TOUCH_KEY); } catch { /* storage unavailable */ }
@@ -1039,7 +1075,9 @@ export function CloneWizard() {
     if (!redirectSig) { setRedirectIn(null); return; }
     try { if (window.sessionStorage.getItem("gv-flow-redirected") === redirectSig) return; } catch { /* storage unavailable */ }
     try { void navigator.clipboard.writeText(flowPackage()); } catch { /* o botão Copiar pacote continua disponível */ }
-    setRedirectIn(5);
+    extensionGotIt.current = false;
+    void pushPackage(flowPackage()).then((ok) => { extensionGotIt.current = ok; });
+    setRedirectIn(3);
     const timer = window.setInterval(() => {
       setRedirectIn((n) => {
         if (n === null) return null;
@@ -1047,8 +1085,8 @@ export function CloneWizard() {
           window.clearInterval(timer);
           try { window.sessionStorage.setItem("gv-flow-redirected", redirectSig); } catch { /* storage unavailable */ }
           markSent(); // a pessoa vai gerar no Flow: o projeto espera até 2 horas
-          const opened = window.open(FLOW_HOME_URL, "_blank");
-          if (!opened) setRedirectBlocked(true);
+          // Com a extensão, ela mesma abre o Flow; sem ela, tentamos abrir daqui.
+          if (!extensionGotIt.current) { const opened = window.open(FLOW_HOME_URL, "_blank"); if (!opened) setRedirectBlocked(true); }
           return null;
         }
         return n - 1;
@@ -1117,6 +1155,7 @@ export function CloneWizard() {
     const sendToFlow = () => {
       markSent();
       void copy("flow-send", flowPackage());
+      pushPackage(flowPackage());
       window.open(FLOW_TOOL_URL, "_blank", "noopener");
     };
     const assembling_ = Object.values(built).some((b) => b.state === "running");
@@ -1309,11 +1348,46 @@ export function CloneWizard() {
           </section>
         )}
 
+        {ready && flowProg && flowProg.total > 0 && Date.now() - flowProg.at < 6 * 60 * 60 * 1000 && (() => {
+          const pct = Math.round((flowProg.done / flowProg.total) * 100);
+          const durs = Object.values(flowProg.dur || {}).filter((v) => v > 0);
+          const avg = durs.length ? durs.reduce((a, b) => a + b, 0) / durs.length : 240;
+          const left = flowProg.total - flowProg.done;
+          const jobSec = flowProg.running && flowProg.jobStartedAt ? (nowTick - flowProg.jobStartedAt) / 1000 : 0;
+          const eta = flowProg.running ? Math.max(0, left - 1) * avg + Math.max(30, avg - jobSec) : 0;
+          const videos = Array.from(new Set(flowProg.jobs.map((j) => j.vi))).sort((a, b) => a - b);
+          return (
+            <section role="status" className="cg-orbit space-y-3 rounded-[18px] border border-[#7B3FE4]/60 bg-[#7B3FE4]/10 p-4" data-testid="flow-progress">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold">{flowProg.done === flowProg.total ? "Tudo pronto no Flow!" : flowProg.running ? "Gerando no Flow (automático)" : "Geração pausada"}</p>
+                <p className="text-xs text-muted-foreground">{flowProg.done}/{flowProg.total} cenas · {pct}%{flowProg.running && flowProg.startedAt ? ` · ${fmtClock((nowTick - flowProg.startedAt) / 1000)} no total` : ""}{flowProg.running && left > 0 ? ` · faltam ~${eta < 90 ? "2" : Math.round(eta / 60)} min` : ""}</p>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A98BFF] transition-all duration-700" style={{ width: `${pct}%` }} /></div>
+              {flowProg.now && <p className="text-xs">{flowProg.now}</p>}
+              <ul className="space-y-1 text-xs">
+                {videos.map((vi) => {
+                  const mine = flowProg.jobs.filter((j) => j.vi === vi);
+                  const doneN = mine.filter((j) => j.done).length;
+                  const secs = mine.reduce((a, j) => a + (flowProg.dur?.[j.key] || 0), 0);
+                  const active = flowProg.current?.vi === vi && flowProg.running;
+                  return (
+                    <li key={vi} className="flex items-center justify-between gap-2 rounded-[10px] border border-border px-3 py-1.5">
+                      <span>Vídeo {String(vi + 1).padStart(2, "0")} · {doneN}/{mine.length} cenas{active && flowProg.phase ? ` · ${flowProg.phase}` : ""}</span>
+                      <span className="text-muted-foreground">{doneN === mine.length ? `pronto em ${fmtClock(secs)}` : active ? `${fmtClock(jobSec)} nesta cena` : "na fila"}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+              <p className="text-xs text-muted-foreground">Cada vídeo concluído é baixado e chega aqui em “Vídeos do Flow” e na etapa de envio abaixo.</p>
+            </section>
+          );
+        })()}
+
         {ready && (redirectIn !== null || redirectBlocked) && (
           <section role="status" className="space-y-2 rounded-[18px] border border-[#7B3FE4]/60 bg-[#7B3FE4]/15 p-4" data-testid="flow-redirect">
-            <p className="text-sm font-semibold">{redirectBlocked ? "Seu navegador bloqueou a abertura do Flow." : `Direcionando para o Flow em ${redirectIn}s…`}</p>
-            <div className="h-1.5 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A98BFF] transition-all duration-1000" style={{ width: `${redirectBlocked ? 100 : ((5 - (redirectIn ?? 5)) / 5) * 100}%` }} /></div>
-            <p className="text-xs text-muted-foreground">Tudo pronto. O pacote já foi copiado. No Flow, abra o seu projeto e cole o pacote na extensão.</p>
+            <p className="text-sm font-semibold">{redirectBlocked ? "Seu navegador bloqueou a abertura do Flow." : `Abrindo o Flow e enviando tudo em ${redirectIn}s…`}</p>
+            <div className="h-1.5 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A98BFF] transition-all duration-1000" style={{ width: `${redirectBlocked ? 100 : ((3 - (redirectIn ?? 3)) / 3) * 100}%` }} /></div>
+            <p className="text-xs text-muted-foreground">Tudo pronto. A extensão recebe o pacote, abre um projeto novo e gera as imagens e os vídeos sozinha. Você não precisa copiar nem colar nada.</p>
             <div className="flex gap-2">
               <a href={FLOW_HOME_URL} target="_blank" rel="noopener noreferrer" className="inline-flex items-center rounded-full border border-border px-3 py-1.5 text-xs hover:text-foreground" onClick={() => { markSent(); setRedirectIn(null); setRedirectBlocked(false); }}>Abrir o Flow agora</a>
               {redirectIn !== null && <button type="button" className="text-xs underline" onClick={() => setRedirectIn(null)}>Cancelar</button>}
@@ -1334,7 +1408,7 @@ export function CloneWizard() {
               <details className="rounded-[12px] border border-border p-3 text-xs text-muted-foreground">
                 <summary className="cursor-pointer">BETA · Tenho créditos no Flow e quero gerar pela ferramenta</summary>
                 <div className="mt-3 space-y-2">
-                  <p>A ferramenta gasta créditos do Flow. Ao clicar, copiamos tudo e abrimos a ferramenta. Lá, clique em <b>Colar pacote do ClipGringa</b> e depois em <b>Gerar tudo</b>.</p>
+                  <p>A ferramenta gasta créditos do Flow. Ao clicar, enviamos tudo para a extensão e abrimos a ferramenta.</p>
                   <Button type="button" size="sm" variant="outline" className="rounded-full" onClick={sendToFlow}>
                     <ExternalLink className="size-4" /> Enviar para o Flow
                   </Button>
@@ -1787,9 +1861,9 @@ export function CloneWizard() {
                 <div className="space-y-2 rounded-[14px] border border-[#5BD69A]/40 bg-[#5BD69A]/10 p-3 text-sm" data-testid="flow-lower-priority">
                   <p className="font-medium">{lowPriority ? "Gerar no Flow, sem gastar créditos (Lower Priority)" : "Gerar no Flow"}</p>
                   {modelChooser()}
-                  <p className="text-xs text-muted-foreground">{lowPriority ? "No Flow, use o modelo “Veo 3.1 - Lite [Lower Priority]”, 8s e x1. O Flow mostra “A geração vai usar 0 créditos”. " : "No Flow, use o modelo escolhido acima, 8s e x1. "}Com a extensão, isso é feito sozinho: copie o pacote, abra o seu projeto no Flow e cole na extensão.</p>
+                  <p className="text-xs text-muted-foreground">{lowPriority ? "No Flow, use o modelo “Veo 3.1 - Lite [Lower Priority]”, 8s e x1. O Flow mostra “A geração vai usar 0 créditos”. " : "No Flow, use o modelo escolhido acima, 8s e x1. "}Com a extensão, isso é feito sozinho: clique em “Enviar para o Flow”. O pacote vai direto para a extensão, sem copiar e colar.</p>
                   <div className="flex flex-wrap gap-2">
-                    <Button type="button" size="sm" className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white" onClick={() => { markSent(); void copy("flow-send", flowPackage()); window.open(FLOW_HOME_URL, "_blank", "noopener"); }}>
+                    <Button type="button" size="sm" className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white" onClick={() => { markSent(); void copy("flow-send", flowPackage()); void pushPackage(flowPackage()).then((ok) => { if (!ok) window.open(FLOW_HOME_URL, "_blank", "noopener"); }); }}>
                       <ExternalLink className="size-3.5" /> Enviar para o Flow
                     </Button>
                     {copyButton("flow-pack", flowPackage(), "Copiar pacote para o Flow")}

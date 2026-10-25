@@ -6,6 +6,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     pending = { filename: String(message.filename || ""), at: Date.now(), upload: message.upload || null };
     sendResponse({ ok: true });
   }
+  if (message && message.type === "clipgringa-open-flow") {
+    // Abre o Flow sozinho (sem depender de pop-up do site) se ainda não houver uma aba dele.
+    chrome.tabs.query({ url: ["https://labs.google/fx/*/tools/flow*", "https://flow.google.com/*"] }, (tabs) => {
+      if (tabs && tabs.length) { chrome.tabs.update(tabs[0].id, { active: true }); chrome.windows.update(tabs[0].windowId, { focused: true }); sendResponse({ ok: true, reused: true }); }
+      else chrome.tabs.create({ url: "https://labs.google/fx/pt/tools/flow" }, () => sendResponse({ ok: true }));
+    });
+    return true;
+  }
   if (message && message.type === "clipgringa-upload") {
     postVideo(message.upload, base64ToBlob(String(message.b64 || "")), String(message.file || ""))
       .then((r) => sendResponse(r))
