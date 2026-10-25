@@ -169,26 +169,35 @@ def ffprobe_video_size(video_path: Path) -> Tuple[int, int]:
     return int(width), int(height)
 
 
+def _parse_seconds(text: str) -> float | None:
+    for line in text.splitlines():
+        try:
+            value = float(line.strip())
+        except ValueError:
+            continue
+        if value > 0:
+            return value
+    return None
+
+
 def ffprobe_duration(video_path: Path) -> float:
-    result = run_ffmpeg_command(
-        [
-            "ffprobe",
-            "-v",
-            "error",
-            "-show_entries",
-            "format=duration",
-            "-of",
-            "default=noprint_wrappers=1:nokey=1",
-            str(video_path),
-        ],
-        timeout=60,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(f"Unable to read duration for {video_path}")
-    try:
-        return max(0.0, float(result.stdout.strip()))
-    except ValueError as exc:
-        raise RuntimeError(f"Invalid duration for {video_path}") from exc
+    """Duration in seconds. Some files (webm, screen recordings, odd mp4s) report
+    ``N/A`` for the container, so fall back to the streams and finally to a decode pass."""
+    for entries in ("format=duration", "stream=duration"):
+        result = run_ffmpeg_command(
+            ["ffprobe", "-v", "error", "-show_entries", entries, "-of", "default=noprint_wrappers=1:nokey=1", str(video_path)],
+            timeout=60,
+        )
+        if result.returncode == 0:
+            found = _parse_seconds(result.stdout)
+            if found is not None:
+                return found
+    # Last resort: decode to null and read the final timestamp.
+    result = run_ffmpeg_command(["ffmpeg", "-v", "error", "-i", str(video_path), "-f", "null", "-", "-progress", "pipe:1", "-nostats"], timeout=300)
+    stamps = re.findall(r"out_time_us=(\d+)", result.stdout or "")
+    if stamps and int(stamps[-1]) > 0:
+        return int(stamps[-1]) / 1_000_000
+    raise RuntimeError(f"Unable to read duration for {video_path}")
 
 
 def ffmpeg_escape_filter_value(value: str) -> str:
