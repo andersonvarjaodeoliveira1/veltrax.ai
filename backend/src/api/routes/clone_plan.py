@@ -228,6 +228,7 @@ def _context(data: dict[str, Any], need_cta: bool = False) -> dict[str, Any]:
         "cta": cta,
         "avatars": avatars,
         "objects": objects,
+        "changes": _text(data.get("changes"), 600),
         "mode": mode,
         "count": max(1, min(MAX_VARIATIONS, count)),
     }
@@ -369,8 +370,19 @@ def _fail() -> HTTPException:
     return HTTPException(status_code=502, detail="Could not generate this step. Try again.")
 
 
+def _changes_block(ctx: dict[str, Any]) -> str:
+    """Changes the member asked for in the chat ("troque o cenário", "ela fala mais devagar"...). Applies to everything written."""
+    text = ctx.get("changes") or ""
+    if not text:
+        return ""
+    return ("CHANGES REQUESTED BY THE MEMBER (highest priority, apply them to everything you write: scene, person, setting, wording and prompts; "
+            "keep the rest of the plan unchanged):\n" + text)
+
+
 async def stage_scenes(ctx: dict[str, Any], model: Any = None) -> list[dict[str, str]]:
     prompt = f"Reference transcript:\n{ctx['reference'] or '(not provided)'}\n\nNotes about the video:\n{ctx['notes'] or '(none)'}"
+    if _changes_block(ctx):
+        prompt += "\n\n" + _changes_block(ctx)
     n = ctx["scene_count"]
     out = await _run(scenes_system(n, bool(ctx["product"] or ctx["product_info"] or ctx["product_look"])) + lang_note(ctx) + SPEECH_LAW + (ctx.get("scene_note") or ""), _Scenes, prompt, model)
     scenes = [{"what": _text(s.what, 240), "line": apply_speech_law(_text(s.line, 300), ctx.get("language", "pt-BR"))} for s in out.items if s.line.strip()]
@@ -410,6 +422,8 @@ async def stage_variations(ctx: dict[str, Any], scenes: list[dict[str, str]], mo
     count = ctx["count"]
     avatars = "\n".join(f"- {a['name']}: {a['look'] or 'no description'}" for a in ctx["avatars"]) or "(none)"
     prompt = f"N = {count}\nAvatar mode: {ctx['mode']}\n\nScenes:\n{_scene_block(scenes)}\n\nAvatars:\n{avatars}"
+    if _changes_block(ctx):
+        prompt += "\n\n" + _changes_block(ctx)
     out = await _run(VARIATIONS_SYSTEM, _Variations, prompt, model)
     items = [
         {
@@ -465,14 +479,14 @@ async def _scene_prompts(system: str, scenes: list[dict[str, str]], variations: 
 
 async def stage_images(ctx: dict[str, Any], scenes: list[dict[str, str]], variations: list[dict[str, str]], model: Any = None):
     product = _product_block(ctx)
-    return await _scene_prompts(images_system(len(scenes), bool(product)) + (ctx.get("camera_note") or ""), scenes, variations, None, model, product, extra=_object_block(ctx))
+    return await _scene_prompts(images_system(len(scenes), bool(product)) + (ctx.get("camera_note") or ""), scenes, variations, None, model, product, extra="\n\n".join(x for x in (_object_block(ctx), _changes_block(ctx)) if x))
 
 
 async def stage_videos(ctx: dict[str, Any], scenes: list[dict[str, str]], variations: list[dict[str, str]], lines: list[list[str]], model: Any = None):
     product = _product_block(ctx)
     language = ctx.get("language", "pt-BR")
     lines = [[apply_speech_law(line, language) for line in row] for row in lines]
-    return await _scene_prompts(videos_system(len(scenes), bool(product), bool(ctx.get("structured"))) + lang_note(ctx) + SPEECH_LAW + (ctx.get("delivery") or ""), scenes, variations, lines, model, product, verbatim=bool(ctx.get("structured")), extra=_object_block(ctx))
+    return await _scene_prompts(videos_system(len(scenes), bool(product), bool(ctx.get("structured"))) + lang_note(ctx) + SPEECH_LAW + (ctx.get("delivery") or ""), scenes, variations, lines, model, product, verbatim=bool(ctx.get("structured")), extra="\n\n".join(x for x in (_object_block(ctx), _changes_block(ctx)) if x))
 
 
 @router.post("/generate")

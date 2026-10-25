@@ -28,6 +28,7 @@ type Project = {
   step: number;
   reference: string;
   notes: string;
+  changes: string;
   product: string;
   productInfo: string;
   productLook: string;
@@ -113,6 +114,7 @@ const EMPTY: Project = {
   step: 1,
   reference: "",
   notes: "",
+  changes: "",
   product: "",
   productInfo: "",
   productLook: "",
@@ -266,6 +268,7 @@ async function callStage(stage: Stage, proj: Project): Promise<{ items?: unknown
       stage,
       reference: proj.reference,
       notes: proj.notes,
+      changes: proj.changes ?? "",
       product: proj.product,
       product_info: proj.productInfo,
       product_look: proj.productLook,
@@ -1134,6 +1137,41 @@ export function CloneWizard() {
   // Quando tudo fica pronto (modo simples), leva a pessoa ao Flow sozinho, com uma barra avisando.
   const [redirectIn, setRedirectIn] = useState<number | null>(null);
   const [redirectBlocked, setRedirectBlocked] = useState(false);
+  // Chat "Quero mudar algo": ao abrir/escrever, a geração para; ao aplicar, os prompts são refeitos com a mudança e o Flow recebe o pacote novo.
+  const [changeText, setChangeText] = useState("");
+  const [paused, setPaused] = useState(false);
+  const [pendingChange, setPendingChange] = useState<string | null>(null);
+  const pauseForChange = () => {
+    if (paused) return;
+    stopRef.current = true;
+    setPaused(true);
+    try { window.postMessage({ source: "clipgringa-page", type: "flow-stop" }, window.location.origin); } catch { /* sem janela */ }
+  };
+  const applyChange = () => {
+    const text = changeText.trim();
+    if (!text) return;
+    pauseForChange();
+    setPendingChange(text);
+  };
+  useEffect(() => {
+    if (pendingChange === null || busy !== null || auto !== null) return;
+    const text = pendingChange;
+    setPendingChange(null);
+    setChangeText("");
+    setPaused(false);
+    try { window.sessionStorage.removeItem("gv-flow-redirected"); } catch { /* storage unavailable */ }
+    const merged = [projRef.current.changes, text].filter(Boolean).join(" | ").slice(0, 600);
+    const next = { ...projRef.current, changes: merged, scenes: [], mix: NO_MIX, variations: [], images: [], videos: [], approved: {}, checks: {}, gen: {}, final: {}, ctaLocked: false };
+    projRef.current = next;
+    setP(next);
+    setImgs({});
+    setAutoGo((n) => n + 1);
+  }, [pendingChange, busy, auto]); // eslint-disable-line react-hooks/exhaustive-deps
+  const resumeWithoutChange = () => {
+    setPaused(false);
+    setChangeText("");
+    setAutoGo((n) => n + 1);
+  };
   useEffect(() => { if (autoGo > 0) void runAll(!paid); }, [autoGo]); // eslint-disable-line react-hooks/exhaustive-deps
   const readyToFlow = simple && p.videos.length > 0 && p.ctaLocked;
   const redirectSig = readyToFlow ? p.variations.map((v) => v.title).join("|") : "";
@@ -1264,6 +1302,18 @@ export function CloneWizard() {
     return (
       <div className="space-y-5">
         {flowBanner}
+        {(hasReference || refFile || ready) && (
+          <section className="space-y-2 rounded-[18px] border border-border bg-card p-4" data-testid="change-box">
+            <label className="block text-sm font-medium" htmlFor="change-text">Quer mudar alguma coisa?</label>
+            <textarea id="change-text" value={changeText} onFocus={pauseForChange} onChange={(event) => setChangeText(event.target.value)} rows={2} maxLength={400}
+              placeholder="Ex.: troque o cenário para uma cozinha, a pessoa mais jovem, fale mais devagar" className={inputClass} />
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="button" size="sm" className="rounded-full" onClick={applyChange} disabled={!changeText.trim() || pendingChange !== null}>Aplicar a mudança</Button>
+              {paused && <Button type="button" size="sm" variant="outline" className="rounded-full" onClick={resumeWithoutChange}>Continuar sem mudar</Button>}
+              {paused && <span className="text-xs text-[#F5B454]">Pausado enquanto você escreve. A extensão para na etapa atual.</span>}
+            </div>
+          </section>
+        )}
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-xl font-semibold">Clonar um vídeo</h2>
@@ -1455,7 +1505,7 @@ export function CloneWizard() {
 
         {ready && (redirectIn !== null || redirectBlocked) && (
           <section role="status" className="space-y-2 rounded-[18px] border border-[#7B3FE4]/60 bg-[#7B3FE4]/15 p-4" data-testid="flow-redirect">
-            <p className="text-sm font-semibold">{redirectBlocked ? "A extensão não respondeu. Recarregue esta página (F5) e confira se a extensão 1.8.1 está ligada; ou abra o Flow pelo botão abaixo." : `Abrindo o Flow e enviando tudo em ${redirectIn}s…`}</p>
+            <p className="text-sm font-semibold">{redirectBlocked ? "A extensão não respondeu. Recarregue esta página (F5) e confira se a extensão 1.9.0 está ligada; ou abra o Flow pelo botão abaixo." : `Abrindo o Flow e enviando tudo em ${redirectIn}s…`}</p>
             <div className="h-1.5 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A98BFF] transition-all duration-1000" style={{ width: `${redirectBlocked ? 100 : ((1 - (redirectIn ?? 1)) / 1) * 100}%` }} /></div>
             <p className="text-xs text-muted-foreground">Tudo pronto. A extensão recebe o pacote, abre um projeto novo e gera as imagens e os vídeos sozinha. Você não precisa copiar nem colar nada.</p>
             <div className="flex gap-2">

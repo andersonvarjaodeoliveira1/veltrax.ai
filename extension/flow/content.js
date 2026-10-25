@@ -281,6 +281,7 @@
         lastError = err;
         if (!fresh) throw new Error(err);
       }
+      if (stopFlag) throw new Error("STOP");
       if (Date.now() > end) throw new Error("O Flow demorou demais para terminar.");
       await sleep(1500);
     }
@@ -724,7 +725,7 @@
       state.current = null; state.phase = ""; if (!left || stopFlag) autoRun = false; await persist();
       setNow(left === 0 ? `Tudo pronto em ${fmt((Date.now() - runAt) / 1000)}! Os vídeos foram baixados na pasta Downloads/ClipGringa e enviados ao ClipGringa.` : stopFlag ? "Parado. Clique em Começar para continuar de onde parou." : `Terminou com ${left} cena(s) pendente(s). Clique em Começar para tentar de novo.`);
     } finally {
-      running = false; setRunning(false); el("go").disabled = false; el("stop").disabled = true; state.phase = ""; tickClock(); render();
+      running = false; setRunning(false); window.setTimeout(() => takePending(), 500); el("go").disabled = false; el("stop").disabled = true; state.phase = ""; tickClock(); render();
     }
   }
 
@@ -791,6 +792,17 @@
     } catch (e) { setError(e && e.message ? e.message : ""); }
   }
   try { chrome.storage.onChanged.addListener((changes) => { if (changes[PENDING_KEY]) takePending(); }); } catch (_e) { /* ignore */ }
+
+  // O site pediu para parar (a pessoa abriu o chat de mudanças): termina de forma limpa e espera o pacote novo.
+  try {
+    chrome.storage.onChanged.addListener((changes) => {
+      const stop = changes["clipgringa-flow-stop-v1"];
+      if (!stop || !stop.newValue || Date.now() - stop.newValue.at > 15000) return;
+      stopFlag = true; autoRun = false;
+      persist().catch(() => undefined);
+      setNow("Pausado: você abriu o chat de mudanças. Quando aplicar, o pacote novo chega e eu recomeço sozinho.");
+    });
+  } catch (_e) { /* ignore */ }
 
   // Resultado do envio feito pelo plano B (download): atualiza o "no ClipGringa" da lista.
   try {

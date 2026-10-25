@@ -22,6 +22,12 @@
     window.postMessage({ source: "clipgringa-flow", type: "package-ack", ok }, window.location.origin);
   });
 
+  // O usuário abriu o chat de mudanças: avisa a aba do Flow para parar na etapa atual.
+  window.addEventListener("message", async (event) => {
+    if (event.source !== window || !event.data || event.data.source !== "clipgringa-page" || event.data.type !== "flow-stop") return;
+    try { await chrome.storage.local.set({ "clipgringa-flow-stop-v1": { at: Date.now() } }); } catch (_e) { /* extensão recarregada */ }
+  });
+
   // Andamento da geração no Flow, repassado para a página do ClipGringa.
   const PROGRESS = "clipgringa-flow-progress-v1";
   try {
