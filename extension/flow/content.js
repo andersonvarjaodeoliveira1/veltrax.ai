@@ -614,7 +614,8 @@
   }
 
   const FLOW_HOME = "https://labs.google/fx/pt/tools/flow";
-  const inProject = () => /\/project\//.test(location.pathname);
+  // Só conta como projeto a tela do projeto em si (não páginas antigas como /project/…/tool/…, que dão "App não encontrada").
+  const inProject = () => /\/project\/[^/]+\/?$/.test(location.pathname);
 
   const isNewProject = (b) => visible(b) && /(novo projeto|new project)/i.test(`${text(b)} ${b.getAttribute("aria-label") || ""}`.trim());
 
@@ -641,7 +642,13 @@
       return;
     }
     try {
-      const raw = el("pkg").value.trim() || state.raw || "";
+      let raw = el("pkg").value.trim() || state.raw || "";
+      if (!raw) {
+        // Sem pacote no painel: usa o último que o ClipGringa enviou (até 6 horas).
+        const last = (await chrome.storage.local.get("clipgringa-flow-last-v1"))["clipgringa-flow-last-v1"];
+        if (last && last.raw && Date.now() - last.at < 6 * 3600 * 1000) { raw = last.raw.trim(); uploadInfo = last.upload || uploadInfo; el("pkg").value = raw; }
+      }
+      if (!raw) throw new Error("Ainda não recebi o pacote. Volte ao ClipGringa (Clonar vídeo) e deixe chegar em “Tudo pronto”; ele envia sozinho para cá.");
       parsePackage(raw); // define o modelo pedido pelo pacote
       if (!state.jobs.length || raw !== (state.raw || "")) {
         const parsed = parsePackage(raw);

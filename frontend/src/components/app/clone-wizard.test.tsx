@@ -401,7 +401,7 @@ it("simple mode: upload one video and everything is prepared automatically, read
   expect(calls[3].body.keyword).toBe("QUERO");
 
   await user.click(screen.getByRole("button", { name: /Enviar para o Flow/ }));
-  expect(open).toHaveBeenCalledWith(expect.stringContaining("flow.google.com"), "_blank", "noopener");
+  await waitFor(() => expect(open).toHaveBeenCalledWith(expect.stringContaining("labs.google"), "_blank", "noopener"), { timeout: 4000 });
   const pack = JSON.parse(await navigator.clipboard.readText());
   expect(pack.videos).toHaveLength(2);
 

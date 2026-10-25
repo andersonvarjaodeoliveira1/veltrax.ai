@@ -70,7 +70,6 @@ type FlowProgress = {
 };
 const fmtClock = (sec: number) => { const s = Math.max(0, Math.round(sec)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
 const FLOW_HOME_URL = "https://labs.google/fx/pt/tools/flow";
-const FLOW_TOOL_URL = "https://flow.google.com/project/50e752e7-9a93-4477-8e3a-9bd266ec636b/tool/fccd23dc-ee0d-437a-9f45-a5ad87ccefce";
 // Créditos do Flow por geração de 8s (conta sem Lower Priority). Fonte: support.google.com/flow/answer/16526234. Podem mudar.
 const NEXT_HINTS = [
   "separe a referência em cenas (botão “Separar em cenas”) e, se escolheu variar a copy, gere os ganchos, corpos e CTAs.",
@@ -1155,8 +1154,7 @@ export function CloneWizard() {
     const sendToFlow = () => {
       markSent();
       void copy("flow-send", flowPackage());
-      pushPackage(flowPackage());
-      window.open(FLOW_TOOL_URL, "_blank", "noopener");
+      void pushPackage(flowPackage()).then((ok) => { if (!ok) window.open(FLOW_HOME_URL, "_blank", "noopener"); });
     };
     const assembling_ = Object.values(built).some((b) => b.state === "running");
     return (

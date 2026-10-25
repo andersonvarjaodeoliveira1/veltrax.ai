@@ -14,6 +14,7 @@
       const up = event.data.upload;
       const upload = up && typeof up.url === "string" && typeof up.token === "string" && /^https:\/\//.test(up.url)
         ? { url: up.url, token: up.token, package: String(up.package || "").slice(0, 120) } : null;
+      await chrome.storage.local.set({ "clipgringa-flow-last-v1": { raw: String(event.data.raw || ""), at: Date.now(), upload } });
       await chrome.storage.local.set({ [PENDING]: { raw: String(event.data.raw || ""), at: Date.now(), upload } });
       ok = true;
       try { chrome.runtime.sendMessage({ type: "clipgringa-open-flow" }, () => void chrome.runtime.lastError); } catch (_e) { /* ignore */ }
