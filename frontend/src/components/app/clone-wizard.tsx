@@ -1278,6 +1278,9 @@ export function CloneWizard() {
                     <Group label="Quantas cenas por vídeo">
                       <Chips label="Quantas cenas" value={p.sceneCount} onPick={chooseScenes} options={[1, 2, 3, 4, 5, 6].map((n) => ({ value: n, text: n === 1 ? "1 cena" : `${n} cenas` }))} />
                     </Group>
+                    <Group label="Modelo do Flow" hint="Lower Priority não gasta créditos. Os outros modelos gastam créditos do seu Flow.">
+                      {modelChooser()}
+                    </Group>
                     <p className="rounded-[12px] bg-[#7B3FE4]/10 px-4 py-3 text-sm text-muted-foreground" data-testid="qty-summary">
                       <span className="font-medium text-foreground">{p.count} {p.count === 1 ? "vídeo" : "vídeos"} × {p.sceneCount} {p.sceneCount === 1 ? "cena" : "cenas"} = {p.count * p.sceneCount} cenas</span> · cada vídeo fica com cerca de {p.sceneCount * 8} segundos.
                     </p>
@@ -1608,6 +1611,9 @@ export function CloneWizard() {
                   <Chips label="Como gerar" value={mode} onPick={chooseMode} options={[{ value: "free" as const, text: "Flow · Lower Priority (sem custo)" }]} />
                 </Group>
               )}
+              <Group label="Modelo do Flow" hint="Escolha o modelo que a extensão usa. Fica salvo para os próximos vídeos.">
+                {modelChooser()}
+              </Group>
               <Group label="Idioma da fala" hint="A voz e os textos do vídeo saem neste idioma.">
                 <Chips label="Idioma da fala" value={p.language} onPick={chooseLanguage} disabled={working} options={LANGUAGES.map((l) => ({ value: l.value, text: l.text }))} />
               </Group>
