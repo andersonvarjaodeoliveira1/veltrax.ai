@@ -11,7 +11,7 @@
   const STORE_KEY = "clipgringa-flow-state-v1";
   const IMAGE_WAIT_MS = 4 * 60 * 1000;
   const VIDEO_WAIT_MS = 25 * 60 * 1000;
-  const RETRIES = 2;
+  const RETRIES = 3;
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -287,21 +287,45 @@
   }
 
   /* ---------- primeiro quadro (Início) ---------- */
+  async function realClick(node) {
+    const r = node.getBoundingClientRect();
+    try {
+      const res = await chrome.runtime.sendMessage({ type: "clipgringa-click", x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) });
+      if (res && res.ok) return;
+    } catch (_) { /* plano B */ }
+    node.click();
+  }
+  const pickerItems = () => {
+    const root = overlay();
+    const direct = $$(".asset-item", root).filter(visible);
+    if (direct.length) return direct;
+    const alt = $$("[class*=asset-item], [class*=asset_item], [role=option], [role=listitem]", root).filter((n) => visible(n) && n.querySelector("img"));
+    if (alt.length) return alt;
+    return null;
+  };
   async function chooseStartFrame(imageSrc) {
     const trigger = await waitFor(() => $$(".frame-trigger").find(visible), 6000);
     if (!trigger) throw new Error("Não achei o campo “Início” do Flow (modo Frames).");
-    trigger.click();
-    const items = await waitFor(() => { const list = $$(".asset-item", overlay()).filter(visible); return list.length ? list : null; }, 8000);
-    if (!items) throw new Error("A lista de imagens do Flow não abriu.");
+    let items = null;
+    for (let attempt = 0; attempt < 3 && !items; attempt += 1) {
+      trigger.scrollIntoView({ block: "center" });
+      if (attempt === 0) trigger.click(); else await realClick(trigger);
+      items = await waitFor(pickerItems, 5000, 250);
+    }
+    if (!items) {
+      const seen = $$("[class]", overlay()).filter(visible).slice(0, 12).map((n) => String(n.className).split(" ")[0]).filter(Boolean);
+      throw new Error(`A lista de imagens do Flow não abriu (vi: ${[...new Set(seen)].join(", ") || "nada"}).`);
+    }
     await sleep(600);
-    let target = $$(".asset-item", overlay()).find((i) => $$("img", i.parentElement || i).some((im) => baseSrc(im.src) === imageSrc));
-    if (!target) target = $$(".asset-item", overlay()).filter(visible)[0];
+    const all = pickerItems() || [];
+    let target = all.find((i) => $$("img", i.parentElement || i).some((im) => baseSrc(im.src) === imageSrc));
+    if (!target) target = all[0];
     target.click();
     await sleep(500);
     const add = await waitFor(() => $$("button", overlay()).find((b) => visible(b) && /detail-add|include/i.test(b.className)), 5000);
     if (!add) throw new Error("Não achei o botão “Incluir no comando”.");
     add.click();
-    await waitFor(() => !$$(".asset-item", overlay()).some(visible), 5000);
+    await waitFor(() => !pickerItems(), 5000);
     await sleep(500);
   }
 
@@ -405,6 +429,9 @@
   .stp.ok{color:#5bd69a;border-color:rgba(91,214,154,.35)}
   .stp.ok i{border-color:#5bd69a;background:#5bd69a;color:#0a0814}
   .doing{font-weight:700;font-size:14px;margin-bottom:2px}
+  .pbar{height:8px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden;width:100%}
+  .pbar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#8B5CF6,#A98BFF);transition:width .8s ease}
+  .plabel{display:flex;justify-content:space-between;width:100%;margin-top:6px}
   .clock{font:600 11px ui-monospace,monospace;color:#c9bbfa;margin-top:8px;display:flex;gap:10px;flex-wrap:wrap}
   .clock span{padding:3px 8px;border-radius:99px;background:rgba(123,63,228,.14);border:1px solid rgba(169,139,255,.25)}
   .run .bar:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.35),transparent);animation:scan 1.6s linear infinite}
@@ -527,7 +554,12 @@
     const avg = avgJobSeconds();
     const thisJob = (Date.now() - jobAt) / 1000;
     const remaining = Math.max(0, left - 1) * avg + Math.max(30, avg - thisJob);
-    clock.innerHTML = `<span>Etapa: ${fmt((Date.now() - phaseAt) / 1000)}</span><span>Esta cena: ${fmt(thisJob)}</span><span>Faltam ${fmtMin(remaining)} · ${left} cena(s)</span><span>No total: ${fmt((Date.now() - runAt) / 1000)}</span>`;
+    const total = state.jobs.length || 1;
+    const doneN = total - left;
+    const within = Math.min(0.95, Math.max(0, (idx + 0.5) / PHASES.length));
+    const pct = Math.min(99, Math.round(((doneN + within) / total) * 100));
+    const nth = Math.min(total, doneN + 1);
+    clock.innerHTML = `<div class="pbar"><i style="width:${pct}%"></i></div><div class="plabel"><span>Cena ${nth} de ${total}</span><span>${pct}%</span></div>`;
   }
   window.setInterval(() => { if (running) tickClock(); }, 1000);
 
@@ -554,14 +586,16 @@
     let lastError;
     for (let attempt = 0; attempt <= RETRIES; attempt += 1) {
       if (stopFlag) throw new Error("STOP");
-      try { return await fn(); } catch (e) {
+      try { return await fn(attempt); } catch (e) {
         lastError = e;
         if (e.message === "STOP") throw e;
         if (attempt < RETRIES) {
-          const wait = 20 + attempt * 40;
+          const limited = /limite|limit|quota|cota|muitas|too many|esperar|wait|try again|tente novamente/i.test(String(e.message));
+          const wait = limited ? 20 + attempt * 30 : 3;
+          const why = limited ? "o Flow pediu para esperar" : `não deu certo (${String(e.message).slice(0, 90)})`;
           for (let s = wait; s > 0; s -= 1) {
             if (stopFlag) throw new Error("STOP");
-            setNow(`${label}: o Flow pediu para esperar. Tentando de novo em ${s}s (tentativa ${attempt + 2} de ${RETRIES + 1})…`);
+            setNow(`${label}: ${why}. Tentando de novo em ${s}s (tentativa ${attempt + 2} de ${RETRIES + 1})…`);
             await sleep(1000);
           }
         }
@@ -588,10 +622,14 @@
 
     // 2) vídeo: anima a imagem aprovada, em Lower Priority
     setPhase("vídeo");
-    const video = await withRetry(`${label} (vídeo)`, async () => {
+    const video = await withRetry(`${label} (vídeo)`, async (attemptNo) => {
       setNow(isLowerPriority() ? `${label}: escolhendo Veo 3.1 Lite [Lower Priority] (0 créditos)…` : `${label}: escolhendo o modelo ${flowModel} (gasta créditos do Flow)…`);
       await configure("video");
-      await chooseStartFrame(image.src);
+      try { await chooseStartFrame(image.src); } catch (pickErr) {
+        // Última tentativa: sem escolher o quadro inicial, o Flow ainda anima pelo texto (a imagem não entra, mas o vídeo sai).
+        if (/vi:|Início|Incluir/.test(String(pickErr.message)) && attemptNo >= RETRIES) setNow(`${label}: não consegui escolher a imagem inicial, animando só pelo texto.`);
+        else throw pickErr;
+      }
       await setPrompt(job.videoPrompt);
       const before = tileKeys();
       await pressGenerate();

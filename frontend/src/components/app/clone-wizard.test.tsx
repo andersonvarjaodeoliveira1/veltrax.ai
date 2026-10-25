@@ -505,7 +505,7 @@ describe("Passos do começo", () => {
     window.localStorage.clear();
     render(<CloneWizard />);
     const quest = await screen.findByTestId("start-quest");
-    expect(quest).toHaveTextContent("Passo 1 de 4");
+    expect(quest).toHaveTextContent("Passo 1 de 5");
     expect(screen.getByRole("button", { name: /Escolher o vídeo que quero clonar/ })).toBeInTheDocument();
   });
 });

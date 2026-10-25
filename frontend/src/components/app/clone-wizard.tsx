@@ -68,7 +68,6 @@ type FlowProgress = {
   current: { vi: number; si: number } | null; startedAt: number; jobStartedAt: number; dur: Record<string, number>;
   jobs: { key: string; vi: number; si: number; file: string; done: boolean; error: string }[];
 };
-const fmtClock = (sec: number) => { const s = Math.max(0, Math.round(sec)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
 // Vídeo já enviado e transcrito antes? Reconhece pelo "RG" do arquivo (tamanho, nome e amostras do começo e do fim) e pula o envio.
 const REF_CACHE_KEY = "cg-ref-cache-v1";
 async function videoFingerprint(file: File): Promise<string | null> {
@@ -968,12 +967,6 @@ export function CloneWizard() {
     try { window.postMessage({ source: "clipgringa-page", type: "progress?" }, window.location.origin); } catch { /* sem janela */ }
     return () => window.removeEventListener("message", onMsg);
   }, []);
-  const [nowTick, setNowTick] = useState(() => Date.now());
-  useEffect(() => {
-    if (!flowProg?.running) return;
-    const id = window.setInterval(() => setNowTick(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, [flowProg?.running]);
   const markSent = () => { try { window.localStorage.setItem(SENT_KEY, "1"); } catch { /* storage unavailable */ } };
   function reset() {
     try { window.localStorage.removeItem(SENT_KEY); window.localStorage.removeItem(TOUCH_KEY); } catch { /* storage unavailable */ }
@@ -1184,12 +1177,6 @@ export function CloneWizard() {
       setPendingFile(null);
       if (file) await startSimple(file); else await runAll(true);
     };
-    // Ao apertar para gerar, pergunta (uma vez) se a pessoa quer falar do produto.
-    const begin = (file: File | null) => {
-      if (hasProduct) { void run(file); return; }
-      setPendingFile(file);
-      setAskProduct(true);
-    };
     const sendToFlow = () => {
       markSent();
       void copy("flow-send", flowPackage());
@@ -1283,9 +1270,21 @@ export function CloneWizard() {
               {([
                 ["2", "Idioma da fala", "A voz e os textos do vídeo saem neste idioma.",
                   <Chips key="l" label="Idioma da fala" value={p.language} onPick={chooseLanguage} options={LANGUAGES.map((l) => ({ value: l.value, text: l.text }))} />],
-                ["3", "Palavra-chave da CTA", "O que a pessoa comenta para receber o link.",
+                ["3", "Quantos vídeos e quantas cenas", "Cada cena tem cerca de 8 segundos. Mais vídeos e cenas demoram mais no Flow.",
+                  <div key="q" className="space-y-4">
+                    <Group label="Quantos vídeos">
+                      <Chips label="Quantos vídeos" value={p.count} onPick={(count) => patch({ count })} options={COUNT_OPTIONS.map((n) => ({ value: n, text: String(n) }))} />
+                    </Group>
+                    <Group label="Quantas cenas por vídeo">
+                      <Chips label="Quantas cenas" value={p.sceneCount} onPick={chooseScenes} options={[1, 2, 3, 4, 5, 6].map((n) => ({ value: n, text: n === 1 ? "1 cena" : `${n} cenas` }))} />
+                    </Group>
+                    <p className="rounded-[12px] bg-[#7B3FE4]/10 px-4 py-3 text-sm text-muted-foreground" data-testid="qty-summary">
+                      <span className="font-medium text-foreground">{p.count} {p.count === 1 ? "vídeo" : "vídeos"} × {p.sceneCount} {p.sceneCount === 1 ? "cena" : "cenas"} = {p.count * p.sceneCount} cenas</span> · cada vídeo fica com cerca de {p.sceneCount * 8} segundos.
+                    </p>
+                  </div>],
+                ["4", "Palavra-chave da CTA", "O que a pessoa comenta para receber o link.",
                   <KeywordPicker key="k" keyword={p.keyword} keepCase={p.keepCase} placeholder="Ou escreva outra palavra" onChange={(keyword) => patch({ keyword })} onKeepCase={(keepCase) => patch({ keepCase, keyword: keepCase ? p.keyword : p.keyword.toUpperCase() })} />],
-                ["4", "Frase final", "O que a pessoa ouve no fim. Use {KEYWORD} onde vai a palavra-chave.",
+                ["5", "Frase final", "O que a pessoa ouve no fim. Use {KEYWORD} onde vai a palavra-chave.",
                   <div key="c" className="space-y-3">
                     <Chips label="Frases prontas" value={p.cta} onPick={(cta) => patch({ cta })} options={(CTA_BY_LANG[p.language] ?? CTA_PRESETS).map((c) => ({ value: c, text: c.replace("{KEYWORD}", "…") }))} />
                     <input value={p.cta} onChange={(event) => patch({ cta: event.target.value })} maxLength={200} aria-label="Escreva a sua frase final" placeholder="Ou escreva a sua frase, ex.: Comente {KEYWORD} e receba o guia" className={inputClass} />
@@ -1318,7 +1317,7 @@ export function CloneWizard() {
               <div className="space-y-4" data-testid="start-quest">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-xs font-semibold">
-                    <span className="text-[#A98BFF]">Passo 1 de 4 · Escolher o vídeo</span>
+                    <span className="text-[#A98BFF]">Passo 1 de 5 · Escolher o vídeo</span>
                     <span>Depois: idioma, palavra-chave e frase final</span>
                   </div>
                   <div role="progressbar" aria-label="Passos" aria-valuemin={0} aria-valuemax={4} aria-valuenow={0} className="h-2.5 overflow-hidden rounded-full bg-border">
@@ -1362,24 +1361,6 @@ export function CloneWizard() {
                   </summary>
                   <div className="mt-4 border-t border-white/10 pt-4">{productFields}</div>
                 </details>
-                <details className="group rounded-[18px] border border-white/10 bg-card p-4 text-sm open:sm:col-span-2 open:border-[#7B3FE4]/50">
-                  <summary className="flex cursor-pointer list-none items-center gap-3">
-                    <span aria-hidden className="grid size-10 shrink-0 place-items-center rounded-[12px] bg-white/10 text-lg">🎚️</span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block font-medium">Ajustes (opcional)</span>
-                      <span className="block text-xs text-muted-foreground">Quantos vídeos e quantas cenas</span>
-                    </span>
-                    <span aria-hidden className="text-muted-foreground transition-transform group-open:rotate-180">⌄</span>
-                  </summary>
-                  <div className="mt-4 space-y-4 border-t border-white/10 pt-4">
-                    <Group label="Quantos vídeos">
-                      <Chips label="Quantos vídeos" value={p.count} onPick={(count) => patch({ count })} options={COUNT_OPTIONS.map((n) => ({ value: n, text: String(n) }))} />
-                    </Group>
-                    <Group label="Quantas cenas" hint="Cada cena tem cerca de 8 segundos.">
-                      <Chips label="Quantas cenas" value={p.sceneCount} onPick={chooseScenes} options={[1, 2, 3, 4, 5, 6].map((n) => ({ value: n, text: n === 1 ? "1 cena" : `${n} cenas` }))} />
-                    </Group>
-                  </div>
-                </details>
               </div>
             </div>
           </section>
@@ -1387,17 +1368,12 @@ export function CloneWizard() {
 
         {ready && flowProg && flowProg.total > 0 && Date.now() - flowProg.at < 6 * 60 * 60 * 1000 && (() => {
           const pct = Math.round((flowProg.done / flowProg.total) * 100);
-          const durs = Object.values(flowProg.dur || {}).filter((v) => v > 0);
-          const avg = durs.length ? durs.reduce((a, b) => a + b, 0) / durs.length : 240;
-          const left = flowProg.total - flowProg.done;
-          const jobSec = flowProg.running && flowProg.jobStartedAt ? (nowTick - flowProg.jobStartedAt) / 1000 : 0;
-          const eta = flowProg.running ? Math.max(0, left - 1) * avg + Math.max(30, avg - jobSec) : 0;
           const videos = Array.from(new Set(flowProg.jobs.map((j) => j.vi))).sort((a, b) => a - b);
           return (
             <section role="status" className="cg-orbit space-y-3 rounded-[18px] border border-[#7B3FE4]/60 bg-[#7B3FE4]/10 p-4" data-testid="flow-progress">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm font-semibold">{flowProg.done === flowProg.total ? "Tudo pronto no Flow!" : flowProg.running ? "Gerando no Flow (automático)" : "Geração pausada"}</p>
-                <p className="text-xs text-muted-foreground">{flowProg.done}/{flowProg.total} cenas · {pct}%{flowProg.running && flowProg.startedAt ? ` · ${fmtClock((nowTick - flowProg.startedAt) / 1000)} no total` : ""}{flowProg.running && left > 0 ? ` · faltam ~${eta < 90 ? "2" : Math.round(eta / 60)} min` : ""}</p>
+                <p className="text-xs text-muted-foreground">{flowProg.done}/{flowProg.total} cenas · {pct}%</p>
               </div>
               <div className="h-2 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A98BFF] transition-all duration-700" style={{ width: `${pct}%` }} /></div>
               {flowProg.now && <p className="text-xs">{flowProg.now}</p>}
@@ -1405,12 +1381,11 @@ export function CloneWizard() {
                 {videos.map((vi) => {
                   const mine = flowProg.jobs.filter((j) => j.vi === vi);
                   const doneN = mine.filter((j) => j.done).length;
-                  const secs = mine.reduce((a, j) => a + (flowProg.dur?.[j.key] || 0), 0);
                   const active = flowProg.current?.vi === vi && flowProg.running;
                   return (
                     <li key={vi} className="flex items-center justify-between gap-2 rounded-[10px] border border-border px-3 py-1.5">
                       <span>Vídeo {String(vi + 1).padStart(2, "0")} · {doneN}/{mine.length} cenas{active && flowProg.phase ? ` · ${flowProg.phase}` : ""}</span>
-                      <span className="text-muted-foreground">{doneN === mine.length ? `pronto em ${fmtClock(secs)}` : active ? `${fmtClock(jobSec)} nesta cena` : "na fila"}</span>
+                      <span className="text-muted-foreground">{doneN === mine.length ? "pronto" : active ? "gerando…" : "na fila"}</span>
                     </li>
                   );
                 })}
@@ -1422,7 +1397,7 @@ export function CloneWizard() {
 
         {ready && (redirectIn !== null || redirectBlocked) && (
           <section role="status" className="space-y-2 rounded-[18px] border border-[#7B3FE4]/60 bg-[#7B3FE4]/15 p-4" data-testid="flow-redirect">
-            <p className="text-sm font-semibold">{redirectBlocked ? "A extensão não respondeu. Recarregue esta página (F5) e confira se a extensão 1.7.2 está ligada; ou abra o Flow pelo botão abaixo." : `Abrindo o Flow e enviando tudo em ${redirectIn}s…`}</p>
+            <p className="text-sm font-semibold">{redirectBlocked ? "A extensão não respondeu. Recarregue esta página (F5) e confira se a extensão 1.8.0 está ligada; ou abra o Flow pelo botão abaixo." : `Abrindo o Flow e enviando tudo em ${redirectIn}s…`}</p>
             <div className="h-1.5 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A98BFF] transition-all duration-1000" style={{ width: `${redirectBlocked ? 100 : ((3 - (redirectIn ?? 3)) / 3) * 100}%` }} /></div>
             <p className="text-xs text-muted-foreground">Tudo pronto. A extensão recebe o pacote, abre um projeto novo e gera as imagens e os vídeos sozinha. Você não precisa copiar nem colar nada.</p>
             <div className="flex gap-2">
