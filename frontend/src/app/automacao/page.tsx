@@ -245,9 +245,9 @@ export default function AutomationPage() {
       )}
 
       <nav aria-label="Etapas" className="space-y-2">
-        <div ref={orbitRef} className="cg-orbit relative w-full sm:w-auto sm:min-w-[320px]" style={{ "--cg-r": "20px" } as React.CSSProperties}>
+        <div ref={orbitRef} className="cg-orbit relative w-full sm:w-fit sm:min-w-[320px]" style={{ "--cg-r": "20px" } as React.CSSProperties}>
         <button type="button" onClick={() => setTab(MAIN_TAB.key)} aria-current={tab === MAIN_TAB.key}
-          className={cn("relative w-full rounded-[18px] border px-5 py-4 text-left transition-all sm:w-auto sm:min-w-[320px]",
+          className={cn("relative block w-full rounded-[18px] border px-5 py-4 text-left transition-all",
             tab === MAIN_TAB.key ? "border-transparent bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white shadow-[0_12px_30px_-14px_#7B3FE4]" : "border-[#A98BFF]/50 bg-card hover:border-[#A98BFF]")}>
           <span className="flex items-center gap-2 text-base font-semibold">
             {MAIN_TAB.label}
