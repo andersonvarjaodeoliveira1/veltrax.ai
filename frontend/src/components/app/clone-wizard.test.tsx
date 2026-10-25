@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CloneWizard } from "./clone-wizard";
 
@@ -524,17 +524,6 @@ it("sends the objects the member wants in every take", async () => {
   expect(calls[0].body.objects).toEqual([{ name: "bandeira dos EUA", place: "Na parede", position: "side" }]);
 });
 
-it("opens the video picker when the main button signals it", async () => {
-  mockApi();
-  window.localStorage.setItem("gv-clonagem-view", "simple");
-  const click = vi.spyOn(HTMLInputElement.prototype, "click");
-  const { rerender } = render(<CloneWizard pickSignal={0} />);
-  await screen.findByLabelText("Escolher o vídeo para clonar");
-  rerender(<CloneWizard pickSignal={1} />);
-  await waitFor(() => expect(click).toHaveBeenCalled());
-  click.mockRestore();
-});
-
 it("does not ask for the video again once it was sent, and offers to retry", async () => {
   vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ detail: "Could not create the captions. Try again." }), { status: 502 })));
   window.localStorage.setItem("gv-clonagem-view", "simple");
@@ -543,4 +532,15 @@ it("does not ask for the video again once it was sent, and offers to retry", asy
   await user.upload(await screen.findByLabelText("Escolher o vídeo para clonar"), new File(["x"], "ref.mp4", { type: "video/mp4" }));
   expect(await screen.findByRole("button", { name: "Tentar de novo" })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /Escolher o vídeo que quero clonar/ })).not.toBeInTheDocument();
+});
+
+it("runs the light around the choose-video button (even with reduced motion)", async () => {
+  vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame", "performance"] });
+  vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} }));
+  window.localStorage.setItem("gv-clonagem-view", "simple");
+  const { container } = render(<CloneWizard />);
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+  const orbit = container.querySelector(".cg-orbit") as HTMLElement;
+  expect(orbit.style.getPropertyValue("--cg-angle")).toMatch(/deg$/);
+  vi.useRealTimers();
 });

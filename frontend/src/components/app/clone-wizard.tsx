@@ -354,7 +354,7 @@ function Group({ label, children, hint }: { label: string; children: React.React
   );
 }
 
-export function CloneWizard({ pickSignal = 0 }: { pickSignal?: number } = {}) {
+export function CloneWizard() {
   const [ready, setReady] = useState(false);
   const [p, setP] = useState<Project>(EMPTY);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -390,14 +390,17 @@ export function CloneWizard({ pickSignal = 0 }: { pickSignal?: number } = {}) {
   const [imgs, setImgs] = useState<Record<string, string>>({});
   const [now, setNow] = useState(() => Date.now());
   const fileRef = useRef<HTMLInputElement>(null);
-  // O botão grande "Clonar um vídeo" já abre a escolha do vídeo (sem projeto lido ainda).
+  // Luz que corre em volta do botão de escolher o vídeo (mesma técnica do chat do influencer).
+  const orbitRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!pickSignal) return;
-    const timer = window.setTimeout(() => {
-      if (projRef.current.reference.trim().length < 20) fileRef.current?.click();
-    }, 50);
-    return () => window.clearTimeout(timer);
-  }, [pickSignal]);
+    let frame = 0; const begin = performance.now();
+    const loop = (time: number) => {
+      orbitRef.current?.style.setProperty("--cg-angle", `${(((time - begin) / 4500) * 360) % 360}deg`);
+      frame = window.requestAnimationFrame(loop);
+    };
+    frame = window.requestAnimationFrame(loop);
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
 
   const savedRef = useRef<string | null>(null);
   useEffect(() => {
@@ -1225,9 +1228,16 @@ export function CloneWizard({ pickSignal = 0 }: { pickSignal?: number } = {}) {
                   </div>
                 </div>
                 <div className="gt-pop space-y-3">
-                  <Button type="button" size="lg" className="gt-btn3d w-full rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] py-7 text-base text-white" onClick={() => fileRef.current?.click()}>
-                    <Upload className="size-5" /> Escolher o vídeo que quero clonar
-                  </Button>
+                  <div ref={orbitRef} className="cg-orbit relative w-full" style={{ "--cg-r": "22px" } as React.CSSProperties}>
+                    <button type="button" onClick={() => fileRef.current?.click()}
+                      className="relative flex w-full items-center gap-4 rounded-[22px] border border-transparent bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-6 py-6 text-left text-white shadow-[0_14px_36px_-14px_#7B3FE4] transition-transform hover:-translate-y-0.5">
+                      <span aria-hidden className="grid size-12 shrink-0 place-items-center rounded-full bg-white/20"><Upload className="size-6" /></span>
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-2 text-lg font-semibold">Escolher o vídeo que quero clonar <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-semibold">BETA</span></span>
+                        <span className="block text-sm opacity-90">suba o vídeo e o resto é automático</span>
+                      </span>
+                    </button>
+                  </div>
                   <ol className="space-y-1 text-sm text-muted-foreground">
                     <li>1. Você escolhe o vídeo (só uma vez).</li>
                     <li>2. Confere idioma, palavra-chave e frase final.</li>

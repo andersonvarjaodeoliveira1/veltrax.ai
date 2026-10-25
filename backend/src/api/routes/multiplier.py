@@ -833,6 +833,18 @@ async def create_caption_draft(request: Request, db: AsyncSession = Depends(get_
             raise HTTPException(status_code=400, detail="Could not read this video")
         if duration > MAX_SOURCE_SECONDS:
             raise HTTPException(status_code=400, detail="The creative is too long (max 10 minutes)")
+        has_audio = True
+        try:
+            has_audio = bool(await run_in_thread(ffprobe_has_audio, video))
+        except Exception:
+            has_audio = True
+        if not has_audio:
+            # Vídeo mudo (legenda queimada na imagem): a IA lê o texto que aparece nos quadros.
+            lines = await _read_onscreen_text(video, duration, folder)
+            if not lines:
+                raise HTTPException(status_code=422, detail="No speech was found in this video")
+            (folder / "meta.json").write_text(json.dumps({"user_id": user_id, "video": video.name}))
+            return {"draft_id": draft_id, "duration": duration, "lines": lines, "source": "onscreen"}
         try:
             words = await run_in_thread(transcribe_words, video)
         except Exception as exc:
@@ -845,6 +857,43 @@ async def create_caption_draft(request: Request, db: AsyncSession = Depends(get_
         shutil.rmtree(folder, ignore_errors=True)
         raise
     return {"draft_id": draft_id, "duration": duration, "lines": lines_from_words(words)}
+
+
+class _OnScreenText(BaseModel):
+    lines: list[str] = Field(default_factory=list)
+
+
+async def _read_onscreen_text(video: Path, duration: float, folder: Path) -> list[dict[str, Any]]:
+    """Silent video: extracts evenly spaced frames and asks the vision model to read the subtitles burned into them."""
+    from pydantic_ai import BinaryContent
+
+    from .clone_plan import _normalize_photo, _run_parts
+
+    count = max(4, min(24, int(duration // 6) or 4))
+    frames = folder / "frames"
+    frames.mkdir(parents=True, exist_ok=True)
+    rate = max(0.05, count / max(duration, 1.0))
+    try:
+        await run_in_thread(run_ffmpeg_command, ["ffmpeg", "-y", "-i", str(video), "-vf", f"fps={rate:.4f},scale=540:-2", "-frames:v", str(count), "-q:v", "5", str(frames / "f_%03d.jpg")])
+    except Exception:
+        logger.warning("frame extraction failed", exc_info=True)
+        return []
+    parts: list[Any] = [
+        "These frames come from one short video, in order. The video has no audio: the script is shown as subtitles burned into the picture. "
+        "Read those subtitles and write the script in order as short spoken sentences, in the same language as the subtitles, without repeating a sentence that "
+        "appears in several frames and without describing the picture. If the frames have no readable text, return an empty list."
+    ]
+    for frame in sorted(frames.glob("f_*.jpg")):
+        fixed = _normalize_photo(frame.read_bytes(), 540)
+        if fixed:
+            parts.append(BinaryContent(data=fixed[0], media_type=fixed[1]))
+    shutil.rmtree(frames, ignore_errors=True)
+    if len(parts) < 2:
+        return []
+    out = await _run_parts("You read subtitles burned into video frames.", _OnScreenText, parts)
+    sentences = [" ".join(str(item).split()) for item in out.lines if str(item).strip()][:60]
+    step = duration / max(len(sentences), 1)
+    return [{"text": text_, "start": round(i * step, 3), "end": round((i + 1) * step, 3)} for i, text_ in enumerate(sentences)]
 
 
 @router.post("/variations")
