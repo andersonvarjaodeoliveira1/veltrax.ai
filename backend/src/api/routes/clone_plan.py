@@ -159,6 +159,22 @@ class _PromptSets(BaseModel):
     items: list[_Prompts]
 
 
+MAX_OBJECTS = 3
+OBJECT_POSITIONS = {"center": "in the center of the frame", "side": "on the side of the frame", "any": "anywhere in the frame, in the center or on the side"}
+
+
+def _object_block(ctx: dict[str, Any]) -> str:
+    """Objects the member wants visible in every take (e.g. a US flag). Empty when none."""
+    rows = []
+    for item in ctx.get("objects") or []:
+        place = f", {item['place']}" if item.get("place") else ""
+        rows.append(f"- {item['name']}{place}, {OBJECT_POSITIONS.get(item.get('position'), OBJECT_POSITIONS['any'])}")
+    if not rows:
+        return ""
+    return ("OBJECTS IN EVERY SCENE: each object below must be clearly visible in the frame of every scene, looking exactly the same in all of them. "
+            "Name it explicitly in the scene description of every prompt, in the placement given, and never let it block the person's face:\n" + "\n".join(rows))
+
+
 def _text(value: Any, limit: int) -> str:
     return _clip(" ".join(str(value or "").split()), limit)
 
@@ -181,6 +197,12 @@ def _context(data: dict[str, Any], need_cta: bool = False) -> dict[str, Any]:
         if isinstance(raw, dict) and str(raw.get("name") or "").strip():
             avatars.append({"name": _text(raw.get("name"), 40), "look": _text(raw.get("look"), 300)})
     mode = "own" if data.get("avatar_mode") == "own" and avatars else "random"
+    objects: list[dict[str, str]] = []
+    raw_objects = data.get("objects")
+    for raw in raw_objects[:MAX_OBJECTS] if isinstance(raw_objects, list) else []:
+        if isinstance(raw, dict) and str(raw.get("name") or "").strip():
+            pos = str(raw.get("position") or "any")
+            objects.append({"name": _text(raw.get("name"), 80), "place": _text(raw.get("place"), 80), "position": pos if pos in OBJECT_POSITIONS else "any"})
     try:
         count = int(data.get("count") or 3)
     except (TypeError, ValueError):
@@ -205,6 +227,7 @@ def _context(data: dict[str, Any], need_cta: bool = False) -> dict[str, Any]:
         "keyword": keyword,
         "cta": cta,
         "avatars": avatars,
+        "objects": objects,
         "mode": mode,
         "count": max(1, min(MAX_VARIATIONS, count)),
     }
@@ -413,13 +436,13 @@ def _lines_in(data: dict[str, Any], scenes: list[dict[str, str]], cta: str, tota
     return [_spoken(scenes, cta) for _ in range(total)]
 
 
-async def _scene_prompts(system: str, scenes: list[dict[str, str]], variations: list[dict[str, str]], lines: list[list[str]] | None, model: Any, product: str = "", verbatim: bool = False):
+async def _scene_prompts(system: str, scenes: list[dict[str, str]], variations: list[dict[str, str]], lines: list[list[str]] | None, model: Any, product: str = "", verbatim: bool = False, extra: str = ""):
     blocks = [
         f"{number}. {v['title']}\n   Look: {v['look']}\n   Setting: {v['setting'] or 'free'}\n   Scenes:\n"
         + "\n".join(f"   {line}" for line in _scene_block(scenes, lines[number - 1] if lines else None).splitlines())
         for number, v in enumerate(variations, 1)
     ]
-    head = f"Product:\n{product}\n\n" if product else ""
+    head = (f"Product:\n{product}\n\n" if product else "") + (extra + "\n\n" if extra else "")
     out = await _run(system, _PromptSets, head + "\n\n".join(blocks), model)
     if len(out.items) < len(variations):
         raise _fail()
@@ -438,14 +461,14 @@ async def _scene_prompts(system: str, scenes: list[dict[str, str]], variations: 
 
 async def stage_images(ctx: dict[str, Any], scenes: list[dict[str, str]], variations: list[dict[str, str]], model: Any = None):
     product = _product_block(ctx)
-    return await _scene_prompts(images_system(len(scenes), bool(product)) + (ctx.get("camera_note") or ""), scenes, variations, None, model, product)
+    return await _scene_prompts(images_system(len(scenes), bool(product)) + (ctx.get("camera_note") or ""), scenes, variations, None, model, product, extra=_object_block(ctx))
 
 
 async def stage_videos(ctx: dict[str, Any], scenes: list[dict[str, str]], variations: list[dict[str, str]], lines: list[list[str]], model: Any = None):
     product = _product_block(ctx)
     language = ctx.get("language", "pt-BR")
     lines = [[apply_speech_law(line, language) for line in row] for row in lines]
-    return await _scene_prompts(videos_system(len(scenes), bool(product), bool(ctx.get("structured"))) + lang_note(ctx) + SPEECH_LAW + (ctx.get("delivery") or ""), scenes, variations, lines, model, product, verbatim=bool(ctx.get("structured")))
+    return await _scene_prompts(videos_system(len(scenes), bool(product), bool(ctx.get("structured"))) + lang_note(ctx) + SPEECH_LAW + (ctx.get("delivery") or ""), scenes, variations, lines, model, product, verbatim=bool(ctx.get("structured")), extra=_object_block(ctx))
 
 
 @router.post("/generate")

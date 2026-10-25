@@ -40,6 +40,7 @@ type Project = {
   mix: Mix;
   avatarMode: "own" | "random";
   avatars: Avatar[];
+  objects: SceneObject[];
   count: number;
   scenes: Scene[];
   variations: Variation[];
@@ -94,6 +95,7 @@ const EMPTY: Project = {
   mix: NO_MIX,
   avatarMode: "random",
   avatars: [],
+  objects: [],
   count: 3,
   scenes: [],
   variations: [],
@@ -137,6 +139,10 @@ const CTA_BY_LANG: Record<string, string[]> = {
   it: ["Scrivi {KEYWORD} nei commenti per vedere il video completo", "Scrivi {KEYWORD} e ti mando il link"],
 };
 const ALL_CTAS = Object.values(CTA_BY_LANG).flat();
+type SceneObject = { id: string; name: string; place: string; position: "center" | "side" | "any" };
+const OBJECT_PLACES = ["No fundo", "Na mão da pessoa", "Na mesa", "Na parede", "Na lapela", "Perto da porta"];
+const OBJECT_POSITIONS: { value: SceneObject["position"]; text: string }[] = [{ value: "any", text: "Centro ou lateral" }, { value: "center", text: "No centro" }, { value: "side", text: "Na lateral" }];
+
 const LOOK_PRESETS: [string, string][] = [
   ["Mulher jovem", "Mulher de 25 anos, cabelo castanho solto, camiseta branca"],
   ["Homem jovem", "Homem de 28 anos, cabelo curto, camiseta escura"],
@@ -237,6 +243,7 @@ async function callStage(stage: Stage, proj: Project): Promise<{ items?: unknown
       cta: proj.cta,
       avatar_mode: proj.avatarMode,
       avatars: proj.avatars.filter((a) => a.name.trim()).map(({ name, look }) => ({ name, look })),
+      objects: (proj.objects ?? []).filter((o) => o.name.trim()).map(({ name, place, position }) => ({ name, place, position })),
       count: proj.count,
       scenes: proj.scenes,
       variations: proj.variations,
@@ -1594,6 +1601,30 @@ export function CloneWizard() {
                   <p className="text-xs text-muted-foreground">No Flow, gere ou envie a imagem de cada avatar e use como referência nas cenas.</p>
                 </div>
               )}
+              <div className="space-y-3 rounded-[14px] border border-border p-4">
+                <div>
+                  <p className="font-medium">Objeto em todo take <span className="rounded-full bg-[#7B3FE4]/20 px-2 py-0.5 text-[10px] font-semibold text-[#A98BFF]">BETA</span></p>
+                  <p className="text-xs text-muted-foreground">Escreva o objeto (ex.: bandeira dos EUA). Ele entra no prompt de todas as cenas para o Flow inserir na imagem e no vídeo.</p>
+                </div>
+                {(p.objects ?? []).map((obj) => (
+                  <div key={obj.id} className="space-y-2 rounded-lg bg-muted/30 p-3">
+                    <div className="flex gap-2">
+                      <input value={obj.name} maxLength={80} placeholder="Ex.: bandeira dos EUA" aria-label="Nome do objeto" className={inputClass}
+                        onChange={(event) => patch({ objects: p.objects.map((o) => (o.id === obj.id ? { ...o, name: event.target.value } : o)), images: [], videos: [] })} />
+                      <Button type="button" variant="ghost" size="icon" aria-label="Remover objeto" onClick={() => patch({ objects: p.objects.filter((o) => o.id !== obj.id), images: [], videos: [] })}>
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </div>
+                    <Chips label="Onde fica o objeto" value={obj.place} onPick={(place) => patch({ objects: p.objects.map((o) => (o.id === obj.id ? { ...o, place: o.place === place ? "" : place } : o)), images: [], videos: [] })} options={OBJECT_PLACES.map((v) => ({ value: v, text: v }))} />
+                    <Chips label="Posição no quadro" value={obj.position} onPick={(position) => patch({ objects: p.objects.map((o) => (o.id === obj.id ? { ...o, position } : o)), images: [], videos: [] })} options={OBJECT_POSITIONS} />
+                  </div>
+                ))}
+                {(p.objects ?? []).length < 3 && (
+                  <Button type="button" variant="outline" onClick={() => patch({ objects: [...(p.objects ?? []), { id: `${Date.now()}`, name: "", place: "", position: "any" }] })}>
+                    <Plus className="size-4" /> Adicionar objeto
+                  </Button>
+                )}
+              </div>
               <div className="flex flex-wrap items-end gap-3">
                 <Group label="Quantos vídeos">
                   <Chips label="Quantos vídeos" value={p.count} onPick={(count) => patch({ count })} options={COUNT_OPTIONS.map((n) => ({ value: n, text: String(n) }))} />

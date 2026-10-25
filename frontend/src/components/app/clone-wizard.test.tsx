@@ -512,3 +512,17 @@ describe("Missões do começo", () => {
     expect(screen.getByRole("button", { name: /Escolher o vídeo que quero clonar/ })).toBeInTheDocument();
   });
 });
+
+it("sends the objects the member wants in every take", async () => {
+  const calls = mockApi();
+  const user = userEvent.setup();
+  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ sceneCount: 3, step: 2, reference: "x".repeat(30), scenes }));
+  render(<CloneWizard />);
+  await user.click(await screen.findByRole("button", { name: "Adicionar objeto" }));
+  await user.type(screen.getByLabelText("Nome do objeto"), "bandeira dos EUA");
+  await user.click(screen.getByRole("radio", { name: "Na parede" }));
+  await user.click(screen.getByRole("radio", { name: "Na lateral" }));
+  await user.click(screen.getByRole("button", { name: "Gerar variações" }));
+  await screen.findByText(/Ideia 1/);
+  expect(calls[0].body.objects).toEqual([{ name: "bandeira dos EUA", place: "Na parede", position: "side" }]);
+});
