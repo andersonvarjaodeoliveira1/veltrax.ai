@@ -810,6 +810,9 @@ async def create_caption_draft(request: Request, db: AsyncSession = Depends(get_
     from ...multiplier_captions import lines_from_words, transcribe_words
 
     user_id = await _user_id(request, db)
+    from ...integrations import load_user_keys
+
+    await load_user_keys(db, user_id)  # usa a chave Claude/Gemini da própria pessoa quando existe
     now = time.time()
     recent = [stamp for stamp in _draft_calls.get(user_id, []) if now - stamp < 3600]
     if len(recent) >= DRAFT_LIMIT_PER_HOUR:
