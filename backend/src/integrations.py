@@ -110,7 +110,27 @@ async def load_user_keys(db: AsyncSession, user_id: str) -> dict[str, str]:
     except Exception:
         logger.exception("não foi possível carregar as integrações do usuário")
     _current_keys.set(keys)
+    # Chaves da casa (dos administradores): reserva automática quando as demais falham ou a cota acaba.
+    house: dict[str, str] = {}
+    try:
+        rows = (await db.execute(text(
+            "SELECT i.provider, i.encrypted_value FROM user_integrations i JOIN users u ON u.id = i.user_id "
+            "WHERE u.is_admin = TRUE AND i.provider IN ('anthropic','openai','gemini','openrouter') ORDER BY i.updated_at DESC"
+        ))).mappings().all()
+        for row in rows:
+            if row["provider"] in house:
+                continue
+            try:
+                house[row["provider"]] = decrypt_setting_value(row["encrypted_value"])
+            except Exception:
+                logger.warning("chave da casa %s ilegível", row["provider"])
+    except Exception:
+        logger.exception("não foi possível carregar as chaves da casa")
+    _house_keys.set(house)
     return keys
+
+
+_house_keys: contextvars.ContextVar[dict[str, str]] = contextvars.ContextVar("house_keys", default={})
 
 
 def current_keys() -> dict[str, str]:
@@ -136,3 +156,28 @@ def user_models() -> list[Any]:
         from pydantic_ai.providers.openai import OpenAIProvider
         out.append(OpenAIChatModel("gpt-5-mini", provider=OpenAIProvider(api_key=keys["openai"])))
     return out
+
+
+def _models_from(keys: dict[str, str], skip: dict[str, str] | None = None) -> list[Any]:
+    skip = skip or {}
+    out: list[Any] = []
+    gem = keys.get("gemini") or keys.get("flow")
+    if keys.get("anthropic") and keys["anthropic"] != skip.get("anthropic"):
+        from pydantic_ai.models.anthropic import AnthropicModel
+        from pydantic_ai.providers.anthropic import AnthropicProvider
+        out.append(AnthropicModel("claude-sonnet-5-5", provider=AnthropicProvider(api_key=keys["anthropic"])))
+    if keys.get("openai") and keys["openai"] != skip.get("openai"):
+        from pydantic_ai.models.openai import OpenAIChatModel
+        from pydantic_ai.providers.openai import OpenAIProvider
+        out.append(OpenAIChatModel("gpt-5-mini", provider=OpenAIProvider(api_key=keys["openai"])))
+    if gem and gem != skip.get("gemini"):
+        from pydantic_ai.models.google import GoogleModel
+        from pydantic_ai.providers.google import GoogleProvider
+        out.append(GoogleModel("gemini-3.5-flash", provider=GoogleProvider(api_key=gem)))
+    return out
+
+
+def house_models() -> list[Any]:
+    """Reserva final: modelos com as chaves dos administradores (Claude primeiro). Só entram quando os demais falham."""
+    own = current_keys()
+    return _models_from(_house_keys.get(), skip={k: v for k, v in own.items()})

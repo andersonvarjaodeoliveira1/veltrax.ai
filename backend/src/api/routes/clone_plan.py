@@ -331,7 +331,10 @@ async def _run(system: str, output_type: type[BaseModel], prompt: str, model: An
             raise HTTPException(status_code=402, detail="TOKENS_EXHAUSTED")
         candidates = own
     else:
-        candidates = own + [model] + (await _fallback_models() if explicit is None else [])
+        from ...integrations import house_models
+
+        reserve = house_models() if explicit is None else []
+        candidates = own + [model] + reserve + (await _fallback_models() if explicit is None else [])
     last_error: Exception | None = None
     for index, candidate in enumerate(candidates):
         agent = Agent(candidate, output_type=output_type, system_prompt=system, output_retries=2)
@@ -1102,7 +1105,9 @@ async def _run_parts(system: str, output_type: type[BaseModel], parts: list[Any]
 
         if server_blocked() and not own:
             raise HTTPException(status_code=402, detail="TOKENS_EXHAUSTED")
-        candidates = own + ([] if server_blocked() else [await _build_model()] + await _fallback_models())
+        from ...integrations import house_models
+
+        candidates = own + ([] if server_blocked() else [await _build_model()] + house_models() + await _fallback_models())
     else:
         candidates = [model]
     last_error: Exception | None = None
