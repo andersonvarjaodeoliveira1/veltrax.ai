@@ -64,6 +64,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // The editor needs every pixel — collapse the sidebar to an icon rail there.
   const compact = /^\/tasks\/[^/]+\/edit/.test(pathname);
 
+  // Voltar para a tela inicial (onde a pessoa escolhe para onde ir) avisa que estamos no menu central.
+  const lastPath = useRef(pathname);
+  useEffect(() => {
+    const previous = lastPath.current;
+    lastPath.current = pathname;
+    if (pathname === "/" && previous !== "/" && session?.user) {
+      toast("Back to the main menu", { description: "Pick where you want to go.", duration: 2600, id: "back-to-hub" });
+    }
+  }, [pathname, session?.user]);
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {

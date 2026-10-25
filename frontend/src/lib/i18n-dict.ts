@@ -42,6 +42,8 @@ const E: Record<string, Entry> = {
   "API e Flow": { pt: "API e Flow", es: "API y Flow" },
   "Comprar": { pt: "Comprar", es: "Comprar" },
   "Mais tokens": { pt: "Mais tokens", es: "Más tokens" },
+  "Back to the main menu": { pt: "Voltando para o menu central", es: "Volviendo al menú central" },
+  "Pick where you want to go.": { pt: "Escolha para onde quer ir.", es: "Elige a dónde quieres ir." },
   "Assinar um plano": { pt: "Assinar um plano", es: "Suscribirse a un plan" },
   "Vídeo orgânico": { pt: "Vídeo orgânico", es: "Video orgánico" },
   "Avatar influencer": { pt: "Avatar influencer", es: "Avatar influencer" },
