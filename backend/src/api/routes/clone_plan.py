@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...config import get_config
+from ...speech_law import SPEECH_LAW, apply_speech_law, enforce_dialogue
 from ...database import get_db
 from .multiplier import _check_script_rate, _clip, _user_id
 
@@ -113,13 +114,12 @@ Put the scene's spoken line in double quotes, in the language it is written in, 
 
 
 STRUCTURED_VIDEO = """
-FORMAT (Veo 3.1 talking-avatar blocks, from the avatar VSL method). Each prompt is ONE self-contained block of at most 2300 characters (aim for 900-1700) with exactly these five labelled parts on separate lines:
-Cinematography: framing and camera, 9:16 vertical. For phone selfie scenes: front phone-camera selfie framing with a constant subtle natural handheld micro-shake from the hand holding the phone, slight organic drift, never tripod-stable and never shaky-cam; the hand holding the phone stays out of frame; the background and furniture stay completely still, only the camera moves.
-Subject: "keep her/his exact identity from the source image" (same face, hair, clothes, accessories). Never add objects, clothes or accessories that are not in the image.
-Action: timeline in order: silent lead-in with the mouth fully closed and still (LEAD seconds, no lip movement, no speech yet), then the person says the line once, continuously, at the chosen pace, filling the window, then about 0.5 s of silence with the mouth settling closed, no filler. Put the spoken line in double quotes, word for word, then (no subtitles, no captions, no on-screen text). Anchor small gestures to key words. When the line mentions the liver, stomach, belly, abdomen, bloating or gut, add a small gesture of the free hand toward that area of the body, returning to the pose afterwards, adapted to the pose in the image.
-Context: the setting and the objects visible, stable and undistorted.
-Style & Ambiance: light, real skin texture with visible pores, no beauty filter, authentic phone UGC look; the pace is calm, even and unrushed; only the person's voice, no second voice, no interviewer, no off-screen voice, no "yeah", no "mm-hmm", no filler sounds (no hmm, no uh, no um); absolutely no text on screen: no subtitles, no captions, no titles, no overlays, no watermark, a completely clean frame; the line is spoken once only, no repetition, no looping. Veo has no negative field, so describe absences in positive form inside this part.
-SPEECH RULES: write numbers out in words in the language of the line (74% as the number spelled out plus percent). Respell hard foreign words, brand names and acronyms phonetically inside the quoted line (spell acronyms letter by letter with hyphens). Never start the clip with a brand name.
+FORMAT (Veo 3.1 talking-avatar blocks, FIVE TAGS, speech verbatim). Each prompt is ONE self-contained block of at most 2300 characters (aim for 900-1700) with exactly these five labelled parts, each starting its own line with the tag in capital letters:
+CAMERA: framing and camera, 9:16 vertical, one continuous take, no cuts. For phone selfie scenes: raw smartphone documentary look, front phone-camera selfie framing with a constant subtle natural handheld micro-shake from the hand holding the phone, slight organic drift, never tripod-stable and never shaky-cam; the hand holding the phone stays out of frame; the background and furniture stay completely still, only the camera moves.
+SUBJECT: "keep her/his exact identity from the source image" (same face, hair, clothes, accessories) and the setting with the objects visible, stable and undistorted. The presenter stays on camera with face and mouth unobstructed. Never add objects, clothes or accessories that are not in the image.
+ACTION: timeline in order: silent lead-in with the mouth fully closed and still (LEAD seconds, no lip movement, no speech yet), then the person says the DIALOGUE line once, continuously, at the chosen pace, filling the window, then about 0.5 s of silence with the mouth settling closed, no filler. Do NOT write the spoken words here: only the movement (what the hands do, glances, small nods) anchored to key moments of the line. When the line mentions the liver, stomach, belly, abdomen, bloating or gut, add a small gesture of the free hand toward that area of the body, returning to the pose afterwards, adapted to the pose in the image.
+DIALOGUE: the scene's spoken line inside double quotes, copied CHARACTER BY CHARACTER exactly as given: do not change, shorten, translate, respell or add any character (no capital-letter shouting, no dashes). Nothing else on this line.
+REALISM: clean audible synchronized speech, natural lip movement, no voice-over; light, real skin texture with visible pores, no beauty filter, authentic phone UGC look; the pace is calm, even and unrushed; only the person's voice, no second voice, no interviewer, no off-screen voice, no "yeah", no "mm-hmm", no filler sounds (no hmm, no uh, no um); absolutely no text on screen: no subtitles, no captions, no titles, no overlays, no watermark, a completely clean frame; the line is spoken once only, no repetition, no looping. Veo has no negative field, so describe absences in positive form inside this part.
 LEAD is 1.2 seconds for the first scene (the first word must be fully voiced and clearly audible, no lip movement before 1.2 s) and about 0.5 seconds for the other scenes.
 """
 
@@ -345,8 +345,8 @@ def _fail() -> HTTPException:
 async def stage_scenes(ctx: dict[str, Any], model: Any = None) -> list[dict[str, str]]:
     prompt = f"Reference transcript:\n{ctx['reference'] or '(not provided)'}\n\nNotes about the video:\n{ctx['notes'] or '(none)'}"
     n = ctx["scene_count"]
-    out = await _run(scenes_system(n, bool(ctx["product"] or ctx["product_info"] or ctx["product_look"])) + lang_note(ctx) + (ctx.get("scene_note") or ""), _Scenes, prompt, model)
-    scenes = [{"what": _text(s.what, 240), "line": _text(s.line, 300)} for s in out.items if s.line.strip()]
+    out = await _run(scenes_system(n, bool(ctx["product"] or ctx["product_info"] or ctx["product_look"])) + lang_note(ctx) + SPEECH_LAW + (ctx.get("scene_note") or ""), _Scenes, prompt, model)
+    scenes = [{"what": _text(s.what, 240), "line": apply_speech_law(_text(s.line, 300), ctx.get("language", "pt-BR"))} for s in out.items if s.line.strip()]
     if len(scenes) < n:
         raise _fail()
     return scenes[:n]
@@ -413,7 +413,7 @@ def _lines_in(data: dict[str, Any], scenes: list[dict[str, str]], cta: str, tota
     return [_spoken(scenes, cta) for _ in range(total)]
 
 
-async def _scene_prompts(system: str, scenes: list[dict[str, str]], variations: list[dict[str, str]], lines: list[list[str]] | None, model: Any, product: str = ""):
+async def _scene_prompts(system: str, scenes: list[dict[str, str]], variations: list[dict[str, str]], lines: list[list[str]] | None, model: Any, product: str = "", verbatim: bool = False):
     blocks = [
         f"{number}. {v['title']}\n   Look: {v['look']}\n   Setting: {v['setting'] or 'free'}\n   Scenes:\n"
         + "\n".join(f"   {line}" for line in _scene_block(scenes, lines[number - 1] if lines else None).splitlines())
@@ -428,6 +428,10 @@ async def _scene_prompts(system: str, scenes: list[dict[str, str]], variations: 
         prompts = [_text(p, 2400) for p in item.prompts if p.strip()][: len(scenes)]
         if len(prompts) < len(scenes):
             raise _fail()
+        if verbatim and lines:
+            row = lines[len(sets)] if len(sets) < len(lines) else []
+            # A fala entra na tag DIALOGUE caractere por caractere, mesmo que o modelo tenha mexido nela.
+            prompts = [enforce_dialogue(prompt, row[i]) if i < len(row) else prompt for i, prompt in enumerate(prompts)]
         sets.append({"prompts": prompts})
     return sets
 
@@ -439,7 +443,9 @@ async def stage_images(ctx: dict[str, Any], scenes: list[dict[str, str]], variat
 
 async def stage_videos(ctx: dict[str, Any], scenes: list[dict[str, str]], variations: list[dict[str, str]], lines: list[list[str]], model: Any = None):
     product = _product_block(ctx)
-    return await _scene_prompts(videos_system(len(scenes), bool(product), bool(ctx.get("structured"))) + lang_note(ctx) + (ctx.get("delivery") or ""), scenes, variations, lines, model, product)
+    language = ctx.get("language", "pt-BR")
+    lines = [[apply_speech_law(line, language) for line in row] for row in lines]
+    return await _scene_prompts(videos_system(len(scenes), bool(product), bool(ctx.get("structured"))) + lang_note(ctx) + SPEECH_LAW + (ctx.get("delivery") or ""), scenes, variations, lines, model, product, verbatim=bool(ctx.get("structured")))
 
 
 @router.post("/generate")
@@ -1508,9 +1514,9 @@ async def influencer_storyboard(request: Request, db: AsyncSession = Depends(get
         ctx["delivery"] = (ctx.get("delivery") or "") + ctx["camera_note"]
     if str(data.get("format") or "") == "recipe":
         ctx["delivery"] = (ctx.get("delivery") or "") + "\nFORMAT: faceless recipe video. Never show the person's face: only hands, ingredients and the preparation, in first-person POV, with the voice speaking over it."
-    ctx["delivery"] = (ctx.get("delivery") or "") + (
+    ctx["delivery"] = (ctx.get("delivery") or "") + SPEECH_LAW + (
         "\nSCRIPT RULES: each scene's spoken line has 18 to 22 words, in plain everyday speech like a real person talking. "
-        "Never use em dashes and never write words in ALL CAPS. Structure across the scenes: hook, the problem, a short mechanism without giving the full solution, "
+        "Never use em dashes and never write words in ALL CAPS. Write numbers out in words. Structure across the scenes: hook, the problem, a short mechanism without giving the full solution, "
         "a line that the usual options are fake or do not work, the product or brand reveal, then the call to action in the last scene."
     )
     TONES = {

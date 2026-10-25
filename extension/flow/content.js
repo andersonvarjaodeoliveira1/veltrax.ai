@@ -294,11 +294,11 @@
   }
 
   /* ---------- download ---------- */
-  function nameNextDownload(filename) {
+  function nameNextDownload(filename, upload) {
     return new Promise((resolve) => {
       try {
         if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
-          chrome.runtime.sendMessage({ type: "clipgringa-name", filename }, () => resolve());
+          chrome.runtime.sendMessage({ type: "clipgringa-name", filename, upload: upload || null }, () => resolve());
           return;
         }
       } catch (_e) { /* ignora */ }
@@ -306,12 +306,41 @@
     });
   }
 
-  async function downloadTile(tile, filename) {
+  function toBase64(buffer) {
+    const bytes = new Uint8Array(buffer);
+    let out = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) out += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(out);
+  }
+
+  // Lê o vídeo pronto direto do card do Flow e manda para o ClipGringa. Devolve true se enviou.
+  async function uploadVideo(tile, job) {
+    if (!uploadInfo) return false;
+    try {
+      const v = tile.tile.querySelector("video");
+      const src = v && (v.currentSrc || v.src);
+      if (!src) throw new Error("o card não mostra o endereço do vídeo");
+      const res = await fetch(src, { credentials: "include" });
+      if (!res.ok) throw new Error(`o Flow respondeu ${res.status}`);
+      const buffer = await res.arrayBuffer();
+      if (buffer.byteLength > 120 * 1024 * 1024) throw new Error("vídeo grande demais");
+      const reply = await chrome.runtime.sendMessage({ type: "clipgringa-upload", upload: uploadInfo, file: job.file, b64: toBase64(buffer) });
+      if (!reply || !reply.ok) throw new Error((reply && reply.error) || "sem resposta da extensão");
+      state.cloud[job.key] = "ok";
+      return true;
+    } catch (e) {
+      state.cloud[job.key] = "fail";
+      setNow(`Não consegui enviar ${job.file} pela página (${(e && e.message) || e}). Tento pelo download.`);
+      return false;
+    }
+  }
+
+  async function downloadTile(tile, filename, upload) {
     const img = tile.img;
     img.click();
     const dl = await waitFor(() => $$("button").find((b) => visible(b) && text(b) === "download"), 10000);
     if (!dl) throw new Error("Não achei o botão de baixar do Flow.");
-    await nameNextDownload(filename);
+    await nameNextDownload(filename, upload);
     dl.click();
     const item = await waitFor(() => $$("[role=menuitem], .mat-mdc-menu-item", overlay()).filter(visible).find((i) => /^720p/i.test(text(i))) || null, 5000);
     const fallback = $$("[role=menuitem], .mat-mdc-menu-item", overlay()).filter(visible)[1];
@@ -399,7 +428,8 @@
   const el = (id) => root.getElementById(id);
   let running = false;
   let stopFlag = false;
-  let state = { jobs: [], done: {}, errors: {} };
+  let state = { jobs: [], done: {}, errors: {}, cloud: {} };
+  let uploadInfo = null; // destino no ClipGringa (token curto enviado pelo site junto com o pacote)
 
   function setNow(msg) { el("now").textContent = msg; }
   function setRunning(on) {
@@ -415,7 +445,7 @@
     el("list").innerHTML = state.jobs.map((j) => {
       const label = `Vídeo ${pad(j.vi + 1)} · Cena ${pad(j.si + 1)}`;
       let st = "<span class='st-wait'>na fila</span>";
-      if (state.done[j.key]) st = "<span class='st-done'>baixado</span>";
+      if (state.done[j.key]) st = `<span class='st-done'>baixado${state.cloud[j.key] === "ok" ? " · no ClipGringa" : state.cloud[j.key] ? " · não enviado" : ""}</span>`;
       else if (state.errors[j.key]) st = "<span class='st-err'>erro</span>";
       else if (state.current === j.key) st = `<span class='st-run'>${state.phase || "gerando"}</span>`;
       return `<li class="${state.current === j.key ? "cur" : ""}"><span>${label}</span>${st}</li>`;
@@ -423,7 +453,7 @@
   }
 
   async function persist() {
-    await storage.set({ jobs: state.jobs, done: state.done, errors: state.errors, raw: el("pkg").value });
+    await storage.set({ jobs: state.jobs, done: state.done, errors: state.errors, cloud: state.cloud, upload: uploadInfo, raw: el("pkg").value });
   }
 
   async function withRetry(label, fn) {
@@ -477,8 +507,10 @@
 
     // 3) baixar
     state.phase = "baixando"; render();
+    setNow(`${label}: enviando ${job.file} para o ClipGringa…`);
+    const sent = await uploadVideo(video, job);
     setNow(`${label}: baixando ${job.file}…`);
-    await withRetry(`${label} (download)`, () => downloadTile(video, job.file));
+    await withRetry(`${label} (download)`, () => downloadTile(video, job.file, sent || !uploadInfo ? null : uploadInfo));
     state.done[job.key] = true;
     delete state.errors[job.key];
     await persist();
@@ -515,7 +547,7 @@
       parsePackage(el("pkg").value); // define o modelo pedido pelo pacote
       if (!state.jobs.length || el("pkg").value.trim() !== (state.raw || "")) {
         const parsed = parsePackage(el("pkg").value);
-        state = { jobs: parsed.jobs, done: {}, errors: {}, raw: el("pkg").value.trim() };
+        state = { jobs: parsed.jobs, done: {}, errors: {}, cloud: {}, raw: el("pkg").value.trim() };
       }
     } catch (e) { setError(e.message); return; }
     running = true; stopFlag = false; setRunning(true);
@@ -552,7 +584,7 @@
   el("stop").addEventListener("click", () => { stopFlag = true; setNow("Parando assim que a etapa atual terminar…"); });
   el("clear").addEventListener("click", async () => {
     if (running) return;
-    state = { jobs: [], done: {}, errors: {} };
+    state = { jobs: [], done: {}, errors: {}, cloud: {} };
     el("pkg").value = ""; setError(""); setNow("Pronto para começar."); render(); await storage.set(null);
   });
   el("min").addEventListener("click", () => {
@@ -568,6 +600,7 @@
       const got = (await chrome.storage.local.get(PENDING_KEY))[PENDING_KEY];
       if (!got || !got.raw || Date.now() - got.at > 30 * 60 * 1000) { if (got) await chrome.storage.local.remove(PENDING_KEY); return; }
       el("pkg").value = got.raw;
+      uploadInfo = got.upload || null;
       if (!(await ensureProject())) return; // o pacote fica guardado e continua quando a página do Flow abrir
       await chrome.storage.local.remove(PENDING_KEY);
       setNow("Pacote recebido do ClipGringa. Começando…");
@@ -576,11 +609,25 @@
   }
   try { chrome.storage.onChanged.addListener((changes) => { if (changes[PENDING_KEY]) takePending(); }); } catch (_e) { /* ignore */ }
 
+  // Resultado do envio feito pelo plano B (download): atualiza o "no ClipGringa" da lista.
+  try {
+    chrome.storage.onChanged.addListener((changes) => {
+      const got = changes["clipgringa-flow-uploads-v1"];
+      if (!got || !got.newValue) return;
+      for (const job of state.jobs) {
+        const r = got.newValue[job.file];
+        if (r && Date.now() - r.at < 120000) state.cloud[job.key] = r.ok ? "ok" : "fail";
+      }
+      persist().catch(() => undefined); render();
+    });
+  } catch (_e) { /* ignore */ }
+
   window.__clipgringaDebug = { el, start, getState: () => state };
 
   storage.get().then((saved) => {
     if (saved && saved.jobs && saved.jobs.length) {
-      state = { jobs: saved.jobs, done: saved.done || {}, errors: saved.errors || {}, raw: (saved.raw || "").trim() };
+      state = { jobs: saved.jobs, done: saved.done || {}, errors: saved.errors || {}, cloud: saved.cloud || {}, raw: (saved.raw || "").trim() };
+      uploadInfo = saved.upload || null;
       el("pkg").value = saved.raw || "";
       const left = state.jobs.filter((j) => !state.done[j.key]).length;
       setNow(left ? `Pacote carregado: ${left} cena(s) faltando. Clique em Começar para continuar.` : "Pacote concluído. Clique em Limpar para começar outro.");

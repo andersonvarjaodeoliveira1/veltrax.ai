@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth-client";
 import { FLOW_CHOICES, defaultFlowCategory, saveFlowCategory } from "@/lib/flow-models";
 import { LanguageSwitcher, useI18n } from "@/lib/i18n";
+import { flowUploadInfo } from "@/lib/flow-upload";
 import { EXAMPLES, SKILLS, type Lang3, type SkillId } from "@/lib/influencer-examples";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -1237,7 +1238,7 @@ export function InfluencerChat() {
             ))}
           </ol>
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => { const raw = flowPackage(); window.postMessage({ source: "clipgringa-page", type: "flow-package", raw }, window.location.origin); void copyOut("pack", raw); window.open(FLOW_URL, "_blank", "noopener"); }}
+            <button type="button" onClick={() => { const raw = flowPackage(); void copyOut("pack", raw); window.open(FLOW_URL, "_blank", "noopener"); void flowUploadInfo(productName || prompt.slice(0, 60) || "Influencer").then((upload) => window.postMessage({ source: "clipgringa-page", type: "flow-package", raw, upload }, window.location.origin)); }}
               className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-4 py-2 text-sm font-medium text-white">
               {sent === "pack" ? <Check className="size-4" /> : <ClipboardCopy className="size-4" />} {t("pack")}
             </button>

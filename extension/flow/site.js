@@ -11,7 +11,10 @@
     if (event.source !== window || !event.data || event.data.source !== "clipgringa-page" || event.data.type !== "flow-package") return;
     let ok = false;
     try {
-      await chrome.storage.local.set({ [PENDING]: { raw: String(event.data.raw || ""), at: Date.now() } });
+      const up = event.data.upload;
+      const upload = up && typeof up.url === "string" && typeof up.token === "string" && /^https:\/\//.test(up.url)
+        ? { url: up.url, token: up.token, package: String(up.package || "").slice(0, 120) } : null;
+      await chrome.storage.local.set({ [PENDING]: { raw: String(event.data.raw || ""), at: Date.now(), upload } });
       ok = true;
     } catch (_e) { /* extensão recarregada */ }
     window.postMessage({ source: "clipgringa-flow", type: "package-ack", ok }, window.location.origin);

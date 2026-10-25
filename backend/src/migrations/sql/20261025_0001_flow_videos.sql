@@ -1,0 +1,12 @@
+CREATE TABLE IF NOT EXISTS flow_videos (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id VARCHAR(36) NOT NULL,
+    package VARCHAR(120) NOT NULL DEFAULT '',
+    file VARCHAR(160) NOT NULL DEFAULT '',
+    path TEXT NOT NULL,
+    size BIGINT NOT NULL DEFAULT 0,
+    mime VARCHAR(60) NOT NULL DEFAULT 'video/mp4',
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP WITH TIME ZONE
+);
+CREATE INDEX IF NOT EXISTS idx_flow_videos_user ON flow_videos (user_id, created_at DESC) WHERE deleted_at IS NULL;

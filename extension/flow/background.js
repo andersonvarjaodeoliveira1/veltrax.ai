@@ -3,8 +3,14 @@ let pending = null;
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message && message.type === "clipgringa-name") {
-    pending = { filename: String(message.filename || ""), at: Date.now() };
+    pending = { filename: String(message.filename || ""), at: Date.now(), upload: message.upload || null };
     sendResponse({ ok: true });
+  }
+  if (message && message.type === "clipgringa-upload") {
+    postVideo(message.upload, base64ToBlob(String(message.b64 || "")), String(message.file || ""))
+      .then((r) => sendResponse(r))
+      .catch((e) => sendResponse({ ok: false, error: String((e && e.message) || e) }));
+    return true;
   }
   if (message && message.type === "clipgringa-click" && _sender.tab) {
     trustedClick(_sender.tab.id, Number(message.x), Number(message.y))
@@ -36,9 +42,49 @@ async function trustedClick(tabId, x, y) {
   }
 }
 
+function base64ToBlob(b64) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type: "video/mp4" });
+}
+
+// Envia o vídeo para o ClipGringa (fica visível em "Vídeos do Flow"). Nunca interrompe a geração.
+async function postVideo(upload, blob, file) {
+  if (!upload || !upload.url || !upload.token) return { ok: false, error: "sem destino" };
+  if (blob.size < 1024) return { ok: false, error: "arquivo vazio" };
+  const url = new URL(upload.url);
+  url.searchParams.set("token", upload.token);
+  url.searchParams.set("package", upload.package || "");
+  url.searchParams.set("file", file || "video.mp4");
+  const res = await fetch(url.toString(), { method: "POST", headers: { "Content-Type": "video/mp4" }, body: blob });
+  return res.ok ? { ok: true } : { ok: false, error: `ClipGringa respondeu ${res.status}` };
+}
+
+const RESULTS_KEY = "clipgringa-flow-uploads-v1";
+async function noteResult(file, result) {
+  try {
+    const got = (await chrome.storage.local.get(RESULTS_KEY))[RESULTS_KEY] || {};
+    got[file] = { ok: result.ok, error: result.error || "", at: Date.now() };
+    await chrome.storage.local.set({ [RESULTS_KEY]: got });
+  } catch (_e) { /* ignora */ }
+}
+
+// Plano B: se a página não conseguiu ler o vídeo, lê o arquivo pelo endereço do download do Flow.
+async function uploadFromDownload(item, upload, file) {
+  try {
+    const res = await fetch(item.finalUrl || item.url);
+    if (!res.ok) throw new Error(`Flow respondeu ${res.status}`);
+    await noteResult(file, await postVideo(upload, await res.blob(), file));
+  } catch (e) {
+    await noteResult(file, { ok: false, error: String((e && e.message) || e) });
+  }
+}
+
 chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
   if (pending && Date.now() - pending.at < 60000 && pending.filename) {
     const name = pending.filename;
+    if (pending.upload) uploadFromDownload(item, pending.upload, name);
     pending = null;
     suggest({ filename: `ClipGringa/${name}`, conflictAction: "overwrite" });
     return;

@@ -204,6 +204,12 @@ def create_app(
         app.include_router(multiplier_router)
     except Exception:  # pragma: no cover
         logging.getLogger(__name__).exception("Multiplier (beta) disabled")
+    try:  # BETA, isolated: vídeos gerados no Flow pela extensão
+        from .api.routes.flow_videos import router as flow_videos_router
+
+        app.include_router(flow_videos_router)
+    except Exception:  # pragma: no cover
+        logging.getLogger(__name__).exception("Flow videos (beta) disabled")
     try:  # BETA, isolated: Clonagem de Vídeo
         from .api.routes.clone_plan import router as clone_router
 
