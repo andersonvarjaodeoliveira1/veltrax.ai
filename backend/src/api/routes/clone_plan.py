@@ -865,7 +865,7 @@ async def product_create(request: Request, db: AsyncSession = Depends(get_db)):
         data = await request.json()
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON body")
-    info = _clip(str((data or {}).get("prompt") or ""), 1200).strip()
+    info = _clip(str((data or {}).get("prompt") or ""), 2000).strip()
     skill = _clip(str((data or {}).get("skill") or ""), 40)
     if len(info) < 3:
         raise HTTPException(status_code=400, detail="Tell us what you want to sell")
@@ -1207,7 +1207,7 @@ async def influencer_brief(request: Request, db: AsyncSession = Depends(get_db))
         raise HTTPException(status_code=400, detail="Invalid JSON body")
     if not isinstance(data, dict):
         raise HTTPException(status_code=400, detail="JSON object expected")
-    request_text = _clip(str(data.get("prompt") or ""), 1200)
+    request_text = _clip(str(data.get("prompt") or ""), 2000)
     if len(request_text) < 8:
         raise HTTPException(status_code=400, detail="Describe the influencer in one sentence")
     skill = str(data.get("skill") or "")

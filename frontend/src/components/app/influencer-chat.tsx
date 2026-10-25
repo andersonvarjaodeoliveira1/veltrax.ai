@@ -376,7 +376,7 @@ export function InfluencerChat() {
     try {
       const params = new URLSearchParams(window.location.search);
       const incoming = params.get("prompt");
-      if (incoming) { setPrompt(incoming.slice(0, 1200)); const sk = params.get("skill"); if (sk && SKILLS.some((item) => item.id === sk)) setSkill(sk as SkillId); }
+      if (incoming) { setPrompt(incoming.slice(0, 2000)); const sk = params.get("skill"); if (sk && SKILLS.some((item) => item.id === sk)) setSkill(sk as SkillId); }
     } catch { /* sem URL */ }
     setModels(loadModels());
     setPinnedSkills(loadPinned());
@@ -486,7 +486,7 @@ export function InfluencerChat() {
     if (!extra) return;
     setEditOpen(false); setEditText(""); setError("");
     const next = [...answers, { question: t("editLabel"), answer: extra }];
-    setAnswers(next); setPrompt((current) => `${current}\n${extra}`.slice(0, 1200));
+    setAnswers(next); setPrompt((current) => `${current}\n${extra}`.slice(0, 2000));
     setPhase("ask"); setBusy("build");
     try { const data = await brief(next); if (data) takeBrief(data); else setPhase("approve"); } catch { setError(t("error")); setPhase("approve"); } finally { setBusy(""); }
   }
@@ -684,7 +684,7 @@ export function InfluencerChat() {
   }
   function applyPinned(item: PinnedSkill) {
     if (started) return;
-    setPrompt(item.prompt.slice(0, 1200)); setSkill((SKILLS.some((x) => x.id === item.skill) ? item.skill : "") as SkillId | "");
+    setPrompt(item.prompt.slice(0, 2000)); setSkill((SKILLS.some((x) => x.id === item.skill) ? item.skill : "") as SkillId | "");
     if (item.style) setStyle((current) => ({ ...current, ...(item.style as Partial<typeof current>) }));
     if (item.model && FLOW_CHOICES.some((m) => m.id === item.model)) { setModel(item.model); setModelChosen(true); }
     if (item.videoCount) setVideoCount(item.videoCount);
@@ -722,7 +722,7 @@ export function InfluencerChat() {
     setChangeText(""); setError("");
     const keep = phase;
     const next = [...answers, { question: t("changeQ"), answer: extra }];
-    setAnswers(next); setPrompt((current) => `${current}\n${extra}`.slice(0, 1200));
+    setAnswers(next); setPrompt((current) => `${current}\n${extra}`.slice(0, 2000));
     setBusy("build");
     try {
       const data = await brief(next);
@@ -793,7 +793,7 @@ export function InfluencerChat() {
     <div ref={orbitRef} className="cg-orbit relative">
     <div key={attachedFx} className={cn("relative rounded-[26px] bg-[#1a191d] p-5 ring-1 ring-white/10 shadow-[0_20px_60px_-30px_#000]", attachedFx > 0 && "cg-attach")} data-testid="chat-composer">
       {attachedFx > 0 && !started && <span key={`b${attachedFx}`} className="cg-attach-badge pointer-events-none absolute -top-3 left-6 rounded-full bg-[#7B3FE4] px-3 py-1 text-[11px] font-medium text-white shadow-lg">📎 {t("promptAttached")}</span>}
-      <textarea value={started ? changeText : prompt} onChange={(event) => (started ? setChangeText(event.target.value) : setPrompt(event.target.value))} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); if (started) void applyChange(); else if (!busy && prompt.trim().length >= 8) start(); } }} rows={!started && prompt.length > 220 ? 8 : 3} maxLength={1200} disabled={started && !canChange} aria-label={lang === "en" ? "Describe the influencer" : lang === "es" ? "Describe a la influencer" : "Descreva a influencer"}
+      <textarea value={started ? changeText : prompt} onChange={(event) => (started ? setChangeText(event.target.value) : setPrompt(event.target.value))} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); if (started) void applyChange(); else if (!busy && prompt.trim().length >= 8) start(); } }} rows={!started && prompt.length > 220 ? 8 : 3} maxLength={2000} disabled={started && !canChange} aria-label={lang === "en" ? "Describe the influencer" : lang === "es" ? "Describe a la influencer" : "Descreva a influencer"}
         placeholder={phase === "home" ? (demo ? `${demo}▍` : t("ph")) : canChange ? (hint ? `${hint}▍` : t("changePh")) : t("follow")}
         className={cn("min-h-[96px] w-full resize-none bg-transparent px-1 py-1 text-lg outline-none placeholder:text-muted-foreground/70 disabled:opacity-60", attachedFx > 0 && !started && "cg-reveal")} />
       <div className="mt-2 flex items-center gap-2">
