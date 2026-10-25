@@ -539,6 +539,20 @@ export function CloneWizard() {
   }, [ready]);
 
   const patch = (change: Partial<Project>) => setP((current) => ({ ...current, ...change }));
+  const editPrompt = (kind: "images" | "videos", vi: number, si: number, value: string) => setP((current) => ({
+    ...current,
+    [kind]: current[kind].map((item, i) => (i === vi ? { ...item, prompts: item.prompts.map((t, j) => (j === si ? value : t)) } : item)),
+  }));
+  const removeScene = (si: number) => setP((current) => {
+    if (current.sceneCount <= 1) return current;
+    const drop = <T,>(list: T[]) => list.filter((_, j) => j !== si);
+    return { ...current, sceneCount: current.sceneCount - 1, scenes: drop(current.scenes), images: current.images.map((i) => ({ ...i, prompts: drop(i.prompts) })), videos: current.videos.map((i) => ({ ...i, prompts: drop(i.prompts) })), approved: {}, checks: {}, gen: {}, final: {} };
+  });
+  const removeVideo = (vi: number) => setP((current) => {
+    if (current.variations.length <= 1) return current;
+    const drop = <T,>(list: T[]) => list.filter((_, j) => j !== vi);
+    return { ...current, count: Math.max(1, current.count - 1), variations: drop(current.variations), images: drop(current.images), videos: drop(current.videos), approved: {}, checks: {}, gen: {}, final: {} };
+  });
   const keywordOrDefault = p.keyword.trim() || "PALAVRA";
 
   /** The three spoken lines of video number `vi`, with the CTA that closes the last scene. */
@@ -1145,6 +1159,7 @@ export function CloneWizard() {
   const [paused, setPaused] = useState(false);
   const [changeDemo, setChangeDemo] = useState("");
   const [copyDemo, setCopyDemo] = useState("");
+  const [editing, setEditing] = useState<string | null>(null);
   const [manualMode, setManualMode] = useState<"closed" | "open" | "hidden">("closed");
   const [pendingChange, setPendingChange] = useState<string | null>(null);
   const pauseForChange = () => {
@@ -1589,17 +1604,10 @@ export function CloneWizard() {
                   <li key={vi}>Vídeo {pad(vi + 1)} · {variation.title}</li>
                 ))}
               </ul>
-              <p className="text-sm">Agora vamos criar no Flow em <b>Lower Priority</b> (sem gastar créditos). Siga o passo a passo logo abaixo: copie o prompt de cada cena, gere no Flow e envie os vídeos aqui.</p>
-              <details className="rounded-[12px] border border-border p-3 text-xs text-muted-foreground">
-                <summary className="cursor-pointer">BETA · Tenho créditos no Flow e quero gerar pela ferramenta</summary>
-                <div className="mt-3 space-y-2">
-                  <p>A ferramenta gasta créditos do Flow. Ao clicar, enviamos tudo para a extensão e abrimos a ferramenta.</p>
-                  <Button type="button" size="sm" variant="outline" className="rounded-full" onClick={sendToFlow}>
-                    <ExternalLink className="size-4" /> Enviar para o Flow
-                  </Button>
-                  {copied === "flow-send" && <p className="text-xs text-[#5BD69A]">Copiado. Cole na ferramenta do Flow.</p>}
-                </div>
-              </details>
+              <Button type="button" size="lg" className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white" onClick={sendToFlow}>
+                <ExternalLink className="size-4" /> Enviar para o Flow
+              </Button>
+              {copied === "flow-send" && <p className="text-xs text-[#5BD69A]">Enviado.</p>}
             </section>
 
             {manualMode === "hidden" ? (
@@ -1614,29 +1622,40 @@ export function CloneWizard() {
                 </span>
               </summary>
               <div className="mt-3 rounded-[12px] border border-border bg-card p-3">{modelChooser()}</div>
-              <ol className="mt-3 list-decimal space-y-1 pl-5 text-muted-foreground">
-                <li>Abra o <a href="https://labs.google/fx/pt/tools/flow" target="_blank" rel="noopener noreferrer" className="text-[#A98BFF] underline">Flow</a> e, para cada cena, cole o <b>prompt da imagem</b> (Nano Banana, 9:16, x1).</li>
-                <li>Depois anime a imagem: modelo {lowPriority ? <><b>Veo 3.1 - Lite [Lower Priority]</b> (o Flow mostra “A geração vai usar 0 créditos”)</> : <b>{(FLOW_CHOICES.find((m) => m.id === flowModelId) ?? FLOW_MODELS[0]).name}</b>}, 8s, x1, e cole o <b>prompt da animação</b>.</li>
-                <li>Baixe com o nome indicado (Video01_Cena01.mp4…) e envie todos aqui embaixo.</li>
-              </ol>
               <div className="mt-4 rounded-[12px] border border-border bg-card p-3" data-testid="flow-extension">
-                <p className="text-sm font-medium">Automático com a extensão (BETA)</p>
-                <p className="mt-1 text-xs text-muted-foreground">A extensão no seu Chrome faz tudo sozinha dentro do Flow, em Lower Priority: imagem, animação e download com o nome certo.</p>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   {copyButton("flow-package", flowPackage(), "Copiar pacote")}
                   <a href="/extensao/clipgringa-flow.zip" download className="inline-flex items-center rounded-full border border-border px-3 py-1.5 text-xs hover:text-foreground">Baixar extensão</a>
                 </div>
-                <p className="mt-2 text-xs text-muted-foreground">Instalar uma vez: descompacte o zip, abra chrome://extensions, ligue “Modo do desenvolvedor” e clique em “Carregar sem compactação”. Depois abra um projeto no Flow e cole o pacote no painel da extensão.</p>
               </div>
               <div className="mt-4 space-y-3">
                 {p.variations.map((variation, vi) => (
                   <div key={vi} className="space-y-2">
-                    <p className="font-medium">Vídeo {pad(vi + 1)} · {variation.title}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium">Vídeo {pad(vi + 1)} · {variation.title}</p>
+                      {p.variations.length > 1 && <button type="button" aria-label={`Remover o vídeo ${pad(vi + 1)}`} title="Remover este vídeo" onClick={() => removeVideo(vi)} className="ml-auto grid size-7 place-items-center rounded-full border border-border text-muted-foreground hover:text-foreground"><X className="size-3.5" /></button>}
+                    </div>
                     {Array.from({ length: p.sceneCount }, (_, si) => (
-                      <div key={si} className="flex flex-wrap items-center gap-2 rounded-[12px] border border-border bg-card px-3 py-2">
-                        <span className="min-w-28 text-xs tabular-nums text-muted-foreground">Cena {pad(si + 1)} · {fileName(vi, si, "x.mp4")}</span>
-                        {copyButton(`g-img-${vi}-${si}`, p.images[vi]?.prompts[si] ?? "", "Copiar prompt da imagem")}
-                        {copyButton(`g-vid-${vi}-${si}`, p.videos[vi]?.prompts[si] ?? "", "Copiar prompt da animação")}
+                      <div key={si} className="space-y-2 rounded-[12px] border border-border bg-card px-3 py-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="min-w-28 text-xs tabular-nums text-muted-foreground">Cena {pad(si + 1)} · {fileName(vi, si, "x.mp4")}</span>
+                          {copyButton(`g-img-${vi}-${si}`, p.images[vi]?.prompts[si] ?? "", "Copiar prompt da imagem")}
+                          {copyButton(`g-vid-${vi}-${si}`, p.videos[vi]?.prompts[si] ?? "", "Copiar prompt da animação")}
+                          <span className="ml-auto flex items-center gap-1">
+                            <button type="button" aria-label={`Editar a cena ${pad(si + 1)} do vídeo ${pad(vi + 1)}`} title="Editar os prompts" onClick={() => setEditing((e) => (e === `${vi}-${si}` ? null : `${vi}-${si}`))} className="grid size-8 place-items-center rounded-full border border-border text-muted-foreground hover:text-foreground"><Pencil className="size-4" /></button>
+                            {p.sceneCount > 1 && <button type="button" aria-label={`Remover a cena ${pad(si + 1)}`} title="Remover esta cena de todos os vídeos" onClick={() => removeScene(si)} className="grid size-8 place-items-center rounded-full border border-border text-muted-foreground hover:text-foreground"><X className="size-4" /></button>}
+                          </span>
+                        </div>
+                        {editing === `${vi}-${si}` && (
+                          <div className="space-y-2">
+                            <label className="block text-xs text-muted-foreground">Prompt da imagem
+                              <textarea value={p.images[vi]?.prompts[si] ?? ""} onChange={(event) => editPrompt("images", vi, si, event.target.value)} rows={3} className={`${inputClass} mt-1`} />
+                            </label>
+                            <label className="block text-xs text-muted-foreground">Prompt da animação
+                              <textarea value={p.videos[vi]?.prompts[si] ?? ""} onChange={(event) => editPrompt("videos", vi, si, event.target.value)} rows={3} className={`${inputClass} mt-1`} />
+                            </label>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
