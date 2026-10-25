@@ -117,3 +117,15 @@ it("after the brief, the composer takes a change and folds it into the influence
   await waitFor(() => expect(screen.getByTestId("chat-approval")).toHaveTextContent("Bia morena"));
   expect(JSON.stringify(bodies[1])).toContain("deixe ela mais morena");
 });
+
+it("fills the prompt when clicking the example photo, without the Recriar button", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({}), { status: 200 })));
+  window.localStorage.clear();
+  const user = userEvent.setup();
+  render(<InfluencerChat />);
+  const photo = (await screen.findAllByRole("img", { name: /Mulher de 55 anos/ }))[0];
+  await user.click(photo);
+  const box = screen.getByLabelText(/Descreva a influencer/) as HTMLTextAreaElement;
+  await waitFor(() => expect(box.value).toMatch(/55 anos/));
+  expect(box.value.length).toBeGreaterThan(900);
+});

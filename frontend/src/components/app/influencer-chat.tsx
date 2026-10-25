@@ -956,18 +956,18 @@ export function InfluencerChat() {
             </div>
             <div className="grid gap-x-4 gap-y-6 sm:grid-cols-2 xl:grid-cols-3">
               {shown.map((item) => (
-                <button key={item.id} type="button" onClick={(event) => recreateExample(item, event.currentTarget)} className="group text-left">
+                <button key={item.id} type="button" onClick={(event) => recreateExample(item, event.currentTarget)} className="group cursor-pointer text-left">
                   <div className="relative aspect-[16/10] overflow-hidden rounded-[20px] ring-1 ring-white/10" style={{ background: `radial-gradient(120% 90% at 20% 0%, ${item.from}66, transparent 60%), radial-gradient(100% 90% at 100% 100%, ${item.to}55, transparent 60%), #17161b` }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={`/influencers/${item.id}.jpg`} alt={item.title[lang]} loading="lazy" className="absolute inset-0 size-full object-cover object-top transition duration-500 group-hover:scale-105" />
                     <span aria-hidden className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/70 to-transparent" />
+                    <span className="absolute inset-0 grid place-items-center bg-black/25 opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100"><span className="rounded-full bg-[#7B3FE4] px-4 py-1.5 text-xs font-semibold text-white shadow-lg">{t("recreate")}</span></span>
                     <span className="absolute bottom-3 left-3 rounded-full bg-black/55 px-2.5 py-0.5 text-[10px] font-medium text-white/90">{SKILLS.find((x) => x.id === item.skill)?.name[lang]}</span>
                   </div>
                   <span className="mt-3 flex items-center gap-3">
                     <span aria-hidden className="grid size-7 shrink-0 place-items-center rounded-[9px] bg-white/10 text-sm">{item.emoji}</span>
                     <span className="min-w-0 flex-1 truncate text-sm font-medium">{item.title[lang]}</span>
-                    <span className="inline-flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground transition group-hover:hidden">⚡ Skill</span>
-                    <span className="rounded-full bg-[#7B3FE4] px-3 py-1 text-xs font-medium text-white opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100">{t("recreate")}</span>
+                    <span className="inline-flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">⚡ Skill</span>
                   </span>
                 </button>
               ))}
