@@ -568,6 +568,12 @@ export function InfluencerChat() {
     void writePrompt(null, null);
   }
 
+  // Foto achada pela IA vem como imagem embutida: vira arquivo; as do Pinterest seguem pelo endereço.
+  async function pickPin(item: Pin) {
+    if (item.full.startsWith("data:image/")) { void writePrompt(await dataUrlToFile(item.full, "modelo.jpg"), item); return; }
+    void writePrompt(null, item);
+  }
+
   async function writePrompt(file: File | null, chosenPin: Pin | null, keepPin = false, opts?: { persona?: Persona; extra?: string }) {
     setPhoto(file); if (!keepPin) setPin(chosenPin);
     setPhase("prompt"); setBusy("prompt"); setError("");
@@ -1103,7 +1109,7 @@ export function InfluencerChat() {
           {phase === "photos" && pins.length > 0 && (
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
               {pins.slice(0, 12).map((item) => (
-                <button key={item.id} type="button" aria-label={`${t("approve")} ${item.id}`} onClick={() => void writePrompt(null, item)} className="overflow-hidden rounded-[14px] border border-border hover:border-[#A98BFF]">
+                <button key={item.id} type="button" aria-label={`${t("approve")} ${item.id}`} onClick={() => void pickPin(item)} className="overflow-hidden rounded-[14px] border border-border hover:border-[#A98BFF]">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={item.thumb} alt="" referrerPolicy="no-referrer" className="aspect-[3/4] w-full object-cover" />
                 </button>

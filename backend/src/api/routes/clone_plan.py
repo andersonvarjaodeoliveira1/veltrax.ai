@@ -520,7 +520,7 @@ PHOTO_TYPES = {"image/png", "image/jpeg", "image/webp"}
 MAX_PHOTO_BYTES = 5 * 1024 * 1024
 
 
-def _normalize_photo(data: bytes) -> tuple[bytes, str] | None:
+def _normalize_photo(data: bytes, max_side: int = 1280) -> tuple[bytes, str] | None:
     """Decodes any PNG/JPG/WebP and re-encodes it as a clean JPEG (max 1280px). None when the bytes are not a readable picture.
     The AI rejects odd files ("Unable to process input image"), so every photo goes through here first."""
     try:
@@ -531,7 +531,7 @@ def _normalize_photo(data: bytes) -> tuple[bytes, str] | None:
         if image is None or image.size == 0:
             return None
         height, width = image.shape[:2]
-        scale = 1280 / max(height, width)
+        scale = max_side / max(height, width)
         if scale < 1:
             image = cv2.resize(image, (max(1, int(width * scale)), max(1, int(height * scale))), interpolation=cv2.INTER_AREA)
         ok, buffer = cv2.imencode(".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, 90])
@@ -1402,8 +1402,11 @@ async def influencer_pins(request: Request, db: AsyncSession = Depends(get_db)):
     token = current_keys().get("apify") or cfg.apify_api_token
     _check_script_rate(user_id)
     if not token:
-        # Sem Apify o processo não para: usa o banco de fotos (Pexels) e, sem ele, segue sem fotos.
-        return {"pins": await _pexels_pins(queries, cfg.pexels_api_key)}
+        # Sem Apify o processo não para: a própria IA procura fotos na web; depois o banco de fotos (Pexels).
+        found = await _ai_pins(queries, current_keys().get("anthropic") or cfg.anthropic_api_key or "")
+        if len(found) < 6:
+            found += await _pexels_pins(queries, cfg.pexels_api_key)
+        return {"pins": found[:30]}
 
     def run() -> list[dict[str, str]]:
         from apify_client import ApifyClient
@@ -1469,6 +1472,56 @@ async def influencer_pins(request: Request, db: AsyncSession = Depends(get_db)):
         logger.exception("influencer pins failed")
         raise HTTPException(status_code=502, detail="Could not search Pinterest. Try again.")
     return {"pins": pins[:30]}
+
+
+async def _ai_pins(queries: list[str], claude_key: str) -> list[dict[str, str]]:
+    """No Apify: Claude searches the web for pages with portraits of the persona; each page's main picture becomes a pin (as a small JPEG data URL)."""
+    if not claude_key or not queries:
+        return []
+    import base64
+
+    import httpx
+
+    headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36", "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.7"}
+    pins: list[dict[str, str]] = []
+    try:
+        async with httpx.AsyncClient(timeout=8, headers=headers) as http:
+            async def search(query: str) -> list[dict[str, str]]:
+                try:
+                    web, _, _, _ = await _claude_search("", claude_key, custom_prompt=(
+                        f"Find pages that show a real-looking portrait photo of this kind of person: {query}. Prefer Pinterest pins, blogs and photo galleries where one face is clearly visible (front or three-quarter view), not logos or stock illustrations. "
+                        "Reply with one short sentence, then on a last line write 'PAGES:' followed by up to 6 https links of pages that show such a portrait, separated by spaces."))
+                    return web[:6]
+                except Exception:
+                    return []
+
+            async def grab(hit: dict[str, str], query: str) -> dict[str, str] | None:
+                try:
+                    page, _ = await _safe_get(http, hit["url"], 500_000)
+                    image_url = _page_image(page.decode("utf-8", "ignore"), hit["url"])
+                    if not image_url:
+                        return None
+                    body, kind = await _safe_get(http, image_url, MAX_PHOTO_BYTES)
+                    if kind not in PHOTO_TYPES or len(body) < 20_000:
+                        return None
+                    fixed = _normalize_photo(body, 720)
+                    if not fixed:
+                        return None
+                    url = f"data:image/jpeg;base64,{base64.b64encode(fixed[0]).decode()}"
+                    return {"id": f"ai-{abs(hash(image_url))}", "thumb": url, "full": url, "link": hit["url"], "query": query}
+                except Exception:
+                    return None
+
+            hits = await asyncio.gather(*(search(q) for q in queries))
+            jobs = [grab(hit, q) for q, group in zip(queries, hits) for hit in group][:14]
+            seen: set[str] = set()
+            for result in await asyncio.gather(*jobs):
+                if result and result["full"] not in seen:
+                    seen.add(result["full"])
+                    pins.append(result)
+    except Exception:
+        logger.warning("ai pins failed", exc_info=True)
+    return pins[:10]
 
 
 async def _pexels_pins(queries: list[str], key: str) -> list[dict[str, str]]:
