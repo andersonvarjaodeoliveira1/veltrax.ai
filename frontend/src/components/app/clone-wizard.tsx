@@ -69,6 +69,32 @@ type FlowProgress = {
   jobs: { key: string; vi: number; si: number; file: string; done: boolean; error: string }[];
 };
 const fmtClock = (sec: number) => { const s = Math.max(0, Math.round(sec)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+// Vídeo já enviado e transcrito antes? Reconhece pelo "RG" do arquivo (tamanho, nome e amostras do começo e do fim) e pula o envio.
+const REF_CACHE_KEY = "cg-ref-cache-v1";
+async function videoFingerprint(file: File): Promise<string | null> {
+  try {
+    const head = await file.slice(0, 2_000_000).arrayBuffer();
+    const tail = await file.slice(Math.max(0, file.size - 1_000_000)).arrayBuffer();
+    const joined = new Uint8Array(head.byteLength + tail.byteLength);
+    joined.set(new Uint8Array(head), 0); joined.set(new Uint8Array(tail), head.byteLength);
+    const digest = await crypto.subtle.digest("SHA-256", joined);
+    const hex = Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
+    return `${file.size}-${hex.slice(0, 32)}`;
+  } catch { return null; }
+}
+function cachedTranscript(key: string | null): string {
+  if (!key) return "";
+  try { const all = JSON.parse(window.localStorage.getItem(REF_CACHE_KEY) || "{}") as Record<string, { text: string }>; return all[key]?.text || ""; } catch { return ""; }
+}
+function rememberTranscript(key: string | null, text: string) {
+  if (!key || text.trim().length < 20) return;
+  try {
+    const all = JSON.parse(window.localStorage.getItem(REF_CACHE_KEY) || "{}") as Record<string, { text: string; at: number }>;
+    all[key] = { text, at: Date.now() };
+    const keep = Object.entries(all).sort((a, b) => b[1].at - a[1].at).slice(0, 20);
+    window.localStorage.setItem(REF_CACHE_KEY, JSON.stringify(Object.fromEntries(keep)));
+  } catch { /* storage unavailable */ }
+}
 const FLOW_HOME_URL = "https://labs.google/fx/pt/tools/flow";
 // Créditos do Flow por geração de 8s (conta sem Lower Priority). Fonte: support.google.com/flow/answer/16526234. Podem mudar.
 const NEXT_HINTS = [
@@ -529,6 +555,15 @@ export function CloneWizard() {
     setError(null);
     setRefFile(file);
     setBusy("upload");
+    const fingerprint = await videoFingerprint(file);
+    const known = cachedTranscript(fingerprint);
+    if (known) {
+      const done = startTask("Vídeo já conhecido: usando a transcrição guardada");
+      patch({ reference: known, scenes: [], mix: NO_MIX, variations: [], images: [], videos: [], approved: {} });
+      endTask(done, "done", "Sem enviar de novo");
+      setBusy(null);
+      return;
+    }
     const taskId = startTask("Transcrevendo o vídeo de referência");
     try {
       const form = new FormData();
@@ -536,7 +571,9 @@ export function CloneWizard() {
       const response = await fetch("/api/multiplier/captions/draft", { method: "POST", body: form });
       const data = await response.json().catch(() => null);
       if (!response.ok || !Array.isArray(data?.lines)) throw new Error(ptError(data?.detail, "Não foi possível ler o vídeo. Tente de novo."));
-      patch({ reference: (data.lines as { text: string }[]).map((line) => line.text).join(" ").trim(), scenes: [], mix: NO_MIX, variations: [], images: [], videos: [], approved: {} });
+      const heard = (data.lines as { text: string }[]).map((line) => line.text).join(" ").trim();
+      rememberTranscript(fingerprint, heard);
+      patch({ reference: heard, scenes: [], mix: NO_MIX, variations: [], images: [], videos: [], approved: {} });
       endTask(taskId, "done");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível ler o vídeo. Tente de novo.");
@@ -911,13 +948,16 @@ export function CloneWizard() {
       if (event.source !== window || event.data?.source !== "clipgringa-flow" || event.data?.type !== "package-ack") return;
       window.removeEventListener("message", onAck); window.clearTimeout(timer); resolve(event.data.ok === true);
     };
-    const timer = window.setTimeout(() => { window.removeEventListener("message", onAck); resolve(false); }, 2500);
+    let timer = 0;
     window.addEventListener("message", onAck);
+    const arm = () => { timer = window.setTimeout(() => { window.removeEventListener("message", onAck); resolve(false); }, 6000); };
+    // O relógio só começa depois do token de envio ficar pronto (ele pode demorar), para a resposta da extensão não chegar "atrasada".
     void flowUploadInfo("Clonar vídeo").then((upload) => {
+      arm();
       try { window.postMessage({ source: "clipgringa-page", type: "flow-package", raw, upload }, window.location.origin); } catch { /* sem janela */ }
-    });
+    }, () => { arm(); try { window.postMessage({ source: "clipgringa-page", type: "flow-package", raw, upload: null }, window.location.origin); } catch { /* sem janela */ } });
   });
-  const extensionGotIt = useRef(false);
+  const extensionGotIt = useRef<Promise<boolean>>(Promise.resolve(false));
   const [flowProg, setFlowProg] = useState<FlowProgress | null>(null);
   useEffect(() => {
     const onMsg = (event: MessageEvent) => {
@@ -1074,8 +1114,7 @@ export function CloneWizard() {
     if (!redirectSig) { setRedirectIn(null); return; }
     try { if (window.sessionStorage.getItem("gv-flow-redirected") === redirectSig) return; } catch { /* storage unavailable */ }
     try { void navigator.clipboard.writeText(flowPackage()); } catch { /* o botão Copiar pacote continua disponível */ }
-    extensionGotIt.current = false;
-    void pushPackage(flowPackage()).then((ok) => { extensionGotIt.current = ok; });
+    extensionGotIt.current = pushPackage(flowPackage());
     setRedirectIn(3);
     const timer = window.setInterval(() => {
       setRedirectIn((n) => {
@@ -1085,7 +1124,7 @@ export function CloneWizard() {
           try { window.sessionStorage.setItem("gv-flow-redirected", redirectSig); } catch { /* storage unavailable */ }
           markSent(); // a pessoa vai gerar no Flow: o projeto espera até 2 horas
           // Com a extensão, ela mesma abre o Flow; sem ela, tentamos abrir daqui.
-          if (!extensionGotIt.current) { const opened = window.open(FLOW_HOME_URL, "_blank"); if (!opened) setRedirectBlocked(true); }
+          void extensionGotIt.current.then((ok) => { if (!ok) { const opened = window.open(FLOW_HOME_URL, "_blank"); if (!opened) setRedirectBlocked(true); } });
           return null;
         }
         return n - 1;
@@ -1383,7 +1422,7 @@ export function CloneWizard() {
 
         {ready && (redirectIn !== null || redirectBlocked) && (
           <section role="status" className="space-y-2 rounded-[18px] border border-[#7B3FE4]/60 bg-[#7B3FE4]/15 p-4" data-testid="flow-redirect">
-            <p className="text-sm font-semibold">{redirectBlocked ? "Seu navegador bloqueou a abertura do Flow." : `Abrindo o Flow e enviando tudo em ${redirectIn}s…`}</p>
+            <p className="text-sm font-semibold">{redirectBlocked ? "A extensão não respondeu. Recarregue esta página (F5) e confira se a extensão 1.7.2 está ligada; ou abra o Flow pelo botão abaixo." : `Abrindo o Flow e enviando tudo em ${redirectIn}s…`}</p>
             <div className="h-1.5 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A98BFF] transition-all duration-1000" style={{ width: `${redirectBlocked ? 100 : ((3 - (redirectIn ?? 3)) / 3) * 100}%` }} /></div>
             <p className="text-xs text-muted-foreground">Tudo pronto. A extensão recebe o pacote, abre um projeto novo e gera as imagens e os vídeos sozinha. Você não precisa copiar nem colar nada.</p>
             <div className="flex gap-2">

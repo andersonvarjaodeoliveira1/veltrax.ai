@@ -8,7 +8,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
   if (message && message.type === "clipgringa-open-flow") {
     // Abre o Flow sozinho (sem depender de pop-up do site) se ainda não houver uma aba dele.
-    chrome.tabs.query({ url: ["https://labs.google/fx/*/tools/flow*", "https://flow.google.com/*"] }, (tabs) => {
+    chrome.tabs.query({ url: ["https://labs.google/fx/*/tools/flow*", "https://labs.google/fx/*/tools/flow", "https://flow.google.com/*"] }, (tabs) => {
       if (tabs && tabs.length) { chrome.tabs.update(tabs[0].id, { active: true }); chrome.windows.update(tabs[0].windowId, { focused: true }); sendResponse({ ok: true, reused: true }); }
       else chrome.tabs.create({ url: "https://labs.google/fx/pt/tools/flow" }, () => sendResponse({ ok: true }));
     });
@@ -98,4 +98,15 @@ chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
     return;
   }
   suggest();
+});
+
+
+// Ao instalar ou atualizar, liga a ponte nas abas do ClipGringa que já estavam abertas (sem precisar apertar F5).
+chrome.runtime.onInstalled.addListener(async () => {
+  try {
+    const tabs = await chrome.tabs.query({ url: "https://clipgringa.gringatools.com/*" });
+    for (const tab of tabs) {
+      try { await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["site.js"] }); } catch (_e) { /* aba protegida */ }
+    }
+  } catch (_e) { /* sem permissão */ }
 });

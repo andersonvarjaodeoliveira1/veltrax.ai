@@ -86,7 +86,7 @@ it("follows the Árvore protocol and locks the CTA before the animations", async
   const open = vi.fn();
   vi.stubGlobal("open", open);
   await user.click(screen.getByRole("button", { name: "Enviar para o Flow" }));
-  await waitFor(() => expect(open).toHaveBeenCalledWith(expect.stringContaining("labs.google"), "_blank", "noopener"), { timeout: 4000 });
+  await waitFor(() => expect(open).toHaveBeenCalledWith(expect.stringContaining("labs.google"), "_blank", "noopener"), { timeout: 9000 });
   const pack = JSON.parse(await navigator.clipboard.readText());
   expect(pack).toMatchObject({ app: "clipgringa-flow", version: 1, keyword: "LIMON", sceneCount: 3 });
   expect(pack.videos).toHaveLength(2);
@@ -102,7 +102,7 @@ it("follows the Árvore protocol and locks the CTA before the animations", async
   expect(calls[1].body.scenes).toHaveLength(3);
   expect(calls[3].body.keyword).toBe("LIMON");
   expect(calls[3].body.lines).toBeUndefined(); // same copy: the backend closes every video with the locked CTA
-}, 20000);
+}, 40000);
 
 it("mixes different hooks, bodies and CTAs when the user asks for it", async () => {
   const calls = mockApi();
@@ -401,7 +401,7 @@ it("simple mode: upload one video and everything is prepared automatically, read
   expect(calls[3].body.keyword).toBe("QUERO");
 
   await user.click(screen.getByRole("button", { name: /Enviar para o Flow/ }));
-  await waitFor(() => expect(open).toHaveBeenCalledWith(expect.stringContaining("labs.google"), "_blank", "noopener"), { timeout: 4000 });
+  await waitFor(() => expect(open).toHaveBeenCalledWith(expect.stringContaining("labs.google"), "_blank", "noopener"), { timeout: 9000 });
   const pack = JSON.parse(await navigator.clipboard.readText());
   expect(pack.videos).toHaveLength(2);
 
@@ -410,7 +410,7 @@ it("simple mode: upload one video and everything is prepared automatically, read
   await user.upload(screen.getByLabelText("Enviar os vídeos gerados no Flow"), files);
   expect(await screen.findByText("6 de 6 cenas recebidas")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Montar todos os vídeos" })).toBeEnabled();
-});
+}, 40000);
 
 it("simple mode: product name, one sentence and photos reach the prompts", async () => {
   const calls = mockApi();
@@ -563,3 +563,26 @@ test("shows the extension's live progress with the time of each video", async ()
   await new Promise((r) => setTimeout(r, 20));
   expect(document.body).toBeTruthy();
 });
+
+test("a video already uploaded and transcribed is not sent again", async () => {
+  if (!Blob.prototype.arrayBuffer) {
+    Object.defineProperty(Blob.prototype, "arrayBuffer", { configurable: true, value() { return new Promise((resolve) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.readAsArrayBuffer(this as Blob); }); } });
+  }
+  if (!globalThis.crypto?.subtle) vi.stubGlobal("crypto", (await import("node:crypto")).webcrypto);
+  const drafts = vi.fn();
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    if (String(url).includes("/captions/draft")) { drafts(); return new Response(JSON.stringify({ lines: [{ text: "Você sabe por que o seu vídeo não viraliza? Eu explico agora." }] }), { status: 200 }); }
+    return new Response(JSON.stringify({ detail: "nope" }), { status: 500 });
+  }));
+  window.localStorage.removeItem("gv-clonagem-view");
+  const user = userEvent.setup();
+  const file = () => new File(["conteudo-do-video"], "ref.mp4", { type: "video/mp4", lastModified: 1 });
+  const first = render(<CloneWizard />);
+  await user.upload(await screen.findByLabelText("Escolher o vídeo para clonar"), file());
+  await waitFor(() => expect(drafts).toHaveBeenCalledTimes(1));
+  first.unmount();
+  render(<CloneWizard />);
+  await user.upload(await screen.findByLabelText("Escolher o vídeo para clonar"), file());
+  await screen.findByRole("button", { name: "Preparar meus vídeos" });
+  expect(drafts).toHaveBeenCalledTimes(1);
+}, 20000);
