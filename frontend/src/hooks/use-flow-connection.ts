@@ -9,7 +9,6 @@ export type FlowState = "unknown" | "no-extension" | "logged-out" | "connected";
 
 const SEEN_KEY = "gv-flow-seen-connected";
 const SENT_EVERY_MS = 5 * 60 * 1000;
-const FRESH_MS = 12 * 60 * 60 * 1000;
 
 /** Pergunta à extensão se a conta do Flow está conectada, avisa o membro quando muda e informa o servidor (Admin). */
 export function useFlowConnection(enabled: boolean, report = true) {
@@ -53,8 +52,8 @@ export function useFlowConnection(enabled: boolean, report = true) {
       answered = true;
       const d = event.data;
       const info: FlowAccount = { plan: d.plan ?? null, credits: typeof d.credits === "number" ? d.credits : null, seenAt: d.seenAt ?? null };
-      const fresh = typeof d.seenAt === "number" && Date.now() - d.seenAt < FRESH_MS;
-      apply(d.loggedIn === true && fresh ? "connected" : "logged-out", info);
+      // desconectada só quando a extensão leu um sinal claro de login pendente; sem leitura ainda = conectada
+      apply(d.loggedIn === false ? "logged-out" : "connected", info);
     };
 
     const ask = () => {

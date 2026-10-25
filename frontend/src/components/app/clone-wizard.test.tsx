@@ -327,7 +327,7 @@ it("offers only the free Flow Lower Priority mode", async () => {
   mockAuto();
   window.localStorage.removeItem("gv-clonagem-mode");
   const user = userEvent.setup();
-  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ sceneCount: 3, step: 1, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora." }));
+  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ sceneCount: 3, step: 1, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora.", variations }));
   render(<CloneWizard />);
   expect(screen.queryByRole("radio", { name: /Flow · Lower Priority/ })).not.toBeInTheDocument();
   await act(async () => { window.postMessage({ source: "clipgringa-flow", type: "status", loggedIn: true, plan: "Ultra", credits: 100, seenAt: Date.now() }, window.location.origin); });
@@ -616,7 +616,7 @@ test("the change box pauses the Flow and sends the requested change to every sta
   const realPost = window.postMessage.bind(window);
   vi.spyOn(window, "postMessage").mockImplementation(((message: unknown, ...rest: unknown[]) => { posted.push(message); return (realPost as (...a: unknown[]) => void)(message, ...rest); }) as typeof window.postMessage);
   window.localStorage.setItem("gv-clonagem-view-v2", "simple");
-  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ sceneCount: 3, step: 1, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora." }));
+  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ sceneCount: 3, step: 1, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora.", variations }));
   const user = userEvent.setup();
   render(<CloneWizard />);
   const box = await screen.findByLabelText("Quer mudar alguma coisa?");

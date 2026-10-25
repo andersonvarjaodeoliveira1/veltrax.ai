@@ -24,7 +24,8 @@
     const signInText = texts.some((t) => /^(fazer login|entrar|sign in|log in)$/i.test(t));
     const accountBadge = !!document.querySelector('[aria-label*="Conta do Google"], [aria-label*="Google Account"], a[href*="SignOutOptions"]');
     const inProject = /\/project\//.test(path);
-    const loggedIn = !onAbout && !signInLink && !signInText && (accountBadge || inProject);
+    // só conta como desconectada com sinal claro de login pendente; página desconhecida = continua conectada
+    const loggedIn = !onAbout && !signInLink && !signInText;
 
     let plan = null;
     let credits = null;

@@ -51,7 +51,7 @@
         source: "clipgringa-flow",
         type: "status",
         version: chrome.runtime.getManifest().version,
-        loggedIn: data.loggedIn === true,
+        loggedIn: data.loggedIn !== false,
         plan: data.plan || null,
         credits: typeof data.credits === "number" ? data.credits : null,
         seenAt: data.seenAt || null,

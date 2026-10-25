@@ -94,7 +94,7 @@ export default function ConnectFlowPage() {
       <section className="space-y-3 rounded-[18px] border border-border bg-card p-5" data-testid="step-extension">
         <p className="flex items-center gap-2 font-medium">
           <span className="grid size-6 place-items-center rounded-full bg-[#7B3FE4]/25 text-xs">{done.extension ? <Check className="size-3.5 text-[#5BD69A]" /> : "2"}</span>
-          Instale a extensão do ClipGringa (versão 1.9.0)
+          Instale a extensão do ClipGringa (versão 1.9.1)
         </p>
         <p className="text-xs text-muted-foreground">É ela que gera as imagens e os vídeos sozinha dentro do seu Flow.</p>
         <a href="/extensao/clipgringa-flow.zip" download onClick={() => mark({ extension: true })}

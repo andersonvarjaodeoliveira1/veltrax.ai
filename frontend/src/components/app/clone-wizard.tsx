@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, ClipboardCopy, Download, ExternalLink, Loader2, Lock, Plus, RefreshCw, Sparkles, Trash2, Unlock, Upload, X } from "lucide-react";
+import { Check, ClipboardCopy, Download, ExternalLink, Loader2, Lock, Pencil, Plus, RefreshCw, Sparkles, Trash2, Unlock, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
@@ -1140,6 +1140,7 @@ export function CloneWizard() {
   // Chat "Quero mudar algo": ao abrir/escrever, a geração para; ao aplicar, os prompts são refeitos com a mudança e o Flow recebe o pacote novo.
   const [changeText, setChangeText] = useState("");
   const [paused, setPaused] = useState(false);
+  const [manualMode, setManualMode] = useState<"closed" | "open" | "hidden">("closed");
   const [pendingChange, setPendingChange] = useState<string | null>(null);
   const pauseForChange = () => {
     if (paused) return;
@@ -1302,15 +1303,19 @@ export function CloneWizard() {
     return (
       <div className="space-y-5">
         {flowBanner}
-        {(hasReference || refFile || ready) && (
-          <section className="space-y-2 rounded-[18px] border border-border bg-card p-4" data-testid="change-box">
-            <label className="block text-sm font-medium" htmlFor="change-text">Quer mudar alguma coisa?</label>
+        {(ready || p.variations.length > 0) && (
+          <section className="space-y-3 rounded-[18px] border border-[#7B3FE4]/40 bg-gradient-to-br from-[#7B3FE4]/15 to-transparent p-5" data-testid="change-box">
+            <div className="flex items-center gap-2">
+              <span className="grid size-8 place-items-center rounded-full bg-[#7B3FE4]/25 text-[#A98BFF]"><Pencil className="size-4" /></span>
+              <label className="text-base font-semibold" htmlFor="change-text">Quer mudar alguma coisa?</label>
+              <span className="ml-auto text-xs text-muted-foreground">Opcional</span>
+            </div>
             <textarea id="change-text" value={changeText} onFocus={pauseForChange} onChange={(event) => setChangeText(event.target.value)} rows={2} maxLength={400}
-              placeholder="Ex.: troque o cenário para uma cozinha, a pessoa mais jovem, fale mais devagar" className={inputClass} />
+              placeholder="Ex.: troque o cenário para uma cozinha, a pessoa mais jovem, fale mais devagar" className={`${inputClass} rounded-[14px]`} />
             <div className="flex flex-wrap items-center gap-2">
-              <Button type="button" size="sm" className="rounded-full" onClick={applyChange} disabled={!changeText.trim() || pendingChange !== null}>Aplicar a mudança</Button>
+              <Button type="button" size="sm" className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-5 text-white" onClick={applyChange} disabled={!changeText.trim() || pendingChange !== null}>Aplicar a mudança</Button>
               {paused && <Button type="button" size="sm" variant="outline" className="rounded-full" onClick={resumeWithoutChange}>Continuar sem mudar</Button>}
-              {paused && <span className="text-xs text-[#F5B454]">Pausado enquanto você escreve. A extensão para na etapa atual.</span>}
+              {paused ? <span className="text-xs text-[#F5B454]">Pausado enquanto você escreve. A extensão para na etapa atual.</span> : <span className="text-xs text-muted-foreground">Ao clicar, a geração pausa até você aplicar.</span>}
             </div>
           </section>
         )}
@@ -1505,7 +1510,7 @@ export function CloneWizard() {
 
         {ready && (redirectIn !== null || redirectBlocked) && (
           <section role="status" className="space-y-2 rounded-[18px] border border-[#7B3FE4]/60 bg-[#7B3FE4]/15 p-4" data-testid="flow-redirect">
-            <p className="text-sm font-semibold">{redirectBlocked ? "A extensão não respondeu. Recarregue esta página (F5) e confira se a extensão 1.9.0 está ligada; ou abra o Flow pelo botão abaixo." : `Abrindo o Flow e enviando tudo em ${redirectIn}s…`}</p>
+            <p className="text-sm font-semibold">{redirectBlocked ? "A extensão não respondeu. Recarregue esta página (F5) e confira se a extensão 1.9.1 está ligada; ou abra o Flow pelo botão abaixo." : `Abrindo o Flow e enviando tudo em ${redirectIn}s…`}</p>
             <div className="h-1.5 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A98BFF] transition-all duration-1000" style={{ width: `${redirectBlocked ? 100 : ((1 - (redirectIn ?? 1)) / 1) * 100}%` }} /></div>
             <p className="text-xs text-muted-foreground">Tudo pronto. A extensão recebe o pacote, abre um projeto novo e gera as imagens e os vídeos sozinha. Você não precisa copiar nem colar nada.</p>
             <div className="flex gap-2">
@@ -1537,8 +1542,17 @@ export function CloneWizard() {
               </details>
             </section>
 
-            <details open className="rounded-[18px] border border-[#7B3FE4]/50 bg-[#7B3FE4]/10 p-5 text-sm" data-testid="guided-flow">
-              <summary className="cursor-pointer text-base font-semibold">{lowPriority ? "Gerar no Flow · Lower Priority (sem custo)" : "Gerar no Flow"}</summary>
+            {manualMode === "hidden" ? (
+              <button type="button" onClick={() => setManualMode("closed")} className="text-xs text-muted-foreground underline">Mostrar a geração manual no Flow</button>
+            ) : (
+            <details open={manualMode === "open"} onToggle={(event) => { const o = (event.currentTarget as HTMLDetailsElement).open; setManualMode((m) => (m === "hidden" ? m : o ? "open" : "closed")); }} className="rounded-[18px] border border-[#7B3FE4]/50 bg-[#7B3FE4]/10 p-5 text-sm" data-testid="guided-flow">
+              <summary className="flex cursor-pointer items-center gap-2 text-base font-semibold">
+                <span>{lowPriority ? "Gerar no Flow · Lower Priority (sem custo)" : "Gerar no Flow"}</span>
+                <span className="ml-auto flex items-center gap-1">
+                  <button type="button" aria-label="Editar a geração no Flow" title="Editar" onClick={(event) => { event.preventDefault(); setManualMode((m) => (m === "open" ? "closed" : "open")); }} className="grid size-8 place-items-center rounded-full border border-border text-muted-foreground hover:text-foreground"><Pencil className="size-4" /></button>
+                  <button type="button" aria-label="Remover a geração no Flow" title="Remover" onClick={(event) => { event.preventDefault(); setManualMode("hidden"); }} className="grid size-8 place-items-center rounded-full border border-border text-muted-foreground hover:text-foreground"><X className="size-4" /></button>
+                </span>
+              </summary>
               <div className="mt-3 rounded-[12px] border border-border bg-card p-3">{modelChooser()}</div>
               <ol className="mt-3 list-decimal space-y-1 pl-5 text-muted-foreground">
                 <li>Abra o <a href="https://labs.google/fx/pt/tools/flow" target="_blank" rel="noopener noreferrer" className="text-[#A98BFF] underline">Flow</a> e, para cada cena, cole o <b>prompt da imagem</b> (Nano Banana, 9:16, x1).</li>
@@ -1569,6 +1583,7 @@ export function CloneWizard() {
                 ))}
               </div>
             </details>
+            )}
 
             <section className="space-y-3 rounded-[18px] border border-border bg-card p-5">
               <p className="font-medium">Já gerou no Flow? Envie os vídeos aqui</p>
