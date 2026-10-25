@@ -769,7 +769,8 @@ export function InfluencerChat() {
     if (typeof window === "undefined") return;
     const box = orbitRef.current; // o wrapper não remonta, ao contrário do campo
     const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
-    if (!box || !card || reduce) return;
+    if (!box) return;
+    if (reduce || !card) { box.scrollIntoView?.({ block: "center" }); return; } // sem animação, mas sempre leva até o prompt
     const img = card.querySelector("img");
     const from = (img ?? card).getBoundingClientRect();
     // Sobe devagar até o campo do prompt (rolagem própria, mais lenta que a do navegador).
@@ -787,7 +788,10 @@ export function InfluencerChat() {
       const k = Math.min(1, (now - started) / DURATION);
       const y = startTop + (endTop - startTop) * ease(k);
       if (useWindow) window.scrollTo(0, y); else scroller!.scrollTop = y;
-      if (k < 1) window.requestAnimationFrame(step);
+      if (k < 1) { window.requestAnimationFrame(step); return; }
+      // Garantia: se o campo não ficou à vista (outro container rolável, layout diferente), centraliza.
+      const top = box.getBoundingClientRect().top;
+      if (top < 0 || top > window.innerHeight * 0.6) box.scrollIntoView?.({ behavior: "smooth", block: "center" });
     };
     window.requestAnimationFrame(step);
     // A miniatura do card acompanha a subida e pousa onde o prompt aparece.
