@@ -10,6 +10,14 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        // A extensão sempre baixa como arquivo e nunca fica velha no cache.
+        source: "/extensao/clipgringa-flow.zip",
+        headers: [
+          { key: "Content-Disposition", value: 'attachment; filename="clipgringa-flow.zip"' },
+          { key: "Cache-Control", value: "no-store, max-age=0" },
+        ],
+      },
+      {
         source: "/:path*",
         headers: [
           { key: "X-Frame-Options", value: "DENY" },
