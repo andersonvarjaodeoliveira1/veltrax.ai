@@ -75,6 +75,7 @@ export default function AutomationPage() {
   }, []);
   const [ready, setReady] = useState(false);
   const [tab, setTab] = useState<TabKey>("clonagem");
+  const [pickSignal, setPickSignal] = useState(0);
   const [creatives, setCreatives] = useState<Creative[]>([]);
   const [niches, setNiches] = useState<string[]>(["Geral"]);
   const [tone, setTone] = useState(TONES[0]);
@@ -245,7 +246,7 @@ export default function AutomationPage() {
 
       <nav aria-label="Etapas" className="space-y-2">
         <div ref={orbitRef} className="cg-orbit relative w-full sm:w-fit sm:min-w-[320px]" style={{ "--cg-r": "20px" } as React.CSSProperties}>
-        <button type="button" onClick={() => setTab(MAIN_TAB.key)} aria-current={tab === MAIN_TAB.key}
+        <button type="button" onClick={() => { setTab(MAIN_TAB.key); setPickSignal((n) => n + 1); }} aria-current={tab === MAIN_TAB.key}
           className={cn("relative block w-full rounded-[18px] border px-5 py-4 text-left transition-all",
             tab === MAIN_TAB.key ? "border-transparent bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white shadow-[0_12px_30px_-14px_#7B3FE4]" : "border-[#A98BFF]/50 bg-card hover:border-[#A98BFF]")}>
           <span className="flex items-center gap-2 text-base font-semibold">
@@ -440,7 +441,7 @@ export default function AutomationPage() {
         </section>
       )}
 
-      {tab === "clonagem" && <CloneWizard />}
+      {tab === "clonagem" && <CloneWizard pickSignal={pickSignal} />}
 
       {tab === "ajustes" && (
         <section className="space-y-5 rounded-[18px] border border-border bg-card p-5">

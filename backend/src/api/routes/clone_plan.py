@@ -520,6 +520,27 @@ PHOTO_TYPES = {"image/png", "image/jpeg", "image/webp"}
 MAX_PHOTO_BYTES = 5 * 1024 * 1024
 
 
+def _normalize_photo(data: bytes) -> tuple[bytes, str] | None:
+    """Decodes any PNG/JPG/WebP and re-encodes it as a clean JPEG (max 1280px). None when the bytes are not a readable picture.
+    The AI rejects odd files ("Unable to process input image"), so every photo goes through here first."""
+    try:
+        import cv2
+        import numpy as np
+
+        image = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
+        if image is None or image.size == 0:
+            return None
+        height, width = image.shape[:2]
+        scale = 1280 / max(height, width)
+        if scale < 1:
+            image = cv2.resize(image, (max(1, int(width * scale)), max(1, int(height * scale))), interpolation=cv2.INTER_AREA)
+        ok, buffer = cv2.imencode(".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, 90])
+        return (buffer.tobytes(), "image/jpeg") if ok else None
+    except Exception:
+        logger.warning("photo normalisation failed", exc_info=True)
+        return None
+
+
 @router.post("/product-look")
 async def product_look(request: Request, db: AsyncSession = Depends(get_db)):
     """Reads up to 3 product photos and returns a short description of the product's look. Photos are not stored."""
@@ -841,6 +862,9 @@ async def influencer_reference(request: Request, db: AsyncSession = Depends(get_
     headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36", "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.7"}
 
     def reply(body: bytes, kind: str, source: str) -> dict[str, str]:
+        fixed = _normalize_photo(body)
+        if fixed:
+            body, kind = fixed
         return {"image": f"data:{kind};base64,{base64.b64encode(body).decode()}", "source": source}
 
     async with httpx.AsyncClient(timeout=8, headers=headers) as http:
@@ -857,7 +881,7 @@ async def influencer_reference(request: Request, db: AsyncSession = Depends(get_
                     if not image_url:
                         return None
                     body, kind = await _safe_get(http, image_url, MAX_PHOTO_BYTES)
-                    return (body, kind) if kind in PHOTO_TYPES and len(body) > 30_000 else None
+                    return (body, kind) if kind in PHOTO_TYPES and len(body) > 30_000 and _normalize_photo(body) else None
                 except Exception:
                     return None
 
@@ -871,7 +895,7 @@ async def influencer_reference(request: Request, db: AsyncSession = Depends(get_
                     src = (item.get("src") or {}).get("large") or ""
                     if src.startswith("https://images.pexels.com/"):
                         body, kind = await _safe_get(http, src, MAX_PHOTO_BYTES)
-                        if kind in PHOTO_TYPES and len(body) > 30_000:
+                        if kind in PHOTO_TYPES and len(body) > 30_000 and _normalize_photo(body):
                             return reply(body, kind, "pexels")
             except Exception:
                 logger.warning("pexels reference failed", exc_info=True)
@@ -1290,7 +1314,9 @@ async def influencer_prompt(request: Request, db: AsyncSession = Depends(get_db)
     image_url = str(form.get("image_url") or "")
     if (photo is None or not hasattr(photo, "read")) and image_url:
         data, kind = await _download_pin_image(image_url)
-        parts.append(BinaryContent(data=data, media_type=kind))
+        fixed = _normalize_photo(data)
+        if fixed:
+            parts.append(BinaryContent(data=fixed[0], media_type=fixed[1]))
     elif photo is not None and hasattr(photo, "read"):
         kind = (getattr(photo, "content_type", "") or "").lower()
         data = await photo.read()
@@ -1298,9 +1324,19 @@ async def influencer_prompt(request: Request, db: AsyncSession = Depends(get_db)
             raise HTTPException(status_code=400, detail="Send a PNG, JPG or WebP photo")
         if len(data) > MAX_PHOTO_BYTES:
             raise HTTPException(status_code=413, detail="The photo can have up to 5 MB")
-        parts.append(BinaryContent(data=data, media_type=kind))
+        fixed = _normalize_photo(data)
+        if not fixed:
+            raise HTTPException(status_code=400, detail="Send a PNG, JPG or WebP photo")
+        parts.append(BinaryContent(data=fixed[0], media_type=fixed[1]))
     _check_script_rate(user_id)
-    out = await _run_parts(PHOTOREAL_SYSTEM, _PhotorealPrompts, parts)
+    try:
+        out = await _run_parts(PHOTOREAL_SYSTEM, _PhotorealPrompts, parts)
+    except HTTPException as error:
+        if error.status_code != 502 or len(parts) < 2:
+            raise
+        # A foto não passou na IA: segue só com a descrição da pessoa.
+        logger.warning("influencer prompt retried without the photo")
+        out = await _run_parts(PHOTOREAL_SYSTEM, _PhotorealPrompts, parts[:1])
     prompts: list[str] = []
     for raw in out.prompts:
         value = " ".join(str(raw).split()).rstrip(" .,;")

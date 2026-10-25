@@ -526,3 +526,14 @@ it("sends the objects the member wants in every take", async () => {
   await screen.findByText(/Ideia 1/);
   expect(calls[0].body.objects).toEqual([{ name: "bandeira dos EUA", place: "Na parede", position: "side" }]);
 });
+
+it("opens the video picker when the main button signals it", async () => {
+  mockApi();
+  window.localStorage.setItem("gv-clonagem-view", "simple");
+  const click = vi.spyOn(HTMLInputElement.prototype, "click");
+  const { rerender } = render(<CloneWizard pickSignal={0} />);
+  await screen.findByLabelText("Escolher o vídeo para clonar");
+  rerender(<CloneWizard pickSignal={1} />);
+  await waitFor(() => expect(click).toHaveBeenCalled());
+  click.mockRestore();
+});

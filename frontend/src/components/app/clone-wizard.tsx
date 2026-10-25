@@ -353,7 +353,7 @@ function Group({ label, children, hint }: { label: string; children: React.React
   );
 }
 
-export function CloneWizard() {
+export function CloneWizard({ pickSignal = 0 }: { pickSignal?: number } = {}) {
   const [ready, setReady] = useState(false);
   const [p, setP] = useState<Project>(EMPTY);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -390,6 +390,14 @@ export function CloneWizard() {
   const [imgs, setImgs] = useState<Record<string, string>>({});
   const [now, setNow] = useState(() => Date.now());
   const fileRef = useRef<HTMLInputElement>(null);
+  // O botão grande "Clonar um vídeo" já abre a escolha do vídeo (sem projeto lido ainda).
+  useEffect(() => {
+    if (!pickSignal) return;
+    const timer = window.setTimeout(() => {
+      if (projRef.current.reference.trim().length < 20) fileRef.current?.click();
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, [pickSignal]);
 
   const savedRef = useRef<string | null>(null);
   useEffect(() => {
