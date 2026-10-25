@@ -1092,30 +1092,41 @@ async def product_search(request: Request, db: AsyncSession = Depends(get_db)):
 async def _run_parts(system: str, output_type: type[BaseModel], parts: list[Any], model: Any = None) -> Any:
     from pydantic_ai import Agent
 
-    is_own = False
+    explicit = model
+    own: list[Any] = []
     if model is None:
         from ...integrations import user_models
         own = user_models()
-        is_own = bool(own)
         from ...usage import server_blocked
 
         if server_blocked() and not own:
             raise HTTPException(status_code=402, detail="TOKENS_EXHAUSTED")
-        model = own[0] if own else await _build_model()
-    agent = Agent(model, output_type=output_type, system_prompt=system, output_retries=2)
-    try:
-        result = await asyncio.wait_for(agent.run(parts), timeout=120)
-        from ...usage import record_usage
+        candidates = own + ([] if server_blocked() else [await _build_model()] + await _fallback_models())
+    else:
+        candidates = [model]
+    last_error: Exception | None = None
+    for index, candidate in enumerate(candidates):
+        agent = Agent(candidate, output_type=output_type, system_prompt=system, output_retries=2)
+        try:
+            result = await asyncio.wait_for(agent.run(parts), timeout=120)
+            from ...usage import record_usage
 
-        await record_usage(output_type.__name__, model, result.usage(), is_own)
-    except asyncio.TimeoutError:
-        raise HTTPException(status_code=504, detail="AI took too long. Try again.")
-    except HTTPException:
-        raise
-    except Exception:
-        logger.exception("clone product look failed")
-        raise HTTPException(status_code=502, detail="Could not read the photos. Try again.")
-    return result.output
+            await record_usage(output_type.__name__, candidate, result.usage(), candidate in own)
+            return result.output
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail="AI took too long. Try again.")
+        except HTTPException:
+            raise
+        except Exception as exc:
+            last_error = exc
+            # Cota esgotada, modelo fora do ar ou que não aceita imagem: tenta o próximo da lista.
+            if index + 1 < len(candidates) and (_is_quota_error(exc) or "image" in str(exc).lower() or "400" in str(exc)):
+                logger.warning("clone product look: %s failed (%s), trying the next model", candidate, type(exc).__name__)
+                continue
+            logger.exception("clone product look failed")
+            raise HTTPException(status_code=502, detail="Could not read the photos. Try again.")
+    logger.error("clone product look: every model failed: %s", last_error)
+    raise HTTPException(status_code=502, detail="Could not read the photos. Try again.")
 
 
 # ---------------------------------------------------------------------------
