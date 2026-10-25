@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, ClipboardCopy, Download, ExternalLink, Loader2, Lock, Pencil, Plus, RefreshCw, Sparkles, Trash2, Unlock, Upload, X } from "lucide-react";
+import { ArrowUp, Check, ClipboardCopy, Download, ExternalLink, Loader2, Lock, Pencil, Plus, RefreshCw, Sparkles, Trash2, Unlock, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
@@ -1140,6 +1140,7 @@ export function CloneWizard() {
   // Chat "Quero mudar algo": ao abrir/escrever, a geração para; ao aplicar, os prompts são refeitos com a mudança e o Flow recebe o pacote novo.
   const [changeText, setChangeText] = useState("");
   const [paused, setPaused] = useState(false);
+  const [changeDemo, setChangeDemo] = useState("");
   const [manualMode, setManualMode] = useState<"closed" | "open" | "hidden">("closed");
   const [pendingChange, setPendingChange] = useState<string | null>(null);
   const pauseForChange = () => {
@@ -1199,6 +1200,22 @@ export function CloneWizard() {
     return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [redirectSig]);
+
+  // Exemplos de mudança: digita e apaga, um após o outro, até a pessoa escrever.
+  const changeBoxShown = (p.videos.length > 0 && p.ctaLocked) || p.variations.length > 0;
+  useEffect(() => {
+    if (changeText || !changeBoxShown || typeof window === "undefined") return;
+    const texts = ["Troque o cenário para uma cozinha moderna", "A pessoa mais jovem, de cabelo curto", "Fale mais devagar e com um tom mais amigável", "Deixe os vídeos mais curtos, com um gancho mais forte", "Mude o final para chamar para o WhatsApp"];
+    let ti = 0; let n = 0; let erasing = false; let timer = 0;
+    const tick = () => {
+      const full = texts[ti % texts.length];
+      if (!erasing) { n += 1; setChangeDemo(full.slice(0, n)); if (n >= full.length) { erasing = true; timer = window.setTimeout(tick, 1600); return; } }
+      else { n -= 2; setChangeDemo(full.slice(0, Math.max(n, 0))); if (n <= 0) { erasing = false; n = 0; ti += 1; timer = window.setTimeout(tick, 400); return; } }
+      timer = window.setTimeout(tick, erasing ? 18 : 38);
+    };
+    timer = window.setTimeout(tick, 600);
+    return () => window.clearTimeout(timer);
+  }, [changeText, changeBoxShown]);
 
   if (simple) {
     const ready = p.videos.length > 0 && p.ctaLocked;
@@ -1304,20 +1321,23 @@ export function CloneWizard() {
       <div className="space-y-5">
         {flowBanner}
         {(ready || p.variations.length > 0) && (
-          <section className="space-y-3 rounded-[18px] border border-[#7B3FE4]/40 bg-gradient-to-br from-[#7B3FE4]/15 to-transparent p-5" data-testid="change-box">
-            <div className="flex items-center gap-2">
-              <span className="grid size-8 place-items-center rounded-full bg-[#7B3FE4]/25 text-[#A98BFF]"><Pencil className="size-4" /></span>
-              <label className="text-base font-semibold" htmlFor="change-text">Quer mudar alguma coisa?</label>
-              <span className="ml-auto text-xs text-muted-foreground">Opcional</span>
+          <div className="cg-orbit relative" data-testid="change-box">
+            <div className="relative rounded-[26px] bg-[#1a191d] p-5 ring-1 ring-white/10 shadow-[0_20px_60px_-30px_#000]">
+              <label className="sr-only" htmlFor="change-text">Quer mudar alguma coisa?</label>
+              <p className="mb-2 px-1 text-sm font-medium text-[#C9BBFA]">Quer mudar alguma coisa? <span className="font-normal text-muted-foreground">· escreva e eu adapto os prompts</span></p>
+              <textarea id="change-text" value={changeText} onFocus={pauseForChange} onChange={(event) => setChangeText(event.target.value)} rows={3} maxLength={400}
+                placeholder={changeDemo ? `${changeDemo}▍` : "Ex.: troque o cenário para uma cozinha, a pessoa mais jovem, fale mais devagar"}
+                className="min-h-[84px] w-full resize-none bg-transparent px-1 py-1 text-lg outline-none placeholder:text-muted-foreground/70" />
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {paused && <Button type="button" size="sm" variant="outline" className="rounded-full" onClick={resumeWithoutChange}>Continuar sem mudar</Button>}
+                <span className={`text-xs ${paused ? "text-[#F5B454]" : "text-muted-foreground"}`}>{paused ? "Pausado enquanto você escreve. A extensão para na etapa atual." : "Ao clicar, a geração pausa até você aplicar."}</span>
+                <button type="button" aria-label="Aplicar a mudança" title="Aplicar a mudança" onClick={applyChange} disabled={!changeText.trim() || pendingChange !== null}
+                  className="ml-auto flex size-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#A98BFF] to-[#7B3FE4] text-white disabled:opacity-40">
+                  <ArrowUp className="size-5" />
+                </button>
+              </div>
             </div>
-            <textarea id="change-text" value={changeText} onFocus={pauseForChange} onChange={(event) => setChangeText(event.target.value)} rows={2} maxLength={400}
-              placeholder="Ex.: troque o cenário para uma cozinha, a pessoa mais jovem, fale mais devagar" className={`${inputClass} rounded-[14px]`} />
-            <div className="flex flex-wrap items-center gap-2">
-              <Button type="button" size="sm" className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-5 text-white" onClick={applyChange} disabled={!changeText.trim() || pendingChange !== null}>Aplicar a mudança</Button>
-              {paused && <Button type="button" size="sm" variant="outline" className="rounded-full" onClick={resumeWithoutChange}>Continuar sem mudar</Button>}
-              {paused ? <span className="text-xs text-[#F5B454]">Pausado enquanto você escreve. A extensão para na etapa atual.</span> : <span className="text-xs text-muted-foreground">Ao clicar, a geração pausa até você aplicar.</span>}
-            </div>
-          </section>
+          </div>
         )}
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -1549,7 +1569,7 @@ export function CloneWizard() {
               <summary className="flex cursor-pointer items-center gap-2 text-base font-semibold">
                 <span>{lowPriority ? "Gerar no Flow · Lower Priority (sem custo)" : "Gerar no Flow"}</span>
                 <span className="ml-auto flex items-center gap-1">
-                  <button type="button" aria-label="Editar a geração no Flow" title="Editar" onClick={(event) => { event.preventDefault(); setManualMode((m) => (m === "open" ? "closed" : "open")); }} className="grid size-8 place-items-center rounded-full border border-border text-muted-foreground hover:text-foreground"><Pencil className="size-4" /></button>
+                  <button type="button" aria-label="Editar a geração no Flow" title="Editar" onClick={(event) => { event.preventDefault(); const t = document.getElementById("change-text"); t?.scrollIntoView?.({ behavior: "smooth", block: "center" }); t?.focus(); }} className="grid size-8 place-items-center rounded-full border border-border text-muted-foreground hover:text-foreground"><Pencil className="size-4" /></button>
                   <button type="button" aria-label="Remover a geração no Flow" title="Remover" onClick={(event) => { event.preventDefault(); setManualMode("hidden"); }} className="grid size-8 place-items-center rounded-full border border-border text-muted-foreground hover:text-foreground"><X className="size-4" /></button>
                 </span>
               </summary>
