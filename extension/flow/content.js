@@ -82,6 +82,7 @@
     const wanted = String(data.flowModel || "").trim();
     flowModel = wanted && !/lower priority/i.test(wanted) ? wanted : "[Lower Priority]";
     fallbackModels = Array.isArray(data.fallbackModels) ? data.fallbackModels.map((x) => String(x)).filter(Boolean) : [];
+    try { el("chipmodel").textContent = isLowerPriority() ? "LOWER PRIORITY · 0 CRÉDITOS" : `${flowModel.toUpperCase()} · GASTA CRÉDITOS`; } catch (_e) { /* painel ainda não existe */ }
     return { jobs, keyword: data.keyword || "" };
   }
 
@@ -162,31 +163,42 @@
       if (item) { flowModel = used; fallbackModels = []; setNow(`Sua conta não tem “${needle}”. Usando ${text(item).split("\n")[0]} (gasta créditos).`); }
     }
     if (!item) {
+      const seen = items().map((i) => text(i).split("\n")[0]).filter(Boolean).slice(0, 6).join(" | ");
       await closeSettings();
-      throw new Error(`O Flow não mostrou o modelo “${needle}” nesta conta. ${needle === "[Lower Priority]" ? "Confira se o Veo 3.1 Lite [Lower Priority] aparece nos ajustes do Flow (ele é do plano Ultra)." : "Confira o nome do modelo nos ajustes do Flow."}`);
+      throw new Error(`O Flow não mostrou o modelo “${needle}” nesta conta (modelos que apareceram: ${seen || "nenhum"}). ${needle === "[Lower Priority]" ? "Confira se o Veo 3.1 Lite [Lower Priority] aparece nos ajustes do Flow (ele é do plano Ultra)." : "Confira o nome do modelo nos ajustes do Flow."}`);
     }
     item.click();
     await sleep(500);
     return used;
   }
 
+  let cfgStep = "";
   async function configure(kind) {
-    await ensureDirectMode();
-    await openSettings();
-    if (kind === "image") {
-      await pickRadio("image");
-      await pickRadio("crop_9_16");
-      await pickRadioByLabel("x1");
-    } else {
-      await pickRadio("videocam");
-      await sleep(300);
-      await pickRadio("crop_free"); // Frames (primeiro quadro)
-      await pickRadio("crop_9_16");
-      await pickRadioByLabel("8s");
-      await pickRadioByLabel("x1");
-      await ensureModel(flowModel);
-    }
-    await closeSettings();
+    const steps = async () => {
+      cfgStep = "fechando o painel do Agente"; await ensureDirectMode();
+      cfgStep = "abrindo os ajustes do Flow"; await openSettings();
+      if (kind === "image") {
+        cfgStep = "escolhendo imagem"; await pickRadio("image");
+        cfgStep = "formato 9:16"; await pickRadio("crop_9_16");
+        cfgStep = "quantidade x1"; await pickRadioByLabel("x1");
+      } else {
+        cfgStep = "escolhendo vídeo"; await pickRadio("videocam");
+        await sleep(300);
+        cfgStep = "modo Frames (primeiro quadro)"; await pickRadio("crop_free");
+        cfgStep = "formato 9:16"; await pickRadio("crop_9_16");
+        cfgStep = "duração 8s"; await pickRadioByLabel("8s");
+        cfgStep = "quantidade x1"; await pickRadioByLabel("x1");
+        cfgStep = `modelo ${flowModel}`; await ensureModel(flowModel);
+      }
+      cfgStep = "fechando os ajustes"; await closeSettings();
+    };
+    let timer = 0;
+    try {
+      await Promise.race([
+        steps(),
+        new Promise((_, reject) => { timer = window.setTimeout(() => reject(new Error(`O Flow não respondeu nos ajustes (travou em: ${cfgStep}). Confira se a aba do Flow está aberta e visível.`)), 75000); }),
+      ]);
+    } finally { window.clearTimeout(timer); }
   }
 
   async function setPrompt(value) {
@@ -362,7 +374,11 @@
   .head{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.07)}
   .orb{width:30px;height:30px;border-radius:50%;flex:none;background:conic-gradient(from 0deg,#7b3fe4,#a98bff,#3a9bbb,#7b3fe4);animation:spin 5s linear infinite;position:relative;box-shadow:0 0 18px rgba(123,63,228,.7)}
   .orb:after{content:"";position:absolute;inset:5px;border-radius:50%;background:#0a0814}
-  .idle .orb{animation-duration:14s}
+  .idle .orb{animation-duration:4s}
+  .run .orb{animation-duration:1.3s}
+  .ring{position:fixed;z-index:2147482999;pointer-events:none;border-radius:14px;border:3px solid #a98bff;box-shadow:0 0 0 4px rgba(123,63,228,.35),0 0 28px 6px rgba(169,139,255,.6);animation:ringpulse 1.2s ease-in-out infinite}
+  .ring[hidden]{display:none}
+  button.b.pulse{animation:gopulse 1.2s ease-in-out infinite}
   .ttl{flex:1;min-width:0}
   .eyebrow{font:600 9px ui-monospace,SFMono-Regular,monospace;letter-spacing:.18em;color:#a98bff;text-transform:uppercase}
   .title{font-weight:700;font-size:15px;letter-spacing:-.01em}
@@ -380,6 +396,17 @@
   .err:empty{display:none}
   .bar{height:6px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:10px;position:relative}
   .bar>i{display:block;height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,#5a1baa,#7b3fe4,#a98bff);box-shadow:0 0 14px #7b3fe4;transition:width .5s}
+  .steps{display:flex;gap:6px;margin-bottom:10px}
+  .stp{flex:1;display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:12px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03);font:600 10px ui-monospace,monospace;letter-spacing:.05em;text-transform:uppercase;color:#8d85a3;position:relative;overflow:hidden}
+  .stp i{width:16px;height:16px;border-radius:50%;flex:none;border:2px solid rgba(255,255,255,.18);display:grid;place-items:center;font-style:normal;font-size:9px}
+  .stp.on{color:#fff;border-color:rgba(245,180,84,.6);background:rgba(245,180,84,.08)}
+  .stp.on i{border:2px solid transparent;border-top-color:#f5b454;border-right-color:#f5b454;animation:spin .9s linear infinite}
+  .stp.on:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.12),transparent);animation:scan 1.8s linear infinite}
+  .stp.ok{color:#5bd69a;border-color:rgba(91,214,154,.35)}
+  .stp.ok i{border-color:#5bd69a;background:#5bd69a;color:#0a0814}
+  .doing{font-weight:700;font-size:14px;margin-bottom:2px}
+  .clock{font:600 11px ui-monospace,monospace;color:#c9bbfa;margin-top:8px;display:flex;gap:10px;flex-wrap:wrap}
+  .clock span{padding:3px 8px;border-radius:99px;background:rgba(123,63,228,.14);border:1px solid rgba(169,139,255,.25)}
   .run .bar:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.35),transparent);animation:scan 1.6s linear infinite}
   .row{display:flex;gap:8px;flex-wrap:wrap}
   button.b{border:0;border-radius:99px;padding:10px 18px;font:600 12px inherit;cursor:pointer;color:#fff;background:linear-gradient(135deg,#8b5cf6,#7b3fe4);box-shadow:0 8px 22px -8px #7b3fe4}
@@ -397,8 +424,10 @@
   label.chk{display:flex;gap:6px;align-items:center;font-size:11px;color:#c9bbfa;margin-top:10px}
   @keyframes spin{to{transform:rotate(360deg)}}
   @keyframes pulse{50%{opacity:.35}}
+  @keyframes ringpulse{50%{opacity:.45;transform:scale(1.04)}}
+  @keyframes gopulse{50%{box-shadow:0 0 0 6px rgba(139,92,246,.35),0 8px 22px -8px #7b3fe4}}
   @keyframes scan{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
-  @media (prefers-reduced-motion:reduce){.orb,.run .dot,.run .bar:after{animation:none}}
+  @media (prefers-reduced-motion:reduce){.run .dot,.run .bar:after,.ring,button.b.pulse,.stp.on:after{animation:none}}
   `;
 
   const host = document.createElement("div");
@@ -407,14 +436,20 @@
   const root = host.attachShadow({ mode: "open" });
   root.innerHTML = `
   <style>${css}</style>
+  <div class="ring" id="ring" hidden></div>
   <div class="box idle" id="box"><div class="inner">
     <div class="head"><span class="orb"></span><div class="ttl"><div class="eyebrow">Piloto automático · Flow</div><div class="title">ClipGringa</div></div><button class="x" id="min" title="Minimizar">–</button></div>
     <div class="body" id="body">
-      <div class="chips"><span class="chip"><i class="dot"></i><span id="chipst">PRONTO</span></span><span class="chip">LOWER PRIORITY · 0 CRÉDITOS</span></div>
+      <div class="chips"><span class="chip"><i class="dot"></i><span id="chipst">PRONTO</span></span><span class="chip" id="chipmodel">LOWER PRIORITY · 0 CRÉDITOS</span></div>
       <div class="status">
+        <div class="steps" id="steps" hidden>
+          <div class="stp" data-p="imagem"><i>1</i>Imagem</div><div class="stp" data-p="vídeo"><i>2</i>Animar</div><div class="stp" data-p="enviando"><i>3</i>Enviar</div><div class="stp" data-p="baixando"><i>4</i>Baixar</div>
+        </div>
+        <div class="doing" id="doing"></div>
         <div class="now" id="now">Pronto. Envie o pacote pelo site e eu faço o resto sozinho.</div>
         <div class="err" id="err"></div>
         <div class="bar"><i id="fill"></i></div>
+        <div class="clock" id="clock" hidden></div>
       </div>
       <ul id="list"></ul>
       <div class="row"><button class="b" id="go">Começar</button><button class="b o" id="stop" disabled>Parar</button><button class="b o" id="clear">Limpar</button></div>
@@ -438,6 +473,41 @@
   }
   function setError(msg) { el("err").textContent = msg || ""; }
 
+  /* ---------- etapa atual, tempo e previsão ---------- */
+  const PHASES = ["imagem", "vídeo", "enviando", "baixando"];
+  const DOING = {
+    "imagem": "Etapa 1 de 4 · Gerando a imagem da cena",
+    "vídeo": "Etapa 2 de 4 · Animando a imagem em vídeo",
+    "enviando": "Etapa 3 de 4 · Enviando o vídeo para o ClipGringa",
+    "baixando": "Etapa 4 de 4 · Baixando o vídeo",
+  };
+  let phaseAt = 0; let jobAt = 0; let runAt = 0;
+  const fmt = (sec) => { sec = Math.max(0, Math.round(sec)); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`; };
+  const fmtMin = (sec) => (sec < 90 ? "menos de 2 min" : `~${Math.round(sec / 60)} min`);
+  function setPhase(name) {
+    state.phase = name; phaseAt = Date.now();
+    el("doing").textContent = DOING[name] || "";
+    tickClock(); render();
+  }
+  function avgJobSeconds() {
+    const values = Object.values(state.dur || {}).filter((v) => v > 0);
+    return values.length ? values.reduce((a, b) => a + b, 0) / values.length : 240; // sem histórico: ~4 min por cena
+  }
+  function tickClock() {
+    const steps = el("steps"); const clock = el("clock");
+    const on = running && state.phase;
+    steps.hidden = !on; clock.hidden = !on;
+    if (!on) { el("doing").textContent = ""; return; }
+    const idx = PHASES.indexOf(state.phase);
+    steps.querySelectorAll(".stp").forEach((node, i) => { node.classList.toggle("on", i === idx); node.classList.toggle("ok", i < idx); const dot = node.querySelector("i"); dot.textContent = i < idx ? "✓" : String(i + 1); });
+    const left = state.jobs.filter((j) => !state.done[j.key]).length;
+    const avg = avgJobSeconds();
+    const thisJob = (Date.now() - jobAt) / 1000;
+    const remaining = Math.max(0, left - 1) * avg + Math.max(30, avg - thisJob);
+    clock.innerHTML = `<span>Etapa: ${fmt((Date.now() - phaseAt) / 1000)}</span><span>Esta cena: ${fmt(thisJob)}</span><span>Faltam ${fmtMin(remaining)} · ${left} cena(s)</span><span>No total: ${fmt((Date.now() - runAt) / 1000)}</span>`;
+  }
+  window.setInterval(() => { if (running) tickClock(); }, 1000);
+
   function render() {
     const total = state.jobs.length;
     const done = state.jobs.filter((j) => state.done[j.key]).length;
@@ -453,7 +523,7 @@
   }
 
   async function persist() {
-    await storage.set({ jobs: state.jobs, done: state.done, errors: state.errors, cloud: state.cloud, upload: uploadInfo, raw: el("pkg").value });
+    await storage.set({ jobs: state.jobs, done: state.done, errors: state.errors, cloud: state.cloud, dur: state.dur || {}, upload: uploadInfo, raw: el("pkg").value });
   }
 
   async function withRetry(label, fn) {
@@ -478,10 +548,10 @@
 
   async function runJob(job, onlyFirst) {
     const label = `Vídeo ${pad(job.vi + 1)} · Cena ${pad(job.si + 1)}`;
-    state.current = job.key;
+    state.current = job.key; jobAt = Date.now();
 
-    // 1) imagem
-    state.phase = "imagem"; render();
+    // 1) imagem (primeiro passo: a imagem da cena)
+    setPhase("imagem");
     const image = await withRetry(`${label} (imagem)`, async () => {
       setNow(`${label}: preparando o Flow para gerar a imagem…`);
       await configure("image");
@@ -492,8 +562,8 @@
       return waitNewTile(before, "image", IMAGE_WAIT_MS, (p) => { if (p != null) setNow(`${label}: gerando a imagem… ${p}%`); });
     });
 
-    // 2) vídeo em Lower Priority
-    state.phase = "vídeo"; render();
+    // 2) vídeo: anima a imagem aprovada, em Lower Priority
+    setPhase("vídeo");
     const video = await withRetry(`${label} (vídeo)`, async () => {
       setNow(isLowerPriority() ? `${label}: escolhendo Veo 3.1 Lite [Lower Priority] (0 créditos)…` : `${label}: escolhendo o modelo ${flowModel} (gasta créditos do Flow)…`);
       await configure("video");
@@ -505,13 +575,15 @@
       return waitNewTile(before, "video", VIDEO_WAIT_MS, (p) => { if (p != null) setNow(`${label}: animando${isLowerPriority() ? " em Lower Priority" : ""}… ${p}%`); });
     });
 
-    // 3) baixar
-    state.phase = "baixando"; render();
+    // 3) enviar para o ClipGringa e 4) baixar
+    setPhase("enviando");
     setNow(`${label}: enviando ${job.file} para o ClipGringa…`);
     const sent = await uploadVideo(video, job);
+    setPhase("baixando");
     setNow(`${label}: baixando ${job.file}…`);
     await withRetry(`${label} (download)`, () => downloadTile(video, job.file, sent || !uploadInfo ? null : uploadInfo));
     state.done[job.key] = true;
+    state.dur = { ...(state.dur || {}), [job.key]: Math.round((Date.now() - jobAt) / 1000) };
     delete state.errors[job.key];
     await persist();
     if (onlyFirst) stopFlag = true;
@@ -520,12 +592,13 @@
   const FLOW_HOME = "https://labs.google/fx/pt/tools/flow";
   const inProject = () => /\/project\//.test(location.pathname);
 
+  const isNewProject = (b) => visible(b) && /(novo projeto|new project)/i.test(`${text(b)} ${b.getAttribute("aria-label") || ""}`.trim());
+
   // Garante que estamos dentro de um projeto do Flow: abre um novo sozinho quando preciso.
   async function ensureProject() {
     if (inProject()) return true;
     setNow("Abrindo um novo projeto no Flow…");
-    const isNew = (b) => visible(b) && /(novo projeto|new project)/i.test(`${text(b)} ${b.getAttribute("aria-label") || ""}`.trim());
-    const btn = await waitFor(() => $$("button, [role=button], a", document).find(isNew), 15000);
+    const btn = await waitFor(() => $$("button, [role=button], a", document).find(isNewProject), 15000);
     if (!btn) {
       if (!/\/tools\/flow/.test(location.pathname)) { setNow("Indo para a página do Flow…"); location.href = FLOW_HOME; }
       return false;
@@ -544,13 +617,15 @@
       return;
     }
     try {
-      parsePackage(el("pkg").value); // define o modelo pedido pelo pacote
-      if (!state.jobs.length || el("pkg").value.trim() !== (state.raw || "")) {
-        const parsed = parsePackage(el("pkg").value);
-        state = { jobs: parsed.jobs, done: {}, errors: {}, cloud: {}, raw: el("pkg").value.trim() };
+      const raw = el("pkg").value.trim() || state.raw || "";
+      parsePackage(raw); // define o modelo pedido pelo pacote
+      if (!state.jobs.length || raw !== (state.raw || "")) {
+        const parsed = parsePackage(raw);
+        state = { jobs: parsed.jobs, done: {}, errors: {}, cloud: {}, raw };
+        el("pkg").value = raw;
       }
     } catch (e) { setError(e.message); return; }
-    running = true; stopFlag = false; setRunning(true);
+    running = true; stopFlag = false; runAt = Date.now(); setRunning(true);
     el("go").disabled = true; el("stop").disabled = false;
     const onlyFirst = el("test").checked;
     await persist(); render();
@@ -568,9 +643,9 @@
       }
       const left = state.jobs.filter((j) => !state.done[j.key]).length;
       state.current = null; state.phase = "";
-      setNow(left === 0 ? "Tudo pronto! Os vídeos foram baixados na pasta Downloads/ClipGringa. Envie-os no ClipGringa." : stopFlag ? "Parado. Clique em Começar para continuar de onde parou." : `Terminou com ${left} cena(s) pendente(s). Clique em Começar para tentar de novo.`);
+      setNow(left === 0 ? `Tudo pronto em ${fmt((Date.now() - runAt) / 1000)}! Os vídeos foram baixados na pasta Downloads/ClipGringa e enviados ao ClipGringa.` : stopFlag ? "Parado. Clique em Começar para continuar de onde parou." : `Terminou com ${left} cena(s) pendente(s). Clique em Começar para tentar de novo.`);
     } finally {
-      running = false; setRunning(false); el("go").disabled = false; el("stop").disabled = true; render();
+      running = false; setRunning(false); el("go").disabled = false; el("stop").disabled = true; state.phase = ""; tickClock(); render();
     }
   }
 
@@ -592,20 +667,47 @@
     body.style.display = hidden ? "flex" : "none"; el("min").textContent = hidden ? "–" : "+";
   });
 
-  // Pacote enviado direto pelo site: coloca no painel e começa sozinho.
+  // Guia: com o pacote salvo, pede para clicar em "Novo projeto"; ao detectar o projeto aberto, mostra o Começar.
+  let lastGuide = "";
+  function placeRing(target) {
+    const ring = el("ring");
+    if (!target) { ring.hidden = true; return; }
+    const r = target.getBoundingClientRect();
+    Object.assign(ring.style, { left: `${r.left - 4}px`, top: `${r.top - 4}px`, width: `${r.width + 8}px`, height: `${r.height + 8}px` });
+    ring.hidden = false;
+  }
+  function updateGuide() {
+    if (running) { placeRing(null); el("go").style.display = ""; el("go").classList.remove("pulse"); return; }
+    const left = state.jobs.filter((j) => !state.done[j.key]).length;
+    if (!state.jobs.length || !left) { placeRing(null); el("go").style.display = ""; el("go").classList.remove("pulse"); return; }
+    const inside = inProject() && editor() && visible(editor());
+    if (!inside) {
+      el("go").style.display = "none"; el("go").classList.remove("pulse");
+      placeRing($$("button, [role=button], a", document).find(isNewProject) || null);
+      if (lastGuide !== "new") { lastGuide = "new"; setNow("Pacote salvo. Passo 1: clique em “Novo projeto” aqui no Flow. Quando o projeto abrir, aparece o botão Começar."); }
+      return;
+    }
+    placeRing(null); el("go").style.display = ""; el("go").classList.add("pulse");
+    if (lastGuide !== "start") { lastGuide = "start"; setNow("Projeto aberto! Agora clique em Começar."); }
+  }
+  window.setInterval(updateGuide, 600);
+
+  // Pacote enviado direto pelo site: fica salvo no painel; o guia leva até o Começar.
   const PENDING_KEY = "clipgringa-flow-pending-v1";
   async function takePending() {
     try {
       if (running) return;
       const got = (await chrome.storage.local.get(PENDING_KEY))[PENDING_KEY];
       if (!got || !got.raw || Date.now() - got.at > 30 * 60 * 1000) { if (got) await chrome.storage.local.remove(PENDING_KEY); return; }
-      el("pkg").value = got.raw;
+      // O pacote fica salvo na hora (sobrevive a recarregar a página); quem começa é o botão Começar.
+      const parsed = parsePackage(got.raw);
+      state = { jobs: parsed.jobs, done: {}, errors: {}, cloud: {}, raw: got.raw.trim() };
       uploadInfo = got.upload || null;
-      if (!(await ensureProject())) return; // o pacote fica guardado e continua quando a página do Flow abrir
+      el("pkg").value = got.raw;
+      await persist();
       await chrome.storage.local.remove(PENDING_KEY);
-      setNow("Pacote recebido do ClipGringa. Começando…");
-      start();
-    } catch (_e) { /* sem acesso ao armazenamento */ }
+      setError(""); lastGuide = ""; render(); updateGuide();
+    } catch (e) { setError(e && e.message ? e.message : ""); }
   }
   try { chrome.storage.onChanged.addListener((changes) => { if (changes[PENDING_KEY]) takePending(); }); } catch (_e) { /* ignore */ }
 
@@ -626,12 +728,12 @@
 
   storage.get().then((saved) => {
     if (saved && saved.jobs && saved.jobs.length) {
-      state = { jobs: saved.jobs, done: saved.done || {}, errors: saved.errors || {}, cloud: saved.cloud || {}, raw: (saved.raw || "").trim() };
+      state = { jobs: saved.jobs, done: saved.done || {}, errors: saved.errors || {}, cloud: saved.cloud || {}, dur: saved.dur || {}, raw: (saved.raw || "").trim() };
       uploadInfo = saved.upload || null;
       el("pkg").value = saved.raw || "";
       const left = state.jobs.filter((j) => !state.done[j.key]).length;
       setNow(left ? `Pacote carregado: ${left} cena(s) faltando. Clique em Começar para continuar.` : "Pacote concluído. Clique em Limpar para começar outro.");
       render();
     }
-  }).then(takePending);
+  }).then(takePending).then(updateGuide);
 })();
