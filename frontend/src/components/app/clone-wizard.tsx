@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, ClipboardCopy, Download, ExternalLink, Loader2, Lock, Plus, RefreshCw, Trash2, Unlock, Upload, X } from "lucide-react";
+import { Check, ClipboardCopy, Download, ExternalLink, Loader2, Lock, Plus, RefreshCw, Sparkles, Trash2, Unlock, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
@@ -1190,34 +1190,54 @@ export function CloneWizard() {
               <>
                 <p className="text-sm text-muted-foreground">{hasReference ? "O vídeo já foi lido. Falta preparar as cenas, as variações e os prompts." : `Recebi o seu vídeo${refFile ? ` (${refFile.name})` : ""}, mas ainda não consegui ler a fala. Se quiser tentar de novo, escolha outro vídeo.`}</p>
                 <div className="flex flex-wrap gap-2">
-                  {!hasReference && refFile && <Button type="button" size="lg" className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white" onClick={() => void run(refFile)}>Tentar de novo</Button>}
+                  
                   
                   <Button type="button" size="lg" variant="outline" className="rounded-full" onClick={() => fileRef.current?.click()}>Escolher outro vídeo</Button>
                 </div>
               </>
             ) : null}
             {hasReference || refFile ? (
-            <section className="space-y-4 rounded-[18px] border border-border bg-card p-5">
-              <p className="font-medium">Passos 2 a 4 · Como o vídeo termina</p>
-              <Group label="2 · Idioma da fala" hint="A voz e os textos do vídeo saem neste idioma.">
-                <Chips label="Idioma da fala" value={p.language} onPick={chooseLanguage} options={LANGUAGES.map((l) => ({ value: l.value, text: l.text }))} />
-              </Group>
-              <Group label="3 · Palavra-chave da CTA (o que a pessoa comenta)">
-                <KeywordPicker keyword={p.keyword} keepCase={p.keepCase} placeholder="Ou escreva outra palavra" onChange={(keyword) => patch({ keyword })} onKeepCase={(keepCase) => patch({ keepCase, keyword: keepCase ? p.keyword : p.keyword.toUpperCase() })} />
-              </Group>
-              <Group label="4 · Frase final (o que a pessoa ouve no fim)" hint="Escolha uma pronta ou escreva a sua. Use {KEYWORD} onde vai a palavra-chave.">
-                <Chips label="Frases prontas" value={p.cta} onPick={(cta) => patch({ cta })} options={(CTA_BY_LANG[p.language] ?? CTA_PRESETS).map((c) => ({ value: c, text: c.replace("{KEYWORD}", "…") }))} />
-                <input value={p.cta} onChange={(event) => patch({ cta: event.target.value })} maxLength={200} aria-label="Escreva a sua frase final" placeholder="Ou escreva a sua frase, ex.: Comente {KEYWORD} e receba o guia" className={inputClass} />
-              </Group>
-              <p className="rounded-[12px] bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-                No final o vídeo diz: <span className="text-foreground">“{p.cta.replace("{KEYWORD}", p.keyword.trim() || "PALAVRA")}”</span>
-              </p>
-              {hasReference && (
-                <Button type="button" size="lg" className="gt-btn3d w-full rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] py-7 text-base text-white" onClick={() => (p.scenes.length > 0 || canResume ? void runAll(true) : void run(null))}>
-                  {canResume || p.scenes.length > 0 ? "Continuar de onde parou" : "Preparar meus vídeos"}
-                </Button>
+            <div className="space-y-4">
+              {!hasReference && (
+                <label className="block space-y-2 rounded-[18px] border border-[#F5B454]/40 bg-[#F5B454]/5 p-4 text-sm">
+                  <span className="font-medium">Não consegui ouvir a fala do vídeo. Cole aqui o que ele diz (ou escreva um resumo):</span>
+                  <textarea value={p.reference} onChange={(event) => patch({ reference: event.target.value })} rows={4} maxLength={4000} aria-label="O que o vídeo diz" className={inputClass} placeholder="Cole o texto do vídeo aqui (mínimo 20 letras)" />
+                </label>
               )}
-            </section>
+              {([
+                ["2", "Idioma da fala", "A voz e os textos do vídeo saem neste idioma.",
+                  <Chips key="l" label="Idioma da fala" value={p.language} onPick={chooseLanguage} options={LANGUAGES.map((l) => ({ value: l.value, text: l.text }))} />],
+                ["3", "Palavra-chave da CTA", "O que a pessoa comenta para receber o link.",
+                  <KeywordPicker key="k" keyword={p.keyword} keepCase={p.keepCase} placeholder="Ou escreva outra palavra" onChange={(keyword) => patch({ keyword })} onKeepCase={(keepCase) => patch({ keepCase, keyword: keepCase ? p.keyword : p.keyword.toUpperCase() })} />],
+                ["4", "Frase final", "O que a pessoa ouve no fim. Use {KEYWORD} onde vai a palavra-chave.",
+                  <div key="c" className="space-y-3">
+                    <Chips label="Frases prontas" value={p.cta} onPick={(cta) => patch({ cta })} options={(CTA_BY_LANG[p.language] ?? CTA_PRESETS).map((c) => ({ value: c, text: c.replace("{KEYWORD}", "…") }))} />
+                    <input value={p.cta} onChange={(event) => patch({ cta: event.target.value })} maxLength={200} aria-label="Escreva a sua frase final" placeholder="Ou escreva a sua frase, ex.: Comente {KEYWORD} e receba o guia" className={inputClass} />
+                    <p className="rounded-[12px] bg-[#7B3FE4]/10 px-4 py-3 text-sm text-muted-foreground">
+                      No final o vídeo diz: <span className="font-medium text-foreground">“{p.cta.replace("{KEYWORD}", p.keyword.trim() || "PALAVRA")}”</span>
+                    </p>
+                  </div>],
+              ] as [string, string, string, React.ReactNode][]).map(([number, title, hint, body]) => (
+                <section key={number} aria-label={`${number} · ${title}`} className="space-y-3 rounded-[22px] border border-white/10 bg-card p-5">
+                  <div className="flex items-center gap-3">
+                    <span aria-hidden className="grid size-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-sm font-semibold text-white">{number}</span>
+                    <div>
+                      <p className="font-semibold">{title}</p>
+                      <p className="text-xs text-muted-foreground">{hint}</p>
+                    </div>
+                  </div>
+                  {body}
+                </section>
+              ))}
+              <div className="cg-orbit relative w-full" style={{ "--cg-r": "22px" } as React.CSSProperties}>
+                <button type="button" disabled={!hasReference && !refFile}
+                  onClick={() => (!hasReference && refFile ? void run(refFile) : p.scenes.length > 0 || canResume ? void runAll(true) : void run(null))}
+                  className="relative flex w-full items-center justify-center gap-3 rounded-[22px] bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-6 py-5 text-lg font-semibold text-white shadow-[0_14px_36px_-14px_#7B3FE4] transition-transform hover:-translate-y-0.5 disabled:opacity-60">
+                  <Sparkles className="size-5" />
+                  {!hasReference ? "Tentar de novo" : canResume || p.scenes.length > 0 ? "Continuar de onde parou" : "Preparar meus vídeos"}
+                </button>
+              </div>
+            </div>
             ) : (
               <div className="space-y-4" data-testid="start-quest">
                 <div className="space-y-2">

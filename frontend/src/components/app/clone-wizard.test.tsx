@@ -544,3 +544,14 @@ it("runs the light around the choose-video button (even with reduced motion)", a
   expect(document.documentElement.style.getPropertyValue("--cg-angle")).toMatch(/deg$/);
   vi.useRealTimers();
 });
+
+it("lets the member paste the script when the video could not be read, then prepares", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ detail: "No speech was found in this video" }), { status: 422 })));
+  window.localStorage.setItem("gv-clonagem-view", "simple");
+  const user = userEvent.setup();
+  render(<CloneWizard />);
+  await user.upload(await screen.findByLabelText("Escolher o vídeo para clonar"), new File(["x"], "ref.mp4", { type: "video/mp4" }));
+  const box = await screen.findByLabelText("O que o vídeo diz");
+  await user.type(box, "Esse espartilho serve em qualquer corpo e eu te mostro como amarrar.");
+  expect(await screen.findByRole("button", { name: "Preparar meus vídeos" })).toBeEnabled();
+});
