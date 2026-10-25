@@ -303,3 +303,12 @@ button[class*="to-[#7B3FE4]"]:active::before { animation-delay: 0.12s; border-co
   mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
 }
 .cg-orbit::after { filter: blur(14px); inset: -6px; padding: 8px; opacity: 1; }
+
+/* Recriar exemplo: o prompt "entra" no chat */
+@keyframes cg-attach-ring { 0% { box-shadow: 0 0 0 0 #7B3FE4cc; } 100% { box-shadow: 0 0 0 22px #7B3FE400; } }
+@keyframes cg-reveal { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes cg-badge { 0% { opacity: 0; transform: translateY(8px) scale(.9); } 15% { opacity: 1; transform: none; } 80% { opacity: 1; } 100% { opacity: 0; transform: translateY(-4px); } }
+.cg-attach { animation: cg-attach-ring .9s .55s ease-out 2; }
+.cg-reveal { animation: cg-reveal .9s .6s steps(28, end) both; }
+.cg-attach-badge { animation: cg-badge 2.4s .5s ease both; opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .cg-attach, .cg-reveal, .cg-attach-badge { animation: none; } .cg-attach-badge { opacity: 1; } }

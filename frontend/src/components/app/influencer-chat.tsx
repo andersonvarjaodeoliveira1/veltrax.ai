@@ -62,6 +62,7 @@ const S = {
   niche: ["Nicho (opcional)", "Niche (optional)", "Nicho (opcional)"],
   send: ["Criar a influencer", "Create the influencer", "Crear a la influencer"],
   recreate: ["Recriar", "Recreate", "Recrear"],
+  promptAttached: ["Prompt anexado ao chat", "Prompt attached to the chat", "Prompt adjuntado al chat"],
   all: ["Todos", "All", "Todos"],
   newChat: ["Novo chat", "New chat", "Nuevo chat"],
   other: ["Outro", "Other", "Otro"],
@@ -271,6 +272,7 @@ export function InfluencerChat() {
   const [prompt, setPrompt] = useState("");
   const [skill, setSkill] = useState<SkillId | "">("");
   const [filter, setFilter] = useState<SkillId | "all">("all");
+  const [attachedFx, setAttachedFx] = useState(0);
   const [busy, setBusy] = useState<"" | "think" | "build" | "pins" | "prompt" | "board">("");
   const [error, setError] = useState("");
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -761,12 +763,39 @@ export function InfluencerChat() {
     </div>
   );
 
+  const recreateExample = (item: (typeof EXAMPLES)[number], card: HTMLElement | null) => {
+    setPrompt(item.prompt[lang]); setSkill(item.skill);
+    setAttachedFx((n) => n + 1);
+    if (typeof window === "undefined") return;
+    const box = document.querySelector<HTMLElement>('[data-testid="chat-composer"]');
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    if (!box || !card || reduce) return;
+    const img = card.querySelector("img");
+    const from = (img ?? card).getBoundingClientRect();
+    box.scrollIntoView?.({ behavior: "smooth", block: "center" });
+    window.setTimeout(() => {
+      const to = box.getBoundingClientRect();
+      const chip = document.createElement("div");
+      chip.setAttribute("aria-hidden", "true");
+      chip.style.cssText = `position:fixed;z-index:80;left:${from.left}px;top:${from.top}px;width:${from.width}px;height:${from.height}px;border-radius:20px;overflow:hidden;pointer-events:none;box-shadow:0 20px 60px -10px #7B3FE4;background:#17161b url(${img?.getAttribute("src") ?? ""}) center top/cover`;
+      document.body.appendChild(chip);
+      const dx = to.left + 28 - from.left, dy = to.top + 30 - from.top;
+      const anim = chip.animate?.([
+        { transform: "translate(0,0) scale(1)", opacity: 1 },
+        { transform: `translate(${dx}px,${dy}px) scale(${Math.min(0.14, 90 / from.width)})`, opacity: 0.2 },
+      ], { duration: 650, easing: "cubic-bezier(.6,.05,.3,1)" });
+      if (anim) anim.onfinish = () => chip.remove(); else chip.remove();
+      window.setTimeout(() => chip.remove(), 900);
+    }, 250);
+  };
+
   const composer = (
     <div ref={orbitRef} className="cg-orbit relative">
-    <div className="relative rounded-[26px] bg-[#1a191d] p-5 ring-1 ring-white/10 shadow-[0_20px_60px_-30px_#000]" data-testid="chat-composer">
+    <div key={attachedFx} className={cn("relative rounded-[26px] bg-[#1a191d] p-5 ring-1 ring-white/10 shadow-[0_20px_60px_-30px_#000]", attachedFx > 0 && "cg-attach")} data-testid="chat-composer">
+      {attachedFx > 0 && !started && <span key={`b${attachedFx}`} className="cg-attach-badge pointer-events-none absolute -top-3 left-6 rounded-full bg-[#7B3FE4] px-3 py-1 text-[11px] font-medium text-white shadow-lg">📎 {t("promptAttached")}</span>}
       <textarea value={started ? changeText : prompt} onChange={(event) => (started ? setChangeText(event.target.value) : setPrompt(event.target.value))} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); if (started) void applyChange(); else if (!busy && prompt.trim().length >= 8) start(); } }} rows={3} maxLength={600} disabled={started && !canChange} aria-label={lang === "en" ? "Describe the influencer" : lang === "es" ? "Describe a la influencer" : "Descreva a influencer"}
         placeholder={phase === "home" ? (demo ? `${demo}▍` : t("ph")) : canChange ? (hint ? `${hint}▍` : t("changePh")) : t("follow")}
-        className="min-h-[96px] w-full resize-none bg-transparent px-1 py-1 text-lg outline-none placeholder:text-muted-foreground/70 disabled:opacity-60" />
+        className={cn("min-h-[96px] w-full resize-none bg-transparent px-1 py-1 text-lg outline-none placeholder:text-muted-foreground/70 disabled:opacity-60", attachedFx > 0 && !started && "cg-reveal")} />
       <div className="mt-2 flex items-center gap-2">
         <input ref={attachRef} type="file" multiple accept="image/png,image/jpeg,image/webp" className="sr-only" aria-label={t("attachPhoto")}
           onChange={(event) => { const files = Array.from(event.target.files ?? []).slice(0, 3); if (files.length) setAttached(files); event.target.value = ""; }} />
@@ -911,7 +940,7 @@ export function InfluencerChat() {
             </div>
             <div className="grid gap-x-4 gap-y-6 sm:grid-cols-2 xl:grid-cols-3">
               {shown.map((item) => (
-                <button key={item.id} type="button" onClick={() => { setPrompt(item.prompt[lang]); setSkill(item.skill); }} className="group text-left">
+                <button key={item.id} type="button" onClick={(event) => recreateExample(item, event.currentTarget)} className="group text-left">
                   <div className="relative aspect-[16/10] overflow-hidden rounded-[20px] ring-1 ring-white/10" style={{ background: `radial-gradient(120% 90% at 20% 0%, ${item.from}66, transparent 60%), radial-gradient(100% 90% at 100% 100%, ${item.to}55, transparent 60%), #17161b` }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={`/influencers/${item.id}.jpg`} alt={item.title[lang]} loading="lazy" className="absolute inset-0 size-full object-cover object-top transition duration-500 group-hover:scale-105" />
