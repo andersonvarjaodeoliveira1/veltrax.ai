@@ -65,7 +65,6 @@ export default function AutomationPage() {
   const orbitRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     // A luz que corre em volta do botão principal, igual à caixa do chat do influencer.
-    if (typeof window === "undefined" || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
     let frame = 0; const begin = performance.now();
     const loop = (now: number) => {
       orbitRef.current?.style.setProperty("--cg-angle", `${(((now - begin) / 4500) * 360) % 360}deg`);
