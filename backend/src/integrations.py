@@ -23,6 +23,7 @@ PROVIDERS: dict[str, dict[str, str]] = {
     "openai": {"label": "ChatGPT (OpenAI)", "help": "Chave da OpenAI (platform.openai.com/api-keys)."},
     "anthropic": {"label": "Claude (Anthropic)", "help": "Chave da Anthropic (console.anthropic.com)."},
     "openrouter": {"label": "OpenRouter", "help": "Chave do OpenRouter (openrouter.ai/keys)."},
+    "apify": {"label": "Apify (busca de fotos no Pinterest)", "help": "Token do Apify (console.apify.com/settings/integrations). Sem ele, a busca usa um banco de fotos grátis."},
     "flow": {"label": "Flow / Veo (Google)", "help": "O Flow não tem chave própria: use a chave do Google AI Studio com acesso ao Veo."},
 }
 
@@ -79,6 +80,8 @@ async def check_key(provider: str, value: str) -> tuple[bool, str]:
         url, headers = "https://api.openai.com/v1/models", {"Authorization": f"Bearer {value}"}
     elif provider == "anthropic":
         url, headers = "https://api.anthropic.com/v1/models", {"x-api-key": value, "anthropic-version": "2023-06-01"}
+    elif provider == "apify":
+        url, headers = "https://api.apify.com/v2/users/me", {"Authorization": f"Bearer {value}"}
     elif provider == "openrouter":
         url, headers = "https://openrouter.ai/api/v1/auth/key", {"Authorization": f"Bearer {value}"}
     else:

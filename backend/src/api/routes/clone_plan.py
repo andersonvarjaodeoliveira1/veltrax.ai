@@ -959,12 +959,12 @@ async def product_search(request: Request, db: AsyncSession = Depends(get_db)):
     skip = {str(u) for u in ((data or {}).get("skip") or []) if isinstance(u, str)}
     if len(name) < 2:
         raise HTTPException(status_code=400, detail="Write the product name")
-    token = get_config().apify_api_token
     _check_script_rate(user_id)
-    from ...integrations import load_user_keys
+    from ...integrations import current_keys, load_user_keys
     from ...usage import get_balance, set_server_blocked, set_usage_user
 
     await load_user_keys(db, user_id)
+    token = current_keys().get("apify") or get_config().apify_api_token
     set_usage_user(user_id)
     set_server_blocked((await get_balance(db, user_id))["exhausted"])
 
@@ -1351,7 +1351,7 @@ async def influencer_prompt(request: Request, db: AsyncSession = Depends(get_db)
     return {"prompts": prompts[:3], "summaries": summaries}
 
 
-PIN_HOSTS = ("i.pinimg.com",)
+PIN_HOSTS = ("i.pinimg.com", "images.pexels.com")
 PIN_ACTOR = "epctex/pinterest-scraper"
 GOOGLE_ACTOR = "apify/google-search-scraper"
 
@@ -1394,10 +1394,16 @@ async def influencer_pins(request: Request, db: AsyncSession = Depends(get_db)):
     author = _pinterest_author(str((data or {}).get("author") or ""))
     if not queries and not author:
         raise HTTPException(status_code=400, detail="Send at least one search")
-    token = get_config().apify_api_token
-    if not token:
-        raise HTTPException(status_code=503, detail="Pinterest search is not configured")
+    from ...integrations import current_keys, load_user_keys
+
+    await load_user_keys(db, user_id)
+    cfg = get_config()
+    # Token do próprio usuário (Minhas APIs) tem prioridade; depois o do servidor.
+    token = current_keys().get("apify") or cfg.apify_api_token
     _check_script_rate(user_id)
+    if not token:
+        # Sem Apify o processo não para: usa o banco de fotos (Pexels) e, sem ele, segue sem fotos.
+        return {"pins": await _pexels_pins(queries, cfg.pexels_api_key)}
 
     def run() -> list[dict[str, str]]:
         from apify_client import ApifyClient
@@ -1463,6 +1469,29 @@ async def influencer_pins(request: Request, db: AsyncSession = Depends(get_db)):
         logger.exception("influencer pins failed")
         raise HTTPException(status_code=502, detail="Could not search Pinterest. Try again.")
     return {"pins": pins[:30]}
+
+
+async def _pexels_pins(queries: list[str], key: str) -> list[dict[str, str]]:
+    """Fallback without Apify: portrait photos from Pexels, shaped like pins."""
+    if not key or not queries:
+        return []
+    import httpx
+
+    pins: list[dict[str, str]] = []
+    seen: set[str] = set()
+    try:
+        async with httpx.AsyncClient(timeout=10) as http:
+            for query in queries:
+                resp = await http.get("https://api.pexels.com/v1/search", params={"query": query[:80], "orientation": "portrait", "per_page": 10}, headers={"Authorization": key})
+                for item in (resp.json().get("photos") or []) if resp.status_code == 200 else []:
+                    src = item.get("src") or {}
+                    full, thumb = str(src.get("large") or ""), str(src.get("medium") or src.get("large") or "")
+                    if full.startswith("https://images.pexels.com/") and full not in seen:
+                        seen.add(full)
+                        pins.append({"id": f"pexels-{item.get('id')}", "thumb": thumb, "full": full, "link": str(item.get("url") or ""), "query": query})
+    except Exception:
+        logger.warning("pexels pins failed", exc_info=True)
+    return pins[:30]
 
 
 def _pin_link(url: str) -> str:
