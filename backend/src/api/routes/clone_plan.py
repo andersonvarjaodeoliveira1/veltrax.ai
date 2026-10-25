@@ -189,6 +189,7 @@ def _context(data: dict[str, Any], need_cta: bool = False) -> dict[str, Any]:
         keyword = keyword.upper()
     if need_cta and not keyword:
         raise HTTPException(status_code=400, detail="Keyword is required")
+    own_copy = data.get("own_copy") is True
     cta_template = _text(data.get("cta"), 200) or "Comente {KEYWORD} para assistir o vídeo completo"
     cta = cta_template.replace("{KEYWORD}", keyword or "PALAVRA")
     avatars: list[dict[str, str]] = []
@@ -229,6 +230,7 @@ def _context(data: dict[str, Any], need_cta: bool = False) -> dict[str, Any]:
         "avatars": avatars,
         "objects": objects,
         "changes": _text(data.get("changes"), 600),
+        "own_copy": own_copy,
         "mode": mode,
         "count": max(1, min(MAX_VARIATIONS, count)),
     }
@@ -373,9 +375,11 @@ def _fail() -> HTTPException:
 def _changes_block(ctx: dict[str, Any]) -> str:
     """Changes the member asked for in the chat ("troque o cenário", "ela fala mais devagar"...). Applies to everything written."""
     text = ctx.get("changes") or ""
+    own = ("OWN COPY: the spoken script was written by the member and is already in the reference. Split it into the takes in order, keep their words "
+           "(only trim or join to fit about 8 seconds, around 20 words per take) and never invent a different script.\n\n") if ctx.get("own_copy") else ""
     if not text:
-        return ""
-    return ("CHANGES REQUESTED BY THE MEMBER (highest priority, apply them to everything you write: scene, person, setting, wording and prompts; "
+        return own.rstrip()
+    return own + ("CHANGES REQUESTED BY THE MEMBER (highest priority, apply them to everything you write: scene, person, setting, wording and prompts; "
             "keep the rest of the plan unchanged):\n" + text)
 
 

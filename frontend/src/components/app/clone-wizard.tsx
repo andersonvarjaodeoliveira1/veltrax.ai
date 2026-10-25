@@ -29,6 +29,8 @@ type Project = {
   reference: string;
   notes: string;
   changes: string;
+  ownCopy?: string;
+  copySource?: "video" | "own";
   product: string;
   productInfo: string;
   productLook: string;
@@ -266,7 +268,8 @@ async function callStage(stage: Stage, proj: Project): Promise<{ items?: unknown
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       stage,
-      reference: proj.reference,
+      reference: proj.copySource === "own" && (proj.ownCopy ?? "").trim().length >= 20 ? proj.ownCopy!.trim() : proj.reference,
+      own_copy: proj.copySource === "own" && (proj.ownCopy ?? "").trim().length >= 20,
       notes: proj.notes,
       changes: proj.changes ?? "",
       product: proj.product,
@@ -1141,6 +1144,7 @@ export function CloneWizard() {
   const [changeText, setChangeText] = useState("");
   const [paused, setPaused] = useState(false);
   const [changeDemo, setChangeDemo] = useState("");
+  const [copyDemo, setCopyDemo] = useState("");
   const [manualMode, setManualMode] = useState<"closed" | "open" | "hidden">("closed");
   const [pendingChange, setPendingChange] = useState<string | null>(null);
   const pauseForChange = () => {
@@ -1216,6 +1220,22 @@ export function CloneWizard() {
     timer = window.setTimeout(tick, 600);
     return () => window.clearTimeout(timer);
   }, [changeText, changeBoxShown]);
+
+  // Exemplos de copy para os takes: digita e apaga enquanto a caixa está vazia.
+  const copyBoxShown = p.copySource === "own" && !(p.ownCopy ?? "");
+  useEffect(() => {
+    if (!copyBoxShown || typeof window === "undefined") return;
+    const texts = ["Você sabe por que o seu vídeo não viraliza? Eu explico em 30 segundos.", "Parei de gastar com anúncio e comecei a vender todo dia assim.", "Se você tem mais de 40 anos, essa dica de saúde é para você."];
+    let ti = 0; let n = 0; let erasing = false; let timer = 0;
+    const tick = () => {
+      const full = texts[ti % texts.length];
+      if (!erasing) { n += 1; setCopyDemo(full.slice(0, n)); if (n >= full.length) { erasing = true; timer = window.setTimeout(tick, 1600); return; } }
+      else { n -= 2; setCopyDemo(full.slice(0, Math.max(n, 0))); if (n <= 0) { erasing = false; n = 0; ti += 1; timer = window.setTimeout(tick, 400); return; } }
+      timer = window.setTimeout(tick, erasing ? 18 : 38);
+    };
+    timer = window.setTimeout(tick, 600);
+    return () => window.clearTimeout(timer);
+  }, [copyBoxShown]);
 
   if (simple) {
     const ready = p.videos.length > 0 && p.ctaLocked;
@@ -1470,6 +1490,26 @@ export function CloneWizard() {
                     <li>1. Você escolhe o vídeo (só uma vez).</li>
                     <li>2. O ClipGringa lê, separa as cenas, escreve tudo e já abre o Flow sozinho.</li>
                   </ol>
+                  <div className="space-y-3" data-testid="copy-source">
+                    <p className="text-sm font-medium">Copy dos takes</p>
+                    <div className="flex flex-wrap gap-2" role="group" aria-label="Copy dos takes">
+                      {([["video", "Usar a copy do vídeo"], ["own", "Escrever a minha copy"]] as const).map(([value, label]) => (
+                        <button key={value} type="button" aria-pressed={(p.copySource ?? "video") === value} onClick={() => patch({ copySource: value })}
+                          className={`rounded-full border px-4 py-2 text-sm transition ${(p.copySource ?? "video") === value ? "border-[#7B3FE4] bg-[#7B3FE4]/25 text-white" : "border-white/10 text-muted-foreground hover:text-foreground"}`}>{label}</button>
+                      ))}
+                    </div>
+                    {p.copySource === "own" && (
+                      <div className="cg-orbit relative">
+                        <div className="relative rounded-[26px] bg-[#1a191d] p-5 ring-1 ring-white/10 shadow-[0_20px_60px_-30px_#000]">
+                          <label className="sr-only" htmlFor="own-copy">Sua copy</label>
+                          <textarea id="own-copy" value={p.ownCopy ?? ""} onChange={(event) => patch({ ownCopy: event.target.value })} rows={4} maxLength={4000}
+                            placeholder={copyDemo ? `${copyDemo}▍` : "Escreva a fala do vídeo. Os takes de 8s saem desta copy."}
+                            className="min-h-[110px] w-full resize-none bg-transparent px-1 py-1 text-lg outline-none placeholder:text-muted-foreground/70" />
+                          <p className="mt-2 px-1 text-xs text-muted-foreground">{(p.ownCopy ?? "").trim().length >= 20 ? "Pronto: os takes seguem esta copy. O vídeo que você subir serve só de referência visual." : "Escreva pelo menos 20 letras. Sem copy, uso a do vídeo."}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                   <details className="group rounded-[18px] border border-white/10 bg-card p-4 text-sm" data-testid="quest-adjust">
                     <summary className="cursor-pointer list-none font-medium">Ajustes (opcional): idioma, quantidade, palavra-chave e frase final <span aria-hidden className="text-muted-foreground">⌄</span></summary>
                     <div className="mt-4 border-t border-white/10 pt-4">{adjustSections}</div>

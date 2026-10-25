@@ -626,3 +626,14 @@ test("the change box pauses the Flow and sends the requested change to every sta
   await user.click(screen.getByRole("button", { name: "Aplicar a mudança" }));
   await waitFor(() => expect(calls.some((c) => c.body.changes === "troque o cenário para uma cozinha")).toBe(true), { timeout: 15000 });
 }, 30000);
+
+test("own copy option sends the member's script as the reference of the takes", async () => {
+  const calls = mockApi();
+  window.localStorage.setItem("gv-clonagem-view-v2", "simple");
+  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ sceneCount: 3, copySource: "own", ownCopy: "Minha copy própria para os takes do vídeo hoje." }));
+  render(<CloneWizard />);
+  const box = await screen.findByLabelText("Sua copy");
+  expect((box as HTMLTextAreaElement).value).toContain("Minha copy própria");
+  expect(screen.getByRole("button", { name: "Escrever a minha copy" })).toHaveAttribute("aria-pressed", "true");
+  expect(calls.length).toBe(0);
+});
