@@ -102,9 +102,9 @@ export default function ConnectFlowPage() {
           <Download className="size-4" /> Baixar a extensão
         </a>
         <ol className="list-decimal space-y-1 pl-5 text-xs text-muted-foreground">
-          <li>Descompacte o arquivo baixado.</li>
+          <li>Clique com o botão direito no arquivo baixado e escolha “Extrair tudo” (não dá para instalar com o .zip fechado).</li>
           <li>No Chrome, abra <span className="font-mono">chrome://extensions</span> e ligue o “Modo do desenvolvedor”.</li>
-          <li>Clique em “Carregar sem compactação” e escolha a pasta <span className="font-mono">flow</span>.</li>
+          <li>Clique em “Carregar sem compactação” e escolha a pasta que você acabou de extrair (a que tem o arquivo <span className="font-mono">manifest.json</span> dentro).</li>
         </ol>
       </section>
 

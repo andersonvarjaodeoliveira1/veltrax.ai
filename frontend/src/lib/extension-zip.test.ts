@@ -20,7 +20,7 @@ describe("extensão para baixar", () => {
     if (!existsSync(source) || !existsSync(zip)) return;
     for (const file of files(source)) {
       let inside: Buffer;
-      try { inside = execFileSync("unzip", ["-p", zip, `flow/${file}`], { maxBuffer: 10_000_000 }); } catch (error) {
+      try { inside = execFileSync("unzip", ["-p", zip, file], { maxBuffer: 10_000_000 }); } catch (error) {
         if ((error as NodeJS.ErrnoException).code === "ENOENT") return; // sem o programa unzip neste ambiente
         throw new Error(`${file} não está no zip. Rode scripts/build-extension-zip.sh`);
       }

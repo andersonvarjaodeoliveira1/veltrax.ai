@@ -3,5 +3,6 @@
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 rm -f "$root/frontend/public/extensao/clipgringa-flow.zip"
-(cd "$root/extension" && zip -qr "$root/frontend/public/extensao/clipgringa-flow.zip" flow -x "*.DS_Store")
-echo "OK: $(unzip -p "$root/frontend/public/extensao/clipgringa-flow.zip" flow/manifest.json | grep '"version"')"
+# Arquivos direto na raiz do zip: a pasta extraída já é a pasta da extensão (manifest.json dentro dela).
+(cd "$root/extension/flow" && zip -qr "$root/frontend/public/extensao/clipgringa-flow.zip" . -x "*.DS_Store")
+echo "OK: $(unzip -p "$root/frontend/public/extensao/clipgringa-flow.zip" manifest.json | grep '"version"')"
