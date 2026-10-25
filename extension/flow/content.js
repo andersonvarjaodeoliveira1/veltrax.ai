@@ -699,16 +699,26 @@
     const onlyFirst = el("test").checked;
     await persist(); render();
     try {
-      for (const job of state.jobs) {
-        if (state.done[job.key]) continue;
-        if (stopFlag) break;
-        try { await runJob(job, onlyFirst); } catch (e) {
-          if (e.message === "STOP") break;
-          state.errors[job.key] = e.message;
-          setError(`${`Vídeo ${pad(job.vi + 1)} · Cena ${pad(job.si + 1)}`}: ${e.message}`);
-          await persist();
+      // Duas rodadas: cenas que falharam na primeira são tentadas de novo sozinhas no fim, sem você clicar.
+      for (let round = 0; round < 2 && !stopFlag; round += 1) {
+        if (round === 1) {
+          const pending = state.jobs.filter((j) => !state.done[j.key]);
+          if (!pending.length) break;
+          setNow(`Tentando de novo ${pending.length} cena(s) que não saíram na primeira rodada…`);
+          setError("");
         }
-        render();
+        for (const job of state.jobs) {
+          if (state.done[job.key]) continue;
+          if (stopFlag) break;
+          try { await runJob(job, onlyFirst); } catch (e) {
+            if (e.message === "STOP") { stopFlag = true; break; }
+            state.errors[job.key] = e.message;
+            setError(`${`Vídeo ${pad(job.vi + 1)} · Cena ${pad(job.si + 1)}`}: ${e.message}`);
+            await persist();
+          }
+          render();
+        }
+        if (onlyFirst) break;
       }
       const left = state.jobs.filter((j) => !state.done[j.key]).length;
       state.current = null; state.phase = ""; if (!left || stopFlag) autoRun = false; await persist();
