@@ -540,7 +540,7 @@ it("runs the light around the choose-video button (even with reduced motion)", a
   window.localStorage.setItem("gv-clonagem-view", "simple");
   const { container } = render(<CloneWizard />);
   await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
-  const orbit = container.querySelector(".cg-orbit") as HTMLElement;
-  expect(orbit.style.getPropertyValue("--cg-angle")).toMatch(/deg$/);
+  expect(container.querySelector(".cg-orbit")).not.toBeNull();
+  expect(document.documentElement.style.getPropertyValue("--cg-angle")).toMatch(/deg$/);
   vi.useRealTimers();
 });

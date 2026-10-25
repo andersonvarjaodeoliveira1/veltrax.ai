@@ -391,15 +391,15 @@ export function CloneWizard() {
   const [now, setNow] = useState(() => Date.now());
   const fileRef = useRef<HTMLInputElement>(null);
   // Luz que corre em volta do botão de escolher o vídeo (mesma técnica do chat do influencer).
-  const orbitRef = useRef<HTMLDivElement>(null);
+  // O ângulo fica no <html>: todas as luzes (botão e barras de progresso) herdam e giram juntas.
   useEffect(() => {
     let frame = 0; const begin = performance.now();
     const loop = (time: number) => {
-      orbitRef.current?.style.setProperty("--cg-angle", `${(((time - begin) / 4500) * 360) % 360}deg`);
+      document.documentElement.style.setProperty("--cg-angle", `${(((time - begin) / 4500) * 360) % 360}deg`);
       frame = window.requestAnimationFrame(loop);
     };
     frame = window.requestAnimationFrame(loop);
-    return () => window.cancelAnimationFrame(frame);
+    return () => { window.cancelAnimationFrame(frame); document.documentElement.style.removeProperty("--cg-angle"); };
   }, []);
 
   const savedRef = useRef<string | null>(null);
@@ -1145,7 +1145,8 @@ export function CloneWizard() {
         )}
 
         {(auto || runningTask) && (
-          <div role="status" aria-live="polite" className="space-y-2 rounded-[18px] border border-[#A98BFF]/40 bg-[#141316]/95 p-4 shadow-[0_12px_32px_-18px_#7B3FE4]">
+          <div className="cg-orbit relative" style={{ "--cg-r": "20px" } as React.CSSProperties}>
+          <div role="status" aria-live="polite" className="relative space-y-2 rounded-[18px] border border-[#A98BFF]/40 bg-[#141316] p-4 shadow-[0_12px_32px_-18px_#7B3FE4]">
             <div className="flex items-center justify-between gap-2 text-sm">
               <span className="font-medium">{auto ? auto.label : runningTask?.label}</span>
               <span className="tabular-nums text-xs text-muted-foreground">{Math.round(pct)}%</span>
@@ -1157,6 +1158,7 @@ export function CloneWizard() {
               {auto ? "Estamos preparando tudo por você. Pode esperar aqui, não precisa clicar em nada." : `${steps[Math.min(steps.length - 1, Math.floor(secs / 12))]} Pode esperar aqui.`}
               {assembling ? " Montar o vídeo leva de 1 a 3 minutos." : ""}
             </p>
+          </div>
           </div>
         )}
 
@@ -1228,7 +1230,7 @@ export function CloneWizard() {
                   </div>
                 </div>
                 <div className="gt-pop space-y-3">
-                  <div ref={orbitRef} className="cg-orbit relative w-full" style={{ "--cg-r": "22px" } as React.CSSProperties}>
+                  <div className="cg-orbit relative w-full" style={{ "--cg-r": "22px" } as React.CSSProperties}>
                     <button type="button" onClick={() => fileRef.current?.click()}
                       className="relative flex w-full items-center gap-4 rounded-[22px] border border-transparent bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-6 py-6 text-left text-white shadow-[0_14px_36px_-14px_#7B3FE4] transition-transform hover:-translate-y-0.5">
                       <span aria-hidden className="grid size-12 shrink-0 place-items-center rounded-full bg-white/20"><Upload className="size-6" /></span>
@@ -1451,7 +1453,8 @@ export function CloneWizard() {
         <section className="space-y-4 rounded-[18px] border border-border bg-card p-5">
           <p className="text-sm font-medium text-primary">Passo {p.step} de {STEPS.length}: <span className="font-normal text-foreground">{HINTS[p.step - 1]}</span></p>
           {(auto || runningTask) && (
-            <div role="status" aria-live="polite" className="sticky top-2 z-10 space-y-2 rounded-[18px] border border-[#A98BFF]/40 bg-[#141316]/95 p-4 shadow-[0_12px_32px_-18px_#7B3FE4] backdrop-blur">
+            <div className="cg-orbit sticky top-2 z-10" style={{ "--cg-r": "20px" } as React.CSSProperties}>
+            <div role="status" aria-live="polite" className="relative space-y-2 rounded-[18px] border border-[#A98BFF]/40 bg-[#141316] p-4 shadow-[0_12px_32px_-18px_#7B3FE4]">
               <div className="flex items-center justify-between gap-2 text-sm">
                 <span className="font-medium">{auto ? auto.label : runningTask?.label}{!auto && batch ? ` (${Math.min(batch.done + 1, batch.total)} de ${batch.total})` : ""}</span>
                 <span className="tabular-nums text-xs text-muted-foreground">{Math.round(pct)}%</span>
@@ -1472,6 +1475,7 @@ export function CloneWizard() {
                 </p>
                 {auto && <button type="button" onClick={() => { stopRef.current = true; }} className="shrink-0 text-xs underline text-muted-foreground">Parar</button>}
               </div>
+            </div>
             </div>
           )}
           {p.step === 1 && (
