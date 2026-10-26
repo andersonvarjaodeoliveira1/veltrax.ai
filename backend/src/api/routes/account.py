@@ -23,6 +23,8 @@ class PasswordResetEmailRequest(BaseModel):
     url: str
     # True quando o administrador convida um membro novo: o e-mail dá boas-vindas e pede para criar a senha.
     invite: bool = False
+    # Conta de teste: dias de validade que o e-mail de convite informa.
+    test_days: int | None = Field(default=None, ge=1, le=30)
 
     @field_validator("url")
     @classmethod
@@ -55,7 +57,11 @@ async def send_password_reset_email(
     service = PasswordResetEmailService(config)
 
     try:
-        email_result = await service.send_reset_email(user, body.url, invite=body.invite)
+        email_result = (
+            await service.send_reset_email(user, body.url, invite=body.invite, test_days=body.test_days)
+            if body.test_days
+            else await service.send_reset_email(user, body.url, invite=body.invite)
+        )
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except smtplib.SMTPAuthenticationError as exc:

@@ -110,6 +110,15 @@ export default function TermsOfServicePage() {
             </p>
           </Section>
 
+          <Section title="Test Accounts &amp; Acceptable Use">
+            <p>
+              Test accounts are for personal evaluation only and are deactivated automatically when the trial period ends. You may not
+              use bots or scripts to extract, scrape, resell or redistribute the service, or reverse engineer the hosted application
+              or its prompts and workflows. We may suspend accounts that do. Nothing here limits the rights the open-source licence
+              of the published source code gives you over that code.
+            </p>
+          </Section>
+
           <Section title="Subscriptions &amp; Billing">
             <p>
               Paid plans (for example Pro and Scale) unlock higher monthly clip-generation limits.

@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth";
+import { APIError } from "better-auth/api";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import prisma from "@/lib/prisma";
 import { nextCookies } from "better-auth/next-js";
@@ -38,6 +39,18 @@ export const auth = betterAuth({
   database: prismaAdapter(prisma, {
     provider: "postgresql",
   }),
+  databaseHooks: {
+    session: {
+      create: {
+        // Conta de teste vencida: não deixa entrar de novo (o servidor também encerra as sessões que já existiam).
+        before: async (session) => {
+          const rows = await prisma.$queryRaw<{ expired: boolean }[]>`
+            SELECT (test_expires_at IS NOT NULL AND test_expires_at < NOW() AND is_admin = FALSE) AS expired FROM users WHERE id = ${session.userId}`;
+          if (rows[0]?.expired) throw new APIError("FORBIDDEN", { message: "O seu acesso de teste terminou. Fale com a equipe para continuar." });
+        },
+      },
+    },
+  },
   user: {
     // Single-account install: nobody may delete the account through the API.
     deleteUser: {

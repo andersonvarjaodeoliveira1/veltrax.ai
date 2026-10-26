@@ -492,3 +492,24 @@ async def restore_deleted_chat(user_id: str, chat_id: str, request: Request, db:
     await db.execute(text("UPDATE influencer_chats SET deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE user_id = :u AND id = :id"), {"u": user_id, "id": chat_id})
     await db.commit()
     return {"ok": True}
+
+
+class TestAccess(BaseModel):
+    days: int = Field(ge=1, le=30)
+
+
+@router.put("/users/{user_id}/test-access")
+async def set_test_access(user_id: str, body: TestAccess, request: Request, db: AsyncSession = Depends(get_db)):
+    """Marca a conta como de teste: ela fica ativa pelos próximos dias e depois é desativada sozinha. Não vale para administradores."""
+    await require_admin_user(request, db, get_config())
+    row = (await db.execute(text("SELECT is_admin FROM users WHERE id = :u"), {"u": user_id})).mappings().first()
+    if not row:
+        raise HTTPException(status_code=404, detail="User not found")
+    if row["is_admin"]:
+        raise HTTPException(status_code=400, detail="Administrators cannot be test accounts")
+    expires = (await db.execute(
+        text("UPDATE users SET test_expires_at = NOW() + make_interval(days => :d) WHERE id = :u RETURNING test_expires_at"),
+        {"d": body.days, "u": user_id},
+    )).scalar()
+    await db.commit()
+    return {"user_id": user_id, "test_expires_at": expires.isoformat() if expires else None}

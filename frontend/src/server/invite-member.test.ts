@@ -56,3 +56,19 @@ it("tells the admin when the e-mail could not be sent (user is still created)", 
   const result = await inviteMember("x@y.com");
   expect(result).toMatchObject({ ok: false, error: "email_failed", userId: "u-new", created: true });
 });
+
+it("test account: marks the expiry before the e-mail and tells the e-mail how many days", async () => {
+  const order: string[] = [];
+  fetchBackend.mockImplementation(async () => { order.push("email"); return new Response("{}", { status: 200 }); });
+  const beforeEmail = vi.fn(async () => { order.push("expiry"); return true; });
+  const result = await inviteMember("alisonguimaraes13@gmail.com", { testDays: 7, beforeEmail });
+  expect(result.ok).toBe(true);
+  expect(order).toEqual(["expiry", "email"]);
+  expect(JSON.parse(fetchBackend.mock.calls[0][1].body)).toMatchObject({ invite: true, test_days: 7 });
+});
+
+it("test account: does not send the e-mail when the expiry could not be saved", async () => {
+  const result = await inviteMember("alisonguimaraes13@gmail.com", { testDays: 7, beforeEmail: async () => false });
+  expect(result).toMatchObject({ ok: false, error: "test_access_failed", userId: "u-new" });
+  expect(fetchBackend).not.toHaveBeenCalled();
+});

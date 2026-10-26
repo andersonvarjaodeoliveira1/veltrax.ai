@@ -8,6 +8,7 @@ This is the new main entry point with:
 - Thread pool for blocking operations
 """
 
+import asyncio
 from contextlib import asynccontextmanager
 import logging
 import time
@@ -69,7 +70,11 @@ def create_app(
             await queue_adapter.get_pool()
             logger.info("✅ Job queue initialized")
 
+            from .test_accounts import sweep_forever
+
+            sweeper = asyncio.create_task(sweep_forever(AsyncSessionLocal))
             yield
+            sweeper.cancel()
         finally:
             logger.info("🛑 Shutting down ClipGringa API...")
             await close_db()

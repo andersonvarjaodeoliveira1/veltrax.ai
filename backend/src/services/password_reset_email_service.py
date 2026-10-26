@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from html import escape
 from typing import Optional
 
@@ -19,11 +20,13 @@ class PasswordResetEmailService:
     def is_configured(self) -> bool:
         return self.email_service.is_configured
 
-    async def send_reset_email(self, user: User, reset_url: str, invite: bool = False) -> dict:
-        content = self._build_invite_email(user, reset_url) if invite else self._build_reset_email(user, reset_url)
+    async def send_reset_email(self, user: User, reset_url: str, invite: bool = False, test_days: int | None = None) -> dict:
+        content = self._build_invite_email(user, reset_url, test_days) if invite else self._build_reset_email(user, reset_url)
         return await self.email_service.send_email(user.email, content)
 
-    def _build_invite_email(self, user: User, url: str) -> EmailContent:
+    def _build_invite_email(self, user: User, url: str, test_days: int | None = None) -> EmailContent:
+        if test_days:
+            return self._build_test_invite_email(user, url, test_days)
         first_name = first_name_for(first_name=user.first_name, full_name=user.name)
         safe_url = escape(url, quote=True)
         return EmailContent(
@@ -33,15 +36,40 @@ class PasswordResetEmailService:
                 "<p>Seu acesso ao ClipGringa foi liberado. Clique no botão abaixo para escolher a sua senha e entrar.</p>"
                 f'<p><a href="{safe_url}" style="display:inline-block;padding:12px 22px;border-radius:999px;'
                 'background:#7B3FE4;color:#ffffff;text-decoration:none;font-weight:600">Criar minha senha e entrar</a></p>'
-                "<p>Esse link vale por 3 dias. Depois disso, é só pedir um novo em “Esqueceu a senha?” na tela de entrada.</p>"
+                "<p>Se o link não abrir mais, é só pedir um novo em “Esqueceu a senha?” na tela de entrada.</p>"
                 "<p>Equipe ClipGringa</p>"
             ),
             text=(
                 f"Olá, {first_name}!\n\n"
                 "Seu acesso ao ClipGringa foi liberado. Abra o link abaixo para escolher a sua senha e entrar:\n\n"
                 f"{url}\n\n"
-                "Esse link vale por 3 dias. Depois disso, peça um novo em “Esqueceu a senha?” na tela de entrada.\n\n"
+                "Se o link não abrir mais, peça um novo em “Esqueceu a senha?” na tela de entrada.\n\n"
                 "Equipe ClipGringa"
+            ),
+        )
+
+    def _build_test_invite_email(self, user: User, url: str, days: int) -> EmailContent:
+        first_name = first_name_for(first_name=user.first_name, full_name=user.name)
+        safe_url = escape(url, quote=True)
+        until = (datetime.now(timezone(timedelta(hours=-3))) + timedelta(days=days)).strftime("%d/%m/%Y")
+        word = "dia" if days == 1 else "dias"
+        rules = "Uso pessoal e apenas para testar. É proibido copiar, extrair, revender ou fazer engenharia reversa do aplicativo."
+        return EmailContent(
+            subject=f"Seu acesso de teste ao ClipGringa ({days} {word})",
+            html=(
+                f"<p>Olá, {escape(first_name)}!</p>"
+                f"<p>Você recebeu uma <b>conta de teste</b> do ClipGringa, ativa por <b>{days} {word}</b> (até {until}). Depois disso ela é desativada.</p>"
+                "<p>Clique no botão abaixo para escolher a sua senha e entrar pelo site. Dentro da conta você pode colocar a sua própria chave de API em “Minhas APIs”.</p>"
+                f'<p><a href="{safe_url}" style="display:inline-block;padding:12px 22px;border-radius:999px;'
+                'background:#7B3FE4;color:#ffffff;text-decoration:none;font-weight:600">Criar minha senha e entrar</a></p>'
+                f"<p>{escape(rules)}</p>"
+                "<p>Equipe ClipGringa</p>"
+            ),
+            text=(
+                f"Olá, {first_name}!\n\n"
+                f"Você recebeu uma conta de teste do ClipGringa, ativa por {days} {word} (até {until}). Depois disso ela é desativada.\n\n"
+                "Abra o link abaixo para escolher a sua senha e entrar pelo site. Dentro da conta você pode colocar a sua própria chave de API em “Minhas APIs”.\n\n"
+                f"{url}\n\n{rules}\n\nEquipe ClipGringa"
             ),
         )
 
