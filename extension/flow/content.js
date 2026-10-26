@@ -218,18 +218,43 @@
     }
   }
 
-  const generateButton = () => $$("button", promptBox() || document).find((b) => text(b) === "arrow_forward" && visible(b));
+  const generateButton = () => {
+    const box = promptBox() || document;
+    const all = $$("button", box).filter(visible);
+    return all.find((b) => text(b).split("\n").map((x) => x.trim()).includes("arrow_forward"))
+      || all.find((b) => /gerar|criar|enviar|generate|create|send|submit/i.test(b.getAttribute("aria-label") || b.title || ""))
+      // último recurso: o botão redondo mais à direita da caixa de prompt (a seta)
+      || all.filter((b) => !text(b).trim() || /arrow|send/i.test(text(b))).sort((x, y) => y.getBoundingClientRect().right - x.getBoundingClientRect().right)[0];
+  };
 
   async function pressGenerate() {
-    const btn = await waitFor(() => { const b = generateButton(); return b && !b.disabled ? b : null; }, 6000);
+    const btn = await waitFor(() => { const b = generateButton(); return b && !b.disabled && b.getAttribute("aria-disabled") !== "true" ? b : null; }, 8000);
     if (!btn) throw new Error("O botão de gerar do Flow está desativado.");
+    const before = tileKeys();
+    const startedNow = () => {
+      const ed = editor();
+      if (ed && !text(ed).trim()) return true; // o Flow limpa a caixa ao enviar
+      return firstTiles(12).some((t) => !before.has(t.src) || /%/.test(t.info));
+    };
+    const settle = async () => { for (let i = 0; i < 10; i += 1) { await sleep(400); if (startedNow()) return true; } return false; };
     btn.scrollIntoView({ block: "center" });
     const r = btn.getBoundingClientRect();
-    let res = null;
-    try {
-      res = await chrome.runtime.sendMessage({ type: "clipgringa-click", x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) });
-    } catch (_) {}
-    if (!res || !res.ok) btn.click(); // plano B
+    // 1) clique confiável (chrome.debugger)
+    try { await chrome.runtime.sendMessage({ type: "clipgringa-click", x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }); } catch (_) {}
+    if (await settle()) return;
+    // 2) clique direto com eventos completos
+    for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) btn.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+    if (await settle()) return;
+    btn.click();
+    if (await settle()) return;
+    // 3) Enter na caixa de prompt
+    const ed = editor();
+    if (ed) {
+      ed.focus();
+      for (const type of ["keydown", "keypress", "keyup"]) ed.dispatchEvent(new KeyboardEvent(type, { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true }));
+      if (await settle()) return;
+    }
+    throw new Error("Escrevi o prompt, mas o Flow não aceitou o envio. Clique na seta do Flow uma vez; eu continuo daí.");
   }
 
   /* ---------- Flow: grade de mídias ---------- */
