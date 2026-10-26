@@ -8,14 +8,14 @@ const INVITE_DAYS = 3650;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export type InviteResult =
-  | { ok: true; userId: string; created: boolean; emailSent: true }
+  | { ok: true; userId: string; created: boolean; emailSent: boolean }
   | { ok: false; error: "invalid_email" | "email_failed" | "test_access_failed"; userId?: string; created?: boolean; detail?: string };
 
 /**
  * Libera o acesso de um membro: cria o usuário (se ainda não existe) com uma senha que ninguém conhece
  * e manda um e-mail com o link para a própria pessoa escolher a senha. Pode ser repetido para reenviar o convite.
  */
-export async function inviteMember(rawEmail: string, options: { testDays?: number; beforeEmail?: (userId: string) => Promise<boolean> } = {}): Promise<InviteResult> {
+export async function inviteMember(rawEmail: string, options: { testDays?: number; beforeEmail?: (userId: string) => Promise<boolean>; skipEmail?: boolean } = {}): Promise<InviteResult> {
   const email = rawEmail.trim().toLowerCase();
   if (!EMAIL_RE.test(email) || email.length > 254) return { ok: false, error: "invalid_email" };
 
@@ -36,6 +36,8 @@ export async function inviteMember(rawEmail: string, options: { testDays?: numbe
 
   // Conta de teste: grava a validade ANTES de mandar o e-mail; se não gravar, ninguém é avisado de um acesso sem prazo.
   if (options.beforeEmail && !(await options.beforeEmail(userId))) return { ok: false, error: "test_access_failed", userId, created };
+
+  if (options.skipEmail) return { ok: true, userId, created, emailSent: false };
 
   const token = generateId(24);
   await ctx.internalAdapter.createVerificationValue({

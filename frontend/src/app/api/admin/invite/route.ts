@@ -10,7 +10,7 @@ export async function POST(request: Request) {
   const check = await requireUnlockedAdmin();
   if ("error" in check) return check.error;
 
-  const body = (await request.json().catch(() => ({}))) as { email?: unknown; tokens?: unknown; testDays?: unknown };
+  const body = (await request.json().catch(() => ({}))) as { email?: unknown; tokens?: unknown; testDays?: unknown; skipEmail?: unknown };
   if (typeof body.email !== "string") return NextResponse.json({ error: "invalid_email" }, { status: 400 });
 
   const rawDays = Number(body.testDays);
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
     return true;
   };
 
-  const result = await inviteMember(body.email, { testDays, beforeEmail: markTest });
+  const result = await inviteMember(body.email, { testDays, beforeEmail: markTest, skipEmail: body.skipEmail === true && Boolean(testDays) });
   if (!result.ok && result.error === "invalid_email") return NextResponse.json({ error: "invalid_email" }, { status: 400 });
   if (!result.ok && result.error === "test_access_failed") return NextResponse.json({ error: "test_access_failed", created: result.created }, { status: 502 });
 
@@ -52,5 +52,5 @@ export async function POST(request: Request) {
   if (!result.ok) {
     return NextResponse.json({ error: result.error, created: result.created, tokensGranted, detail: result.detail }, { status: 502 });
   }
-  return NextResponse.json({ ok: true, created: result.created, tokensGranted, testUntil });
+  return NextResponse.json({ ok: true, created: result.created, emailSent: result.emailSent, tokensGranted, testUntil });
 }

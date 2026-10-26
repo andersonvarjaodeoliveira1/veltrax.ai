@@ -59,6 +59,14 @@ async def my_balance(request: Request, db: AsyncSession = Depends(get_db)):
     return await get_balance(db, _uid(request))
 
 
+@usage_router.get("/test-status")
+async def my_test_status(request: Request, db: AsyncSession = Depends(get_db)):
+    """Se a conta é de teste, devolve até quando ela fica ativa (para o aviso dentro do aplicativo)."""
+    row = (await db.execute(text("SELECT test_expires_at FROM users WHERE id = :u AND is_admin = FALSE"), {"u": _uid(request)})).first()
+    expires = row[0] if row else None
+    return {"test_expires_at": expires.isoformat() if expires else None}
+
+
 flow_router = APIRouter(prefix="/flow", tags=["flow"])
 
 

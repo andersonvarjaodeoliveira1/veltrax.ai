@@ -8,6 +8,7 @@ import {
   ArrowRight, Coins, CornerDownLeft, Download, Film, FolderOpen, LogOut, KeyRound, Link2, MessageCircle, Plus, Scissors, Search, Shield, ShoppingCart, UserRound, Workflow,
 } from "lucide-react";
 import { toast } from "sonner";
+import { TestBanner } from "@/components/app/test-banner";
 import { signOut, useSession } from "@/lib/auth-client";
 import { useBillingSummary } from "@/hooks/use-billing-summary";
 import { useTokenBalance } from "@/hooks/use-token-balance";
@@ -184,6 +185,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </button>
           </div>
         </header> : null}
+        {user ? <TestBanner enabled={!admin} /> : null}
         {children}
       </div>
 

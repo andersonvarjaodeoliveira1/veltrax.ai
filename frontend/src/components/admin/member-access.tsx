@@ -26,6 +26,7 @@ function InviteCard({ onDone }: { onDone: () => void }) {
   const [email, setEmail] = useState("");
   const [tokens, setTokens] = useState("");
   const [testDays, setTestDays] = useState("");
+  const [onlyMark, setOnlyMark] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -33,10 +34,10 @@ function InviteCard({ onDone }: { onDone: () => void }) {
     event.preventDefault();
     setBusy(true); setResult(null);
     try {
-      const response = await fetch("/api/admin/invite", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, tokens: Number(tokens) || undefined, testDays: testDays ? Number(testDays) : undefined }) });
+      const response = await fetch("/api/admin/invite", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, tokens: Number(tokens) || undefined, testDays: testDays ? Number(testDays) : undefined, skipEmail: onlyMark && Boolean(testDays) }) });
       const data = await response.json().catch(() => ({}));
       if (response.ok) {
-        setResult({ ok: true, text: `${data.created ? "Usuário criado" : "Usuário já existia"} e e-mail enviado para ${email.trim().toLowerCase()}. Ele escolhe a senha pelo link.${data.testUntil ? ` Conta de teste ativa até ${new Date(data.testUntil).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}.` : ""}${data.tokensGranted ? ` Tokens liberados: ${fmt.format(data.tokensGranted)}.` : ""}` });
+        setResult({ ok: true, text: `${data.created ? "Usuário criado" : "Usuário já existia"}${data.emailSent === false ? `; nenhum e-mail foi enviado (${email.trim().toLowerCase()}).` : ` e e-mail enviado para ${email.trim().toLowerCase()}. Ele escolhe a senha pelo link.`}${data.testUntil ? ` Conta de teste ativa até ${new Date(data.testUntil).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}.` : ""}${data.tokensGranted ? ` Tokens liberados: ${fmt.format(data.tokensGranted)}.` : ""}` });
         setEmail(""); setTokens(""); setTestDays(""); onDone();
       } else if (response.status === 403) {
         setResult({ ok: false, text: "Destrave o Admin (senha da conta) e tente de novo." });
@@ -77,6 +78,9 @@ function InviteCard({ onDone }: { onDone: () => void }) {
         </label>
         <label className="flex w-40 flex-col gap-1 text-xs text-muted-foreground">Conta de teste (dias)
           <input type="number" min={1} max={30} value={testDays} onChange={(e) => setTestDays(e.target.value)} placeholder="ex.: 7" className="h-10 rounded-full border bg-background px-4 text-sm text-foreground" />
+        </label>
+        <label className="flex h-10 items-center gap-2 text-xs text-muted-foreground">
+          <input type="checkbox" checked={onlyMark} onChange={(e) => setOnlyMark(e.target.checked)} /> Só marcar o teste (não reenviar e-mail)
         </label>
         <button type="submit" disabled={busy || !email.trim()} className="inline-flex h-10 items-center gap-2 rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-5 text-sm font-medium text-white disabled:opacity-50">
           {busy ? <Loader2 className="size-4 animate-spin" /> : <MailPlus className="size-4" />} Liberar e enviar e-mail

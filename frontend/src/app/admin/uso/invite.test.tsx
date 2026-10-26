@@ -25,7 +25,7 @@ it("invites a member by e-mail with optional tokens and confirms it", async () =
   await user.click(screen.getByRole("button", { name: /Liberar e enviar e-mail/ }));
   expect(await screen.findByText(/Usuário criado e e-mail enviado para alisonguimaraes13@gmail.com/)).toBeInTheDocument();
   const sent = JSON.parse(calls.find((c) => c.url === "/api/admin/invite")!.body!);
-  expect(sent).toEqual({ email: "alisonguimaraes13@gmail.com", tokens: 500000 });
+  expect(sent).toEqual({ email: "alisonguimaraes13@gmail.com", tokens: 500000, skipEmail: false });
   await waitFor(() => expect(screen.getByLabelText(/E-mail do membro/)).toHaveValue(""));
 });
 
