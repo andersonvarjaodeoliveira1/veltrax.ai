@@ -1185,7 +1185,6 @@ export function CloneWizard() {
   const [questName, setQuestName] = useState("");
   const chatRef = useRef<HTMLDivElement>(null);
   useEffect(() => { if (questHold) window.setTimeout(() => chatRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" }), 150); }, [questHold]);
-  const [copyDemo, setCopyDemo] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
   const [manualMode, setManualMode] = useState<"closed" | "open" | "hidden">("closed");
   const [pendingChange, setPendingChange] = useState<string | null>(null);
@@ -1214,7 +1213,7 @@ export function CloneWizard() {
     setP(next);
     setImgs({});
     setAutoGo((n) => n + 1);
-  }, [pendingChange, busy, auto]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pendingChange, busy, auto]);
   const resumeWithoutChange = () => {
     setPaused(false);
     setChangeText("");
@@ -1262,22 +1261,6 @@ export function CloneWizard() {
     timer = window.setTimeout(tick, 600);
     return () => window.clearTimeout(timer);
   }, [changeText, changeBoxShown]);
-
-  // Exemplos de copy para os takes: digita e apaga enquanto a caixa está vazia.
-  const copyBoxShown = p.copySource === "own" && !(p.ownCopy ?? "");
-  useEffect(() => {
-    if (!copyBoxShown || typeof window === "undefined") return;
-    const texts = ["Você sabe por que o seu vídeo não viraliza? Eu explico em 30 segundos.", "Parei de gastar com anúncio e comecei a vender todo dia assim.", "Se você tem mais de 40 anos, essa dica de saúde é para você."];
-    let ti = 0; let n = 0; let erasing = false; let timer = 0;
-    const tick = () => {
-      const full = texts[ti % texts.length];
-      if (!erasing) { n += 1; setCopyDemo(full.slice(0, n)); if (n >= full.length) { erasing = true; timer = window.setTimeout(tick, 1600); return; } }
-      else { n -= 2; setCopyDemo(full.slice(0, Math.max(n, 0))); if (n <= 0) { erasing = false; n = 0; ti += 1; timer = window.setTimeout(tick, 400); return; } }
-      timer = window.setTimeout(tick, erasing ? 18 : 38);
-    };
-    timer = window.setTimeout(tick, 600);
-    return () => window.clearTimeout(timer);
-  }, [copyBoxShown]);
 
   // Vídeo escolhido primeiro: lê enquanto a pessoa responde a conversa; ao terminar as duas coisas, prepara tudo e abre o Flow.
   useEffect(() => {

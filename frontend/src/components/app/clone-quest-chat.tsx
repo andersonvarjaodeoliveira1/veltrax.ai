@@ -136,7 +136,6 @@ export function QuestChat({ values, languages, models, onCount, onScenes, onTake
     if (k >= 0 && !answered.includes("takekind") && at > k) setAt(k);
   }, [values.takes]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const idx = (id: string) => steps.findIndex((x) => x.id === id);
   const advance = (done: string[], from: number) => {
     const all = Array.from(new Set([...answered, ...done]));
     setAnswered(all);

@@ -64,7 +64,7 @@ async def test_sends_reset_email_to_authenticated_user(client):
     response = await http.post("/account/password-reset-email", json={"url": url})
 
     assert response.status_code == 200
-    send.assert_awaited_once_with(user, url)
+    send.assert_awaited_once_with(user, url, invite=False)
 
 
 @pytest.mark.parametrize("url", ["javascript:alert(1)", "/relative", "ftp://x/y"])

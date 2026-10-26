@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CloneWizard } from "./clone-wizard";
 
@@ -334,7 +334,6 @@ it("counts the generated images and videos and lists each generation with its ti
 it("offers only the free Flow Lower Priority mode", async () => {
   mockAuto();
   window.localStorage.removeItem("gv-clonagem-mode");
-  const user = userEvent.setup();
   window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ sceneCount: 3, step: 1, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora.", variations }));
   render(<CloneWizard />);
   expect(screen.queryByRole("radio", { name: /Flow · Lower Priority/ })).not.toBeInTheDocument();
