@@ -1491,7 +1491,7 @@ export function CloneWizard() {
                 </div>
                 <div className="gt-pop space-y-3">
                   <QuestChat
-                    values={{ count: p.count, sceneCount: p.sceneCount, language: p.language, copySource: p.copySource ?? "video", ownCopy: p.ownCopy ?? "", keyword: p.keyword, flowModel: flowModelId }}
+                    values={{ cta: p.cta, product: p.product, count: p.count, sceneCount: p.sceneCount, language: p.language, copySource: p.copySource ?? "video", ownCopy: p.ownCopy ?? "", keyword: p.keyword, flowModel: flowModelId }}
                     languages={LANGUAGES.map((l) => ({ value: l.value, text: l.text }))}
                     models={visibleFlowChoices(flowAccount.plan).map((m) => ({ id: m.id, name: m.id === "lower" ? "Lower Priority" : m.name, credits: m.credits }))}
                     onCount={(n) => patch({ count: n })}
@@ -1500,6 +1500,9 @@ export function CloneWizard() {
                     onCopy={(source, text) => patch({ copySource: source, ownCopy: text })}
                     onKeyword={(value) => patch({ keyword: value })}
                     onModel={(id) => chooseModel(id)}
+                    onCta={(value) => patch({ cta: value })}
+                    onProduct={(value) => patch({ product: value })}
+                    onExtra={(value) => setP((cur) => ({ ...cur, changes: [cur.changes, value].filter(Boolean).join(" | ").slice(0, 600) }))}
                   >
                   <div className="cg-orbit relative w-full" style={{ "--cg-r": "22px" } as React.CSSProperties}>
                     <button type="button" onClick={() => fileRef.current?.click()}

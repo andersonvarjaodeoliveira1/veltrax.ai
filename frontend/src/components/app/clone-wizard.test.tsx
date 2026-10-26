@@ -640,6 +640,22 @@ test("the quest chat collects the choices step by step with Enter and then offer
   await user.click(await screen.findByRole("button", { name: "Português" }));
   await user.type(await screen.findByLabelText("Qual copy usar nos takes?"), "Minha copy própria para os takes do vídeo hoje.{Enter}");
   await user.click(await screen.findByRole("button", { name: "Pular" }));
+  await user.click(await screen.findByRole("button", { name: "Usar a frase padrão" }));
+  await user.click(await screen.findByRole("button", { name: "Não, só o vídeo" }));
+  await user.click(await screen.findByRole("button", { name: "Deixar automático" }));
+  await user.click(await screen.findByRole("button", { name: "Não, pode seguir" }));
   expect((await screen.findAllByText(/3 vídeos/)).length).toBeGreaterThan(0);
   expect(screen.getByText(/Minha copy: Minha copy própria/)).toBeInTheDocument();
+}, 30000);
+
+test("a single sentence answers several quest questions at once", async () => {
+  mockApi();
+  window.localStorage.setItem("gv-clonagem-view-v2", "simple");
+  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ sceneCount: 3 }));
+  const user = userEvent.setup();
+  render(<CloneWizard />);
+  await user.type(await screen.findByLabelText("Quantos vídeos você quer?"), "2 vídeos de 5 cenas em inglês{Enter}");
+  expect(await screen.findByLabelText("Qual copy usar nos takes?")).toBeInTheDocument();
+  expect(screen.getAllByText(/2 vídeos/).length).toBeGreaterThan(0);
+  expect(screen.getAllByText(/5 cenas/).length).toBeGreaterThan(0);
 }, 30000);

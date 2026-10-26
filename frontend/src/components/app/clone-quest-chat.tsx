@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowUp } from "lucide-react";
 
 type Opt = { value: string; label: string };
-export type QuestValues = { count: number; sceneCount: number; language: string; copySource: "video" | "own"; ownCopy: string; keyword: string; flowModel: string };
+export type QuestValues = { cta: string; product: string; count: number; sceneCount: number; language: string; copySource: "video" | "own"; ownCopy: string; keyword: string; flowModel: string };
 type Props = {
   values: QuestValues;
   languages: { value: string; text: string }[];
@@ -15,17 +15,22 @@ type Props = {
   onCopy: (source: "video" | "own", text: string) => void;
   onKeyword: (value: string) => void;
   onModel: (id: string) => void;
+  onCta: (value: string) => void;
+  onProduct: (value: string) => void;
+  onExtra: (value: string) => void;
   children?: React.ReactNode; // aparece no fim da conversa (o botão de subir o vídeo)
 };
 
 type Step = { id: string; question: string; hint: string; options: Opt[]; answer: string; apply: (text: string, picked?: string) => boolean };
 
 /** Conversa guiada: cada pergunta tem opções para tocar e também aceita digitar + Enter. As escolhas ficam sempre visíveis. */
-export function QuestChat({ values, languages, models, onCount, onScenes, onLanguage, onCopy, onKeyword, onModel, children }: Props) {
+export function QuestChat({ values, languages, models, onCount, onScenes, onLanguage, onCopy, onKeyword, onModel, onCta, onProduct, onExtra, children }: Props) {
   const [at, setAt] = useState(0);
   const [text, setText] = useState("");
+  const [answered, setAnswered] = useState<string[]>([]);
+  const [oops, setOops] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
-  const num = (t: string, min: number, max: number) => { const n = parseInt(t.replace(/\D+/g, ""), 10); return Number.isFinite(n) && n >= min && n <= max ? n : null; };
+  const num = (t: string, min: number, max: number) => { const n = parseInt((t.match(/\d+/) ?? [""])[0], 10); return Number.isFinite(n) && n >= min && n <= max ? n : null; };
 
   const steps: Step[] = [
     { id: "count", question: "Quantos vídeos você quer?", hint: "Digite um número (1 a 10) ou toque numa opção.",
@@ -56,6 +61,28 @@ export function QuestChat({ values, languages, models, onCount, onScenes, onLang
       options: [{ value: "skip", label: "Pular" }],
       answer: values.keyword.trim() ? values.keyword.trim().toUpperCase() : "Sem palavra-chave",
       apply: (t, picked) => { if (picked === "skip" || !t.trim()) { onKeyword(""); return true; } const k = t.trim().slice(0, 30); onKeyword(k); return true; } },
+    { id: "cta", question: "Qual frase fecha o vídeo?", hint: "Ex.: Comente QUERO para receber. Escreva e aperte Enter, ou use a padrão.",
+      options: [{ value: "default", label: "Usar a frase padrão" }],
+      answer: values.cta.trim() ? values.cta.trim().slice(0, 40) : "Frase padrão",
+      apply: (t, picked) => { if (picked === "default" || !t.trim()) { return true; } onCta(t.trim().slice(0, 200)); return true; } },
+    { id: "product", question: "Vai falar de algum produto?", hint: "Escreva o nome do produto e aperte Enter, ou pule.",
+      options: [{ value: "skip", label: "Não, só o vídeo" }],
+      answer: values.product.trim() ? values.product.trim().slice(0, 40) : "Sem produto",
+      apply: (t, picked) => { if (picked === "skip" || !t.trim()) { onProduct(""); return true; } onProduct(t.trim().slice(0, 120)); return true; } },
+    { id: "camera", question: "Qual estilo de câmera?", hint: "Toque numa opção ou descreva (ex.: celular na mão, de perto).",
+      options: [{ value: "selfie", label: "Selfie, celular na mão" }, { value: "tripod", label: "Tripé fixo" }, { value: "close", label: "De perto, rosto" }, { value: "skip", label: "Deixar automático" }],
+      answer: "Câmera definida",
+      apply: (t, picked) => {
+        const map: Record<string, string> = { selfie: "selfie vertical com o celular na mão", tripod: "câmera fixa em tripé, plano médio", close: "close no rosto, bem de perto" };
+        if (picked === "skip") return true;
+        const desc = picked ? map[picked] : t.trim();
+        if (!desc) return false;
+        onExtra(`Câmera: ${desc}`); return true;
+      } },
+    { id: "extra", question: "Quer mudar mais alguma coisa?", hint: "Ex.: cenário numa cozinha, pessoa mais jovem. Escreva e aperte Enter, ou siga.",
+      options: [{ value: "skip", label: "Não, pode seguir" }],
+      answer: "Ajustes anotados",
+      apply: (t, picked) => { if (picked === "skip" || !t.trim()) return true; onExtra(t.trim().slice(0, 300)); return true; } },
     ...(models.length > 1 ? [{ id: "model", question: "Qual modelo do Flow gera as cenas?", hint: "Toque numa opção. O custo aparece em cada uma.",
       options: models.map((m) => ({ value: m.id, label: `${m.name} · ${m.credits === 0 ? "0 créditos" : `${m.credits} créd./cena`}` })),
       answer: models.find((m) => m.id === values.flowModel)?.name ?? "Lower Priority",
@@ -70,21 +97,42 @@ export function QuestChat({ values, languages, models, onCount, onScenes, onLang
   const current = steps[at];
   useEffect(() => { endRef.current?.scrollIntoView?.({ block: "nearest", behavior: "smooth" }); }, [at, finished]);
 
+  const idx = (id: string) => steps.findIndex((x) => x.id === id);
+  const advance = (done: string[], from: number) => {
+    const all = Array.from(new Set([...answered, ...done]));
+    setAnswered(all);
+    let n = from + 1;
+    while (n < steps.length && all.includes(steps[n].id)) n += 1;
+    setAt(n);
+  };
+  // Frase solta: "3 vídeos de 4 cenas em inglês" já responde várias perguntas de uma vez.
+  const smart = (t: string): string[] => {
+    const done: string[] = [];
+    const v = t.match(/(\d+)\s*v[ií]deos?/i); if (v) { const n = num(v[1], 1, 10); if (n) { onCount(n); done.push("count"); } }
+    const c = t.match(/(\d+)\s*cenas?/i); if (c) { const n = num(c[1], 1, 6); if (n) { onScenes(n); done.push("scenes"); } }
+    const l = languages.find((x) => new RegExp(`\\b${x.text.toLowerCase()}\\b`).test(t.toLowerCase())); if (l) { onLanguage(l.value); done.push("language"); }
+    return done;
+  };
   const submit = (picked?: string) => {
     if (!current) return;
+    setOops(false);
+    if (picked === undefined && /v[ií]deos?|cenas?|ingl[eê]s|espanhol|franc[eê]s|portugu[eê]s/i.test(text) && text.trim().split(/\s+/).length <= 14 && current.id !== "copy") {
+      const done = smart(text);
+      if (done.length) { setText(""); advance(done, at); return; }
+    }
     const ok = current.apply(text, picked);
-    if (!ok) return;
+    if (!ok) { setOops(true); return; }
     setText("");
-    setAt((n) => n + 1);
+    advance([current.id], at);
   };
 
   return (
     <div className="space-y-3" data-testid="quest-chat">
       <ol className="space-y-2" aria-label="Suas escolhas">
-        {steps.slice(0, Math.min(at, steps.length)).map((step, i) => (
+        {steps.map((step, i) => ({ step, i })).filter(({ step, i }) => (answered.includes(step.id) && i !== at) || (i < at && !answered.includes(step.id))).map(({ step, i }) => (
           <li key={step.id} className="flex flex-wrap items-center gap-2 text-sm">
             <span className="text-muted-foreground">{step.question}</span>
-            <button type="button" onClick={() => { setText(""); setAt(i); }} title="Mudar esta escolha"
+            <button type="button" onClick={() => { setText(""); setOops(false); setAt(i); }} title="Mudar esta escolha"
               className="rounded-full border border-[#7B3FE4]/50 bg-[#7B3FE4]/20 px-3 py-1 text-xs font-medium text-white hover:bg-[#7B3FE4]/35">{step.answer} ✎</button>
           </li>
         ))}
@@ -108,6 +156,7 @@ export function QuestChat({ values, languages, models, onCount, onScenes, onLang
               <button type="button" aria-label="Avançar" title="Avançar (Enter)" onClick={() => submit()} disabled={!text.trim()}
                 className="flex size-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#A98BFF] to-[#7B3FE4] text-white disabled:opacity-40"><ArrowUp className="size-5" /></button>
             </div>
+            {oops && <p role="alert" className="text-xs text-[#F5B454]">Não entendi. Toque numa opção ou escreva de outro jeito.</p>}
             <button type="button" onClick={() => { setText(""); setAt(steps.length); }} className="text-xs text-muted-foreground underline">Usar o padrão no resto e escolher o vídeo</button>
           </div>
         </div>
