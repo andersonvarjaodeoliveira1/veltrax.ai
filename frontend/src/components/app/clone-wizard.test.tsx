@@ -701,6 +701,11 @@ test("shows the created videos panel with time, remaining, progress, photo and d
   expect(await screen.findByLabelText("Baixar a foto da cena 1 do vídeo 1")).toHaveAttribute("download", "Video01_Cena01.jpg");
   expect(await screen.findByLabelText("Baixar o vídeo da cena 1 do vídeo 1")).toHaveAttribute("href", expect.stringContaining("/flow-videos/abc/file"));
 
+  // A cena pronta pode ser assistida ali mesmo, e a aba não tem luz correndo em volta.
+  await userEvent.setup().click(await screen.findByLabelText("Assistir a cena 1 do vídeo 1"));
+  expect(await screen.findByLabelText("Vídeo Video01_Cena01.mp4")).toHaveAttribute("src", expect.stringContaining("/flow-videos/abc/file"));
+  expect(panel.className).not.toContain("cg-orbit");
+
   // Parou de gerar: cada cena pronta ganha "+ take", que manda só aquela cena de novo.
   const sent: string[] = [];
   const listen = (event: MessageEvent) => { if (event.data?.source === "clipgringa-page" && event.data?.type === "flow-package") sent.push(String(event.data.raw)); };

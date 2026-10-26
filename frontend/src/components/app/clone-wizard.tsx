@@ -1023,6 +1023,7 @@ export function CloneWizard() {
   })();
   const [flowProg, setFlowProg] = useState<FlowProgress | null>(null);
   const [flowImages, setFlowImages] = useState<Record<string, { file: string; data: string }>>({});
+  const [watching, setWatching] = useState<string | null>(null);
   const [flowFiles, setFlowFiles] = useState<Record<string, string>>({}); // nome do arquivo -> id no ClipGringa
   useEffect(() => {
     const onImages = (event: MessageEvent) => {
@@ -1643,7 +1644,7 @@ export function CloneWizard() {
           const fmtTime = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, "0")}`;
           const total = flowProg.startedAt ? Math.max(0, Math.round(((flowProg.running ? Date.now() : flowProg.at) - flowProg.startedAt) / 1000)) : 0;
           return (
-            <section role="status" className="cg-orbit space-y-4 rounded-[22px] border border-[#7B3FE4]/60 bg-[#7B3FE4]/10 p-5" data-testid="flow-progress">
+            <section role="status" className="space-y-4 rounded-[22px] border border-[#7B3FE4]/60 bg-[#7B3FE4]/10 p-5" data-testid="flow-progress">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-lg font-semibold">{flowProg.done === flowProg.total ? "Tudo pronto no Flow!" : flowProg.running ? "Criando os vídeos no Flow" : "Geração pausada"}</p>
@@ -1671,8 +1672,13 @@ export function CloneWizard() {
                           const videoId = flowFiles[job.file];
                           const value = job.done ? 100 : typeof job.pct === "number" ? job.pct : running ? 8 : 0;
                           return (
-                            <li key={job.key} className="flex items-center gap-3 rounded-[14px] border border-white/10 bg-black/20 p-2.5">
-                              {image ? (
+                            <li key={job.key} className="flex flex-wrap items-center gap-3 rounded-[14px] border border-white/10 bg-black/20 p-2.5">
+                              {videoId ? (
+                                <button type="button" onClick={() => setWatching(watching === job.key ? null : job.key)} aria-label={`Assistir a cena ${job.si + 1} do vídeo ${vi + 1}`} title="Assistir" className="relative h-14 w-10 shrink-0 overflow-hidden rounded-[8px] bg-black">
+                                  <video preload="metadata" muted playsInline src={`/api/multiplier/flow-videos/${videoId}/file#t=0.5`} className="size-full object-cover" />
+                                  <span aria-hidden className="absolute inset-0 grid place-items-center bg-black/30 text-xs text-white">▶</span>
+                                </button>
+                              ) : image ? (
                                 // eslint-disable-next-line @next/next/no-img-element
                                 <img src={image.data} alt={`Foto da cena ${job.si + 1}`} className="h-14 w-10 shrink-0 rounded-[8px] object-cover" />
                               ) : (
@@ -1694,6 +1700,9 @@ export function CloneWizard() {
                                 {image && <a href={image.data} download={image.file} aria-label={`Baixar a foto da cena ${job.si + 1} do vídeo ${vi + 1}`} title="Baixar a foto" className="grid size-8 place-items-center rounded-full border border-border text-muted-foreground hover:text-foreground"><ImageDown className="size-4" /></a>}
                                 {videoId && <a href={`/api/multiplier/flow-videos/${videoId}/file?download=1`} download={job.file} aria-label={`Baixar o vídeo da cena ${job.si + 1} do vídeo ${vi + 1}`} title="Baixar o vídeo" className="grid size-8 place-items-center rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white"><Download className="size-4" /></a>}
                               </div>
+                              {watching === job.key && videoId && (
+                                <video controls autoPlay playsInline src={`/api/multiplier/flow-videos/${videoId}/file`} className="mx-auto mt-1 max-h-[70vh] w-full basis-full rounded-[12px] bg-black object-contain" aria-label={`Vídeo ${job.file}`} />
+                              )}
                             </li>
                           );
                         })}
