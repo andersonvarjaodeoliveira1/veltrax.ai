@@ -681,13 +681,20 @@
       return;
     }
     try {
-      let raw = el("pkg").value.trim() || state.raw || "";
-      if (!raw) {
-        // Sem pacote no painel: usa o último que o ClipGringa enviou (até 6 horas).
-        const last = (await chrome.storage.local.get("clipgringa-flow-last-v1"))["clipgringa-flow-last-v1"];
-        if (last && last.raw && Date.now() - last.at < 6 * 3600 * 1000) { raw = last.raw.trim(); uploadInfo = last.upload || uploadInfo; el("pkg").value = raw; }
-      }
-      if (!raw) throw new Error("Ainda não recebi o pacote. Volte ao ClipGringa (Clonar vídeo) e deixe chegar em “Tudo pronto”; ele envia sozinho para cá.");
+      // Usa o primeiro pacote que for válido: o do painel, o já carregado, o pendente do site ou o último enviado (até 6 horas).
+      const ok = (text) => { try { parsePackage(text); return true; } catch (_e) { return false; } };
+      let raw = "";
+      const pending = (await chrome.storage.local.get(PENDING_KEY))[PENDING_KEY];
+      const last = (await chrome.storage.local.get("clipgringa-flow-last-v1"))["clipgringa-flow-last-v1"];
+      const options = [
+        { text: el("pkg").value.trim() },
+        { text: state.raw || "" },
+        { text: pending && pending.raw ? pending.raw.trim() : "", upload: pending && pending.upload },
+        { text: last && last.raw && Date.now() - last.at < 6 * 3600 * 1000 ? last.raw.trim() : "", upload: last && last.upload },
+      ];
+      const found = options.find((o) => o.text && ok(o.text));
+      if (found) { raw = found.text; if (found.upload) uploadInfo = found.upload; el("pkg").value = raw; }
+      if (!raw) throw new Error("Ainda não recebi o pacote. Volte ao ClipGringa (Clonar vídeo), deixe chegar em “Tudo pronto” e clique em “Enviar para o Flow”; ele manda sozinho para cá.");
       parsePackage(raw); // define o modelo pedido pelo pacote
       if (!state.jobs.length || raw !== (state.raw || "")) {
         const parsed = parsePackage(raw);
