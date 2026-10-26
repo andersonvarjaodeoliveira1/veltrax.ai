@@ -1161,6 +1161,8 @@ export function CloneWizard() {
   const [questDone, setQuestDone] = useState(false);
   const [readDone, setReadDone] = useState(false);
   const [questName, setQuestName] = useState("");
+  const chatRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (questHold) window.setTimeout(() => chatRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" }), 150); }, [questHold]);
   const [copyDemo, setCopyDemo] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
   const [manualMode, setManualMode] = useState<"closed" | "open" | "hidden">("closed");
@@ -1493,15 +1495,25 @@ export function CloneWizard() {
             </div>
             ) : (
               <div className="space-y-4" data-testid="start-quest">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-xs font-semibold">
-                    <span className="text-[#A98BFF]">1º escolha o vídeo · depois responda · o resto é automático</span>
-                    <span>Leitura, cenas, textos e Flow</span>
-                  </div>
-                  <div role="progressbar" aria-label="Passos" aria-valuemin={0} aria-valuemax={4} aria-valuenow={0} className="h-2.5 overflow-hidden rounded-full bg-border">
-                    <div className="h-full w-[6%] rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A98BFF]" />
-                  </div>
-                </div>
+                {(() => {
+                  const hasVideoNow = questHold || hasReference || !!refFile;
+                  const stage = !hasVideoNow ? 1 : !questDone ? 2 : 3;
+                  const labels = ["Escolher o vídeo", "Responder as perguntas", "Preparar tudo", "Gerar no Flow"];
+                  return (
+                    <div role="progressbar" aria-label="Passos" aria-valuemin={0} aria-valuemax={4} aria-valuenow={stage - 1} className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      {labels.map((label, i) => {
+                        const state = i + 1 < stage ? "done" : i + 1 === stage ? "now" : "next";
+                        return (
+                          <div key={label} aria-current={state === "now" ? "step" : undefined}
+                            className={`flex items-center gap-2 rounded-[14px] border px-3 py-2 text-xs ${state === "now" ? "border-[#7B3FE4] bg-[#7B3FE4]/20 text-white" : state === "done" ? "border-[#5BD69A]/40 text-[#5BD69A]" : "border-white/10 text-muted-foreground"}`}>
+                            <span className={`grid size-5 shrink-0 place-items-center rounded-full text-[10px] font-semibold ${state === "now" ? "bg-[#7B3FE4] text-white" : state === "done" ? "bg-[#5BD69A]/20" : "bg-white/10"}`}>{state === "done" ? "✓" : i + 1}</span>
+                            <span>{label}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
                 <div className="gt-pop space-y-3">
                   <div className="cg-orbit relative w-full" style={{ "--cg-r": "22px" } as React.CSSProperties}>
                     <button type="button" onClick={() => fileRef.current?.click()}
@@ -1514,6 +1526,8 @@ export function CloneWizard() {
                     </button>
                   </div>
                   {questHold && <p role="status" className="rounded-[14px] border border-[#5BD69A]/40 bg-[#5BD69A]/10 p-3 text-sm">✓ Vídeo escolhido{questName ? `: ${questName}` : ""}. {readDone ? "Já li. Responda as perguntas e eu sigo." : "Lendo a fala enquanto você responde…"}</p>}
+                  {(questHold || hasReference || !!refFile) ? (
+                  <div ref={chatRef} className="scroll-mt-4">
                   <QuestChat
                     values={{ cta: p.cta, product: p.product, count: p.count, sceneCount: p.sceneCount, language: p.language, copySource: p.copySource ?? "video", ownCopy: p.ownCopy ?? "", keyword: p.keyword, flowModel: flowModelId }}
                     languages={LANGUAGES.map((l) => ({ value: l.value, text: l.text }))}
@@ -1528,6 +1542,10 @@ export function CloneWizard() {
                     onProduct={(value) => patch({ product: value })}
                     onExtra={(value) => setP((cur) => ({ ...cur, changes: [cur.changes, value].filter(Boolean).join(" | ").slice(0, 600) }))}
                    onFinish={() => { setQuestDone(true); setP((cur) => (cur.keyword.trim() ? cur : { ...cur, keyword: "QUERO" })); }} hasVideo={questHold || hasReference || !!refFile} />
+                  </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Escolha o vídeo acima. Depois eu faço as perguntas e o resto é automático.</p>
+                  )}
                   <details className="group rounded-[18px] border border-white/10 bg-card p-4 text-sm" data-testid="quest-adjust">
                     <summary className="cursor-pointer list-none font-medium">Ajustes (opcional): idioma, quantidade, palavra-chave e frase final <span aria-hidden className="text-muted-foreground">⌄</span></summary>
                     <div className="mt-4 border-t border-white/10 pt-4">{adjustSections}</div>
