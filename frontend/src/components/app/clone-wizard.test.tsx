@@ -594,7 +594,7 @@ test("tells whether the Flow account is connected and has a plan", async () => {
   await act(async () => {
     window.postMessage({ source: "clipgringa-flow", type: "status", loggedIn: true, plan: null, credits: null, seenAt: Date.now() }, window.location.origin);
   });
-  expect(await screen.findByTestId("flow-account")).toHaveTextContent(/não achei um plano do Flow/);
+  await waitFor(() => expect(screen.queryByTestId("flow-account")).toBeNull());
   await act(async () => {
     window.postMessage({ source: "clipgringa-flow", type: "status", loggedIn: true, plan: "Pro", credits: 250, seenAt: Date.now() }, window.location.origin);
   });

@@ -1001,9 +1001,7 @@ export function CloneWizard() {
     if (flowState === "connected" && flowAccount.plan) {
       return <p role="status" data-testid="flow-account" className={`${base} border-[#5BD69A]/40 bg-[#5BD69A]/10`}>Conta do Flow conectada · plano {flowAccount.plan}{flowAccount.credits !== null ? ` · ${flowAccount.credits} créditos` : ""}.</p>;
     }
-    if (flowState === "connected") {
-      return <p role="status" data-testid="flow-account" className={`${base} border-[#F5B454]/40 bg-[#F5B454]/10`}>Conta do Flow conectada, mas não achei um plano do Flow nela. Sem plano, o Flow pode não liberar a geração de vídeos nem o Lower Priority. Abra o <a className="underline" href={FLOW_HOME_URL} target="_blank" rel="noopener noreferrer">Flow</a> e confira. Quando você assinar, o ClipGringa libera tudo sozinho.</p>;
-    }
+    if (flowState === "connected") return null; // conectada sem plano lido: libera tudo, sem aviso
     if (flowState === "logged-out") {
       return <p role="status" data-testid="flow-account" className={`${base} border-[#F5B454]/40 bg-[#F5B454]/10`}>Sua conta do Flow não está conectada. <a className="underline" href={FLOW_HOME_URL} target="_blank" rel="noopener noreferrer">Abra o Flow</a> e entre com a conta Google que tem o Flow. Enquanto isso você já pode preparar os roteiros e prompts.</p>;
     }
