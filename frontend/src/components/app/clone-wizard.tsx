@@ -910,7 +910,19 @@ export function CloneWizard() {
       if (proj.scenes.length !== proj.sceneCount) await text("scenes", "Entendendo o vídeo de referência", 1);
       if (proj.copyMode === "mix" && !isMixReady(proj.mix)) await text("mix", "Escrevendo ganchos, corpos e CTAs diferentes", 1);
       if (!proj.variations.length) await text("variations", "Planejando as variações", 2);
-      if (proj.images.length !== proj.variations.length || !proj.images.length) await text("images", "Escrevendo os prompts das imagens", 3);
+      const needImages = proj.images.length !== proj.variations.length || !proj.images.length;
+      const needVideos = proj.videos.length !== proj.variations.length || !proj.videos.length;
+      if (textOnly && needImages && needVideos) {
+        // Os prompts das imagens e os das animações não dependem um do outro: pede os dois ao mesmo tempo.
+        check();
+        mark("Escrevendo os prompts das imagens e das animações", proj);
+        patch({ step: 3 });
+        const [imageData, videoData] = await Promise.all([callStage("images", proj), callStage("videos", { ...proj, ctaLocked: true })]);
+        proj = { ...applyStage(applyStage(proj, "images", imageData), "videos", videoData), step: 3 };
+        projRef.current = proj;
+        setP(proj);
+        mark("Escrevendo os prompts das imagens e das animações", proj, AUTO_WEIGHT.text * 2);
+      } else if (needImages) await text("images", "Escrevendo os prompts das imagens", 3);
       const n = proj.variations.length;
       const all = Array.from({ length: n * proj.sceneCount }, (_, i) => ({ vi: Math.floor(i / proj.sceneCount), si: i % proj.sceneCount }));
 
