@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, ArrowUp, Check, ClipboardCopy, ImagePlus, Loader2, Plus, Search, Sparkles, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUp, Check, ClipboardCopy, ImagePlus, Loader2, Plus, Search, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth-client";
 import { FLOW_CHOICES, defaultFlowCategory, effectiveFlowId, saveFlowCategory, visibleFlowChoices } from "@/lib/flow-models";
@@ -36,7 +36,7 @@ const CHANGE_HINTS: Record<"pt" | "en" | "es", string[]> = {
 };
 
 const FLOW_URL = "https://labs.google/fx/pt/tools/flow";
-const SCENES = 4;
+const DEFAULT_SCENES = 4;
 const ANGLES = ["curiosity", "problem", "proof", "question"];
 type StyleState = { captions: boolean; voice: string; tone: string; custom: string; camera: string; product: boolean | null; format: string; cta: string; setting: string; avatarMix: boolean };
 const DEFAULT_STYLE: StyleState = { captions: false, voice: "", tone: "", custom: "", camera: "selfie", product: null, format: "talk", cta: "bio", setting: "", avatarMix: false };
@@ -67,7 +67,7 @@ const S = {
   promptAttached: ["Prompt anexado ao chat", "Prompt attached to the chat", "Prompt adjuntado al chat"],
   all: ["Todos", "All", "Todos"],
   newChat: ["Novo chat", "New chat", "Nuevo chat"],
-  other: ["Outro", "Other", "Otro"],
+  other: ["Outro (ajustar)", "Other (adjust)", "Otro (ajustar)"],
   otherHint: ["Escreva o que você quer", "Write what you want", "Escribe lo que quieres"],
   secVideo: ["Vídeo", "Video", "Video"],
   secScene: ["Cenário", "Scene", "Escena"],
@@ -145,6 +145,8 @@ const S = {
   copy: ["Copiar", "Copy", "Copiar"],
   copied: ["Copiado", "Copied", "Copiado"],
   toVideos: ["Fazer os vídeos", "Make the videos", "Hacer los videos"],
+  back: ["Voltar", "Back", "Volver"],
+  howScenes: ["Quantas cenas em cada vídeo?", "How many scenes per video?", "¿Cuántas escenas por video?"],
   howMany: ["Quantos vídeos você quer gerar?", "How many videos do you want?", "¿Cuántos videos quieres generar?"],
   video: ["vídeo", "video", "video"],
   videos: ["vídeos", "videos", "videos"],
@@ -292,6 +294,8 @@ export function InfluencerChat() {
   const [prompts, setPrompts] = useState<string[]>([]);
   const [summaries, setSummaries] = useState<string[]>([]);
   const [videoCount, setVideoCount] = useState(1);
+  const [sceneCount, setSceneCount] = useState(DEFAULT_SCENES);
+  const SCENES = sceneCount;
   const [style, setStyle] = useState<StyleState>(DEFAULT_STYLE);
   const [vary, setVary] = useState<{ hook: boolean; body: boolean; cta: boolean }>({ hook: true, body: false, cta: false });
   const [model, setModel] = useState<string>(FLOW_CHOICES[1].id);
@@ -521,9 +525,9 @@ export function InfluencerChat() {
     } catch { setError(t("error")); setPhase("home"); } finally { setBusy(""); }
   }
 
-  async function answer(skipped: boolean) {
+  async function answer(skipped: boolean, direct?: string) {
     const current = questions[qi];
-    const chosen = isOther ? otherText.trim() : picked;
+    const chosen = direct ?? (isOther ? otherText.trim() : picked);
     const next = skipped || !chosen ? answers : [...answers, { question: current.question, answer: chosen }];
     setAnswers(next); setPicked(null); setIsOther(false); setOtherText("");
     if (qi + 1 < questions.length) { setQi(qi + 1); return; }
@@ -632,7 +636,7 @@ export function InfluencerChat() {
     try { await navigator.clipboard.writeText(text); setSent(key); window.setTimeout(() => setSent(""), 1800); } catch { /* o texto continua na tela */ }
   }
 
-  const snapshot = (): Snap => ({ style, phase, prompt, skill, answers, persona, searches, copyText, pins, pin, prompts, summaries, videoCount, vary, model, boards, productLook, productLink, worked, questions, qi, productName, found: found ? { ...found, image: "" } : null });
+  const snapshot = (): Snap => ({ style, phase, prompt, skill, answers, persona, searches, copyText, pins, pin, prompts, summaries, videoCount, sceneCount, vary, model, boards, productLook, productLink, worked, questions, qi, productName, found: found ? { ...found, image: "" } : null });
   const snapKey = JSON.stringify(snapshot());
   useEffect(() => {
     if (!hydrated || chatId.current === null || phase === "home") return;
@@ -660,7 +664,7 @@ export function InfluencerChat() {
     setQuestions((snap.questions as unknown as Question[]) ?? []); setQi((snap.qi as number) ?? 0);
     setProductName((snap.productName as string) ?? ""); setNameOpen(Boolean(snap.productName)); setFound((snap.found as never) ?? null);
     setAnswers(snap.answers ?? []); setPersona(snap.persona ?? { name: "", age: "", look: "", setting: "" }); setSearches(snap.searches ?? []); setCopyText((snap.copyText as string) ?? "");
-    setPins(snap.pins ?? []); setPin(snap.pin ?? null); setPrompts(snap.prompts ?? []); setSummaries(snap.summaries ?? []); setVideoCount((snap.videoCount as number) ?? 1);
+    setPins(snap.pins ?? []); setPin(snap.pin ?? null); setPrompts(snap.prompts ?? []); setSummaries(snap.summaries ?? []); setVideoCount((snap.videoCount as number) ?? 1); setSceneCount((snap.sceneCount as number) ?? DEFAULT_SCENES);
     setStyle({ ...DEFAULT_STYLE, ...((snap.style as Partial<StyleState>) ?? {}) }); setVary(snap.vary ?? { hook: true, body: false, cta: false }); setModel((snap.model as string) ?? model); setBoards(snap.boards ?? []); setProductLook((snap.productLook as string) ?? ""); setProductLink((snap.productLink as string) ?? "");
     lookRef.current = (snap.productLook as string) ?? ""; linkRef.current = (snap.productLink as string) ?? "";
     setWorked(snap.worked ?? {}); setProject(chat.project ?? "");
@@ -1056,7 +1060,7 @@ export function InfluencerChat() {
           <p className="font-medium">{q.question}</p>
           <div role="radiogroup" aria-label={q.question} className="grid gap-2">
             {q.options.slice(0, 3).map((option, n) => (
-              <button key={option.label} type="button" role="radio" aria-checked={picked === option.label} onClick={() => { setPicked(option.label); setIsOther(false); }}
+              <button key={option.label} type="button" role="radio" aria-checked={picked === option.label} onClick={() => { setPicked(option.label); setIsOther(false); void answer(false, option.label); }}
                 className={cn("flex items-start gap-3 rounded-[16px] border px-4 py-3 text-left transition", picked === option.label ? "border-[#A98BFF] bg-[#7B3FE4]/15" : "border-border bg-card hover:border-[#A98BFF]/60")}>
                 <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border border-border text-[11px]" aria-hidden>{n + 1}</span>
                 <span><span className="font-medium">{option.label}</span>{option.detail && <span className="block text-xs text-muted-foreground">{option.detail}</span>}</span>
@@ -1073,6 +1077,7 @@ export function InfluencerChat() {
             )}
           </div>
           <div className="flex justify-end gap-2">
+            {qi > 0 && <Button type="button" variant="ghost" className="mr-auto rounded-full" onClick={() => { const before = questions[qi - 1]?.question; setAnswers((list) => list.filter((a) => a.question !== before)); setPicked(null); setIsOther(false); setOtherText(""); setQi(qi - 1); }}><ArrowLeft className="size-4" /> {t("back")}</Button>}
             <Button type="button" variant="ghost" className="rounded-full" onClick={() => void answer(true)}>{t("skip")}</Button>
             <Button type="button" className="rounded-full" disabled={isOther ? otherText.trim().length < 2 : !picked} onClick={() => void answer(false)}>{t("next")} <ArrowRight className="size-4" /></Button>
           </div>
@@ -1150,7 +1155,12 @@ export function InfluencerChat() {
               </button>
             </div>
           ))}
-          {phase === "prompt" && <Button type="button" className="rounded-full" onClick={() => setPhase("count")}>{t("toVideos")} <ArrowRight className="size-4" /></Button>}
+          {phase === "prompt" && (
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" className="rounded-full" onClick={() => setPhase("photos")}><ArrowLeft className="size-4" /> {t("back")}</Button>
+              <Button type="button" className="rounded-full" onClick={() => setPhase("count")}>{t("toVideos")} <ArrowRight className="size-4" /></Button>
+            </div>
+          )}
         </Msg>
       )}
 
@@ -1187,6 +1197,10 @@ export function InfluencerChat() {
           <div role="radiogroup" aria-label={t("howMany")} className="flex flex-wrap gap-2">
             {[1, 2, 3, 5, 10].map((n) => <Chip key={n} role="radio" on={videoCount === n} onClick={() => { if (phase === "count") setVideoCount(n); }}>{n} {n === 1 ? t("video") : t("videos")}</Chip>)}
           </div>
+          <p>{t("howScenes")}</p>
+          <div role="radiogroup" aria-label={t("howScenes")} className="flex flex-wrap gap-2">
+            {[1, 2, 3, 4, 5, 6].map((n) => <Chip key={n} role="radio" on={sceneCount === n} onClick={() => { if (phase === "count") setSceneCount(n); }}>{n} {n === 1 ? t("scene").toLowerCase() : t("scenesWord")}</Chip>)}
+          </div>
           {videoCount > 1 && (
             <div className="space-y-2">
               <p className="text-muted-foreground">{t("vary")}</p>
@@ -1197,29 +1211,42 @@ export function InfluencerChat() {
               </div>
             </div>
           )}
-          {phase === "count" && <Button type="button" className="rounded-full" onClick={() => setPhase(modelChosen ? "cost" : "model")}>{t("go")} <ArrowRight className="size-4" /></Button>}
+          {phase === "count" && (
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" className="rounded-full" onClick={() => setPhase("prompt")}><ArrowLeft className="size-4" /> {t("back")}</Button>
+              <Button type="button" className="rounded-full" onClick={() => setPhase(modelChosen ? "cost" : "model")}>{t("go")} <ArrowRight className="size-4" /></Button>
+            </div>
+          )}
         </Msg>
       )}
       {["model", "cost", "board"].includes(phase) && !modelChosen && (
         <Msg testid="chat-model">
           <p>{t("whichModel")}</p>
-          <div role="radiogroup" aria-label={t("whichModel")} className="flex flex-wrap gap-2">
+          <div role="radiogroup" aria-label={t("whichModel")} className="grid gap-2 sm:grid-cols-2">
             {visibleFlowChoices(flowAcct.plan).map((item) => (
-              <Chip key={item.id} role="radio" on={model === item.id} onClick={() => { if (phase === "model") { setModel(item.id); saveFlowCategory(item.id); setPhase("cost"); } }}>
-                {item.id === "lower" ? "Lower Priority" : item.name} · {item.credits === 0 ? t("zero") : `${item.credits} ${t("credits")}`}
-              </Chip>
+              <button key={item.id} type="button" role="radio" aria-checked={model === item.id} aria-label={`${item.id === "lower" ? "Lower Priority" : item.name} · ${item.credits === 0 ? t("zero") : `${item.credits} ${t("credits")}`}`} onClick={() => { if (phase === "model") { setModel(item.id); saveFlowCategory(item.id); setPhase("cost"); } }}
+                className={cn("flex items-center justify-between gap-3 rounded-[16px] border px-4 py-3 text-left transition", model === item.id ? "border-[#A98BFF] bg-[#7B3FE4]/15" : "border-border bg-card hover:border-[#A98BFF]/60")}>
+                <span className="font-medium">{item.id === "lower" ? "Lower Priority" : item.name}</span>
+                <span className={cn("shrink-0 rounded-full px-2.5 py-0.5 text-xs", item.credits === 0 ? "bg-[#5BD69A]/15 text-[#5BD69A]" : "bg-white/5 text-muted-foreground")}>{" · "}{item.credits === 0 ? t("zero") : `${item.credits} ${t("credits")}`}</span>
+              </button>
             ))}
           </div>
           <p className="text-xs text-muted-foreground">{t("modelAuto")}</p>
+          {phase === "model" && <Button type="button" variant="outline" className="rounded-full" onClick={() => setPhase("count")}><ArrowLeft className="size-4" /> {t("back")}</Button>}
         </Msg>
       )}
       {(phase === "cost" || (phase === "board" && busy === "board")) && (
         <div className="space-y-3 rounded-[20px] border border-[#A98BFF]/40 bg-card p-4" data-testid="video-approval">
           <p className="font-semibold">{t("approveGen")}</p>
-          <p className="text-sm">{videoCount} {videoCount === 1 ? t("video") : t("videos")} · {SCENES} {t("scenesWord")} · {chosen.id === "lower" ? "Lower Priority" : chosen.name}</p>
-          <p className="text-sm text-muted-foreground">{t("spend")}: <b className="text-foreground">{totalCredits} {lang === "en" ? "credits" : "créditos"}</b></p>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-[14px] border border-white/10 bg-white/[0.03] px-2 py-3"><p className="text-xl font-semibold tabular-nums">{videoCount}</p><p className="text-xs text-muted-foreground">{videoCount === 1 ? t("video") : t("videos")}</p></div>
+            <div className="rounded-[14px] border border-white/10 bg-white/[0.03] px-2 py-3"><p className="text-xl font-semibold tabular-nums">{SCENES}</p><p className="text-xs text-muted-foreground">{t("scenesWord")}</p></div>
+            <div className="rounded-[14px] border border-[#A98BFF]/40 bg-[#7B3FE4]/10 px-2 py-3"><p className="text-xl font-semibold tabular-nums">{totalCredits}</p><p className="text-xs text-muted-foreground">{lang === "en" ? "credits" : "créditos"}</p></div>
+          </div>
+          <p className="text-sm text-muted-foreground">{chosen.id === "lower" ? "Lower Priority" : chosen.name} · {t("spend")}: <b className="text-foreground">{totalCredits} {lang === "en" ? "credits" : "créditos"}</b></p>
           {phase === "cost" && (
             <div className="flex justify-end gap-2">
+              <Button type="button" variant="ghost" className="mr-auto rounded-full" onClick={() => setPhase("count")}><ArrowLeft className="size-4" /> {t("back")}</Button>
               <Button type="button" variant="outline" className="rounded-full" onClick={() => setPhase("model")}><X className="size-4" /> {t("stop")}</Button>
               <Button type="button" className="rounded-full" onClick={() => void buildBoards()}>{t("approve")} <ArrowRight className="size-4" /></Button>
             </div>

@@ -76,8 +76,7 @@ describe("Criar influencer em chat", () => {
     fireEvent.click(within(screen.getByRole("group", { name: "Nicho (opcional)" })).getByRole("button", { name: /Shopee/ }));
     await sendPrompt();
     await noProduct();
-    fireEvent.click(await screen.findByRole("radio", { name: /Casual/ }));
-    fireEvent.click(screen.getByRole("button", { name: /Continuar/ }));
+    fireEvent.click(await screen.findByRole("radio", { name: /Casual/ })); // tocar na opção já avança, sem botão Continuar
     expect(await screen.findByTestId("chat-approval")).toHaveTextContent("Bia");
     expect(bodies[0].skill).toBe("shopee");
     expect(bodies[0].language).toBe("pt");
@@ -122,14 +121,20 @@ describe("Criar influencer em chat", () => {
     fireEvent.click(within(screen.getByRole("radiogroup", { name: "Variar o avatar a cada vídeo" })).getByRole("radio", { name: "Sim" }));
     fireEvent.click(within(screen.getByRole("radiogroup", { name: "Chamada final (CTA)" })).getByRole("radio", { name: /Link nos comentários/ }));
     fireEvent.click(screen.getByRole("button", { name: /^Corpo/ }));
+    fireEvent.click(within(screen.getByRole("radiogroup", { name: "Quantas cenas em cada vídeo?" })).getByRole("radio", { name: "2 cenas" }));
     fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
     fireEvent.click(await screen.findByRole("radio", { name: /Lite · 10 créditos por cena/ }));
-    expect(await screen.findByTestId("video-approval")).toHaveTextContent("80 créditos");
-    fireEvent.click(screen.getByRole("button", { name: /^Aprovar/ }));
+    expect(await screen.findByTestId("video-approval")).toHaveTextContent("40 créditos");
+    fireEvent.click(screen.getByRole("button", { name: "Voltar" }));
+    expect(await screen.findByRole("radiogroup", { name: "Quantas cenas em cada vídeo?" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    fireEvent.click(await screen.findByRole("radio", { name: /Lite · 10 créditos por cena/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /^Aprovar/ }));
     expect(await screen.findByRole("tab", { name: "Vídeo 2" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Copiar pacote e abrir o Flow/ })).toBeInTheDocument();
     await waitFor(() => expect(bodies.filter((b) => "scene_count" in b).length).toBe(2));
     const boards = bodies.filter((b) => "scene_count" in b);
+    expect(boards[0].scene_count).toBe(2);
     expect(boards[0].language).toBe("es");
     expect(boards[0].captions).toBe(true);
     expect(boards[0].camera).toBe("pov");
