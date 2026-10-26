@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { FlowRunPanel } from "@/components/app/flow-run-panel";
 import { QuestChat } from "./clone-quest-chat";
-import { ArrowUp, Check, ClipboardCopy, Download, ExternalLink, ImageDown, Loader2, Lock, Pencil, Plus, RefreshCw, Sparkles, Trash2, Unlock, Upload, X } from "lucide-react";
+import { ArrowUp, Check, ClipboardCopy, Download, ExternalLink, Loader2, Lock, Pencil, Plus, RefreshCw, Sparkles, Trash2, Unlock, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
@@ -69,11 +70,6 @@ const SENT_KEY = "gv-clonagem-sent";
 const IDLE_MS = 10 * 60 * 1000; // projeto parado: some e começa um novo
 const WAIT_FLOW_MS = 2 * 60 * 60 * 1000; // depois de enviar ao Flow a pessoa precisa de tempo para gerar e voltar
 // Ferramenta "ClipGringa — Gerar Vídeos" no Flow (BETA). Trocar pelo link compartilhado quando for liberada aos membros.
-type FlowProgress = {
-  at: number; running: boolean; total: number; done: number; errors: number; phase: string; now: string;
-  current: { vi: number; si: number } | null; startedAt: number; jobStartedAt: number; dur: Record<string, number>;
-  jobs: { key: string; vi: number; si: number; vname?: string; sname?: string; vbase?: number; sbase?: number; file: string; done: boolean; error: string; pct?: number | null }[];
-};
 // Vídeo já enviado e transcrito antes? Reconhece pelo "RG" do arquivo (tamanho, nome e amostras do começo e do fim) e pula o envio.
 const REF_CACHE_KEY = "cg-ref-cache-v1";
 async function videoFingerprint(file: File): Promise<string | null> {
@@ -1021,44 +1017,6 @@ export function CloneWizard() {
     }
     return <p role="status" data-testid="flow-account" className={`${base} border-[#F5B454]/40 bg-[#F5B454]/10`}>Não encontrei a extensão do Flow neste navegador. <a className="underline" href="/conectar-flow">Conectar ao Flow</a> (leva 2 minutos). Sem ela, você usa os prompts à mão.</p>;
   })();
-  const [flowProg, setFlowProg] = useState<FlowProgress | null>(null);
-  const [flowImages, setFlowImages] = useState<Record<string, { file: string; data: string }>>({});
-  const [watching, setWatching] = useState<string | null>(null);
-  const [flowFiles, setFlowFiles] = useState<Record<string, string>>({}); // nome do arquivo -> id no ClipGringa
-  useEffect(() => {
-    const onImages = (event: MessageEvent) => {
-      if (event.source !== window || event.data?.source !== "clipgringa-flow" || event.data?.type !== "images" || !event.data.data) return;
-      setFlowImages(event.data.data as Record<string, { file: string; data: string }>);
-    };
-    window.addEventListener("message", onImages);
-    window.postMessage({ source: "clipgringa-page", type: "images?" }, window.location.origin);
-    return () => window.removeEventListener("message", onImages);
-  }, []);
-  const flowActive = !!flowProg && flowProg.total > 0 && flowProg.done < flowProg.total;
-  useEffect(() => {
-    if (!flowProg || flowProg.total === 0) return;
-    let stop = false;
-    const load = async () => {
-      try {
-        const response = await fetch("/api/multiplier/flow-videos", { cache: "no-store" });
-        if (!response.ok) return;
-        const list = ((await response.json()).videos ?? []) as { id: string; file: string }[];
-        if (!stop) setFlowFiles(Object.fromEntries(list.map((v) => [v.file, v.id])));
-      } catch { /* sem lista: o painel segue sem as setas */ }
-    };
-    void load();
-    const timer = flowActive ? window.setInterval(load, 6000) : 0;
-    return () => { stop = true; if (timer) window.clearInterval(timer); };
-  }, [flowProg?.total, flowProg?.done, flowActive]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    const onMsg = (event: MessageEvent) => {
-      if (event.source !== window || event.data?.source !== "clipgringa-flow" || event.data?.type !== "progress" || !event.data.data) return;
-      setFlowProg(event.data.data as FlowProgress);
-    };
-    window.addEventListener("message", onMsg);
-    try { window.postMessage({ source: "clipgringa-page", type: "progress?" }, window.location.origin); } catch { /* sem janela */ }
-    return () => window.removeEventListener("message", onMsg);
-  }, []);
   const markSent = () => { try { window.localStorage.setItem(SENT_KEY, "1"); } catch { /* storage unavailable */ } };
   function reset() {
     try { window.localStorage.removeItem(SENT_KEY); window.localStorage.removeItem(TOUCH_KEY); } catch { /* storage unavailable */ }
@@ -1637,83 +1595,7 @@ export function CloneWizard() {
           </section>
         )}
 
-        {ready && flowProg && flowProg.total > 0 && Date.now() - flowProg.at < 6 * 60 * 60 * 1000 && (() => {
-          const pct = Math.round((flowProg.done / flowProg.total) * 100);
-          const videos = Array.from(new Set(flowProg.jobs.map((j) => j.vi))).sort((a, b) => a - b);
-          const left = flowProg.total - flowProg.done;
-          const fmtTime = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, "0")}`;
-          const total = flowProg.startedAt ? Math.max(0, Math.round(((flowProg.running ? Date.now() : flowProg.at) - flowProg.startedAt) / 1000)) : 0;
-          return (
-            <section role="status" className="space-y-4 rounded-[22px] border border-[#7B3FE4]/60 bg-[#7B3FE4]/10 p-5" data-testid="flow-progress">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="text-lg font-semibold">{flowProg.done === flowProg.total ? "Tudo pronto no Flow!" : flowProg.running ? "Criando os vídeos no Flow" : "Geração pausada"}</p>
-                  {flowProg.now && <p className="mt-0.5 text-xs text-muted-foreground">{flowProg.now}</p>}
-                </div>
-                <div className="flex gap-2 text-center text-xs">
-                  <div className="rounded-[14px] border border-white/10 bg-black/20 px-3 py-2"><p className="text-lg font-semibold tabular-nums text-[#5BD69A]">{flowProg.done}</p><p className="text-muted-foreground">prontas</p></div>
-                  <div className="rounded-[14px] border border-white/10 bg-black/20 px-3 py-2"><p className="text-lg font-semibold tabular-nums">{left}</p><p className="text-muted-foreground">faltam</p></div>
-                  <div className="rounded-[14px] border border-white/10 bg-black/20 px-3 py-2"><p className="text-lg font-semibold tabular-nums text-[#A98BFF]">{fmtTime(total)}</p><p className="text-muted-foreground">tempo</p></div>
-                </div>
-              </div>
-              <div className="h-2.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A98BFF] transition-all duration-700" style={{ width: `${pct}%` }} /></div>
-              <div className="space-y-4">
-                {videos.map((vi) => {
-                  const mine = flowProg.jobs.filter((j) => j.vi === vi).sort((a, b) => a.si - b.si);
-                  const doneN = mine.filter((j) => j.done).length;
-                  return (
-                    <div key={vi} className="space-y-2">
-                      <p className="text-sm font-medium">{mine[0]?.vname ?? `Vídeo ${String(vi + 1).padStart(2, "0")}`} <span className="font-normal text-muted-foreground">· {doneN}/{mine.length} cenas</span></p>
-                      <ul className="grid gap-2 sm:grid-cols-2">
-                        {mine.map((job) => {
-                          const running = flowProg.running && flowProg.current?.vi === job.vi && flowProg.current?.si === job.si;
-                          const secs = flowProg.dur?.[job.key];
-                          const image = flowImages[job.key];
-                          const videoId = flowFiles[job.file];
-                          const value = job.done ? 100 : typeof job.pct === "number" ? job.pct : running ? 8 : 0;
-                          return (
-                            <li key={job.key} className="flex flex-wrap items-center gap-3 rounded-[14px] border border-white/10 bg-black/20 p-2.5">
-                              {videoId ? (
-                                <button type="button" onClick={() => setWatching(watching === job.key ? null : job.key)} aria-label={`Assistir a cena ${job.si + 1} do vídeo ${vi + 1}`} title="Assistir" className="relative h-14 w-10 shrink-0 overflow-hidden rounded-[8px] bg-black">
-                                  <video preload="metadata" muted playsInline src={`/api/multiplier/flow-videos/${videoId}/file#t=0.5`} className="size-full object-cover" />
-                                  <span aria-hidden className="absolute inset-0 grid place-items-center bg-black/30 text-xs text-white">▶</span>
-                                </button>
-                              ) : image ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={image.data} alt={`Foto da cena ${job.si + 1}`} className="h-14 w-10 shrink-0 rounded-[8px] object-cover" />
-                              ) : (
-                                <span aria-hidden className="grid h-14 w-10 shrink-0 place-items-center rounded-[8px] bg-white/5 text-xs text-muted-foreground">{job.si + 1}</span>
-                              )}
-                              <div className="min-w-0 flex-1 space-y-1.5">
-                                <div className="flex items-center justify-between gap-2 text-xs">
-                                  <span className="truncate font-medium">{job.sname ?? `Cena ${String(job.si + 1).padStart(2, "0")}`}</span>
-                                  <span className={job.error ? "text-[#F0466B]" : job.done ? "text-[#5BD69A]" : "text-muted-foreground"}>
-                                    {job.error ? "erro" : job.done ? `pronta${secs ? ` · ${fmtTime(secs)}` : ""}` : running || typeof job.pct === "number" ? `${value}%` : "na fila"}
-                                  </span>
-                                </div>
-                                <div className="h-1.5 overflow-hidden rounded-full bg-white/10"><div className={`h-full rounded-full transition-all duration-700 ${job.done ? "bg-[#5BD69A]" : "bg-gradient-to-r from-[#8B5CF6] to-[#A98BFF]"}`} style={{ width: `${value}%` }} /></div>
-                              </div>
-                              <div className="flex shrink-0 gap-1">
-                                {job.done && !flowProg.running && (
-                                  <button type="button" onClick={() => retake(job.vbase ?? job.vi, job.sbase ?? job.si)} aria-label={`Mais um take da cena ${(job.sbase ?? job.si) + 1} do vídeo ${(job.vbase ?? job.vi) + 1}`} title="Mais um take desta cena" className="grid h-8 place-items-center rounded-full border border-border px-2 text-[11px] text-muted-foreground hover:text-foreground">+ take</button>
-                                )}
-                                {image && <a href={image.data} download={image.file} aria-label={`Baixar a foto da cena ${job.si + 1} do vídeo ${vi + 1}`} title="Baixar a foto" className="grid size-8 place-items-center rounded-full border border-border text-muted-foreground hover:text-foreground"><ImageDown className="size-4" /></a>}
-                                {videoId && <a href={`/api/multiplier/flow-videos/${videoId}/file?download=1`} download={job.file} aria-label={`Baixar o vídeo da cena ${job.si + 1} do vídeo ${vi + 1}`} title="Baixar o vídeo" className="grid size-8 place-items-center rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white"><Download className="size-4" /></a>}
-                              </div>
-                              {watching === job.key && videoId && (
-                                <video controls autoPlay playsInline src={`/api/multiplier/flow-videos/${videoId}/file`} className="mx-auto mt-1 max-h-[70vh] w-full basis-full rounded-[12px] bg-black object-contain" aria-label={`Vídeo ${job.file}`} />
-                              )}
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          );
-        })()}
+        {ready && <FlowRunPanel onRetake={retake} />}
 
         {ready && (redirectIn !== null || redirectBlocked) && (
           <section role="status" className="space-y-2 rounded-[18px] border border-[#7B3FE4]/60 bg-[#7B3FE4]/15 p-4" data-testid="flow-redirect">

@@ -7,7 +7,8 @@ import { useSession } from "@/lib/auth-client";
 import { FLOW_CHOICES, defaultFlowCategory, effectiveFlowId, saveFlowCategory, visibleFlowChoices } from "@/lib/flow-models";
 import { useFlowConnection } from "@/hooks/use-flow-connection";
 import { LanguageSwitcher, useI18n } from "@/lib/i18n";
-import { flowUploadInfo } from "@/lib/flow-upload";
+import { pushFlowPackage } from "@/lib/flow-push";
+import { FlowRunPanel } from "@/components/app/flow-run-panel";
 import { EXAMPLES, SKILLS, type Lang3, type SkillId } from "@/lib/influencer-examples";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -146,6 +147,10 @@ const S = {
   copied: ["Copiado", "Copied", "Copiado"],
   toVideos: ["Fazer os vídeos", "Make the videos", "Hacer los videos"],
   back: ["Voltar", "Back", "Volver"],
+  stepWord: ["Passo", "Step", "Paso"],
+  ofWord: ["de", "of", "de"],
+  tweak: ["Quer mudar mais alguma coisa? Escreva aqui (opcional)", "Want to change anything else? Write it here (optional)", "¿Quieres cambiar algo más? Escríbelo aquí (opcional)"],
+  tweakLink: ["Quero escrever uma alteração", "I want to write a change", "Quiero escribir un cambio"],
   howScenes: ["Quantas cenas em cada vídeo?", "How many scenes per video?", "¿Cuántas escenas por video?"],
   howMany: ["Quantos vídeos você quer gerar?", "How many videos do you want?", "¿Cuántos videos quieres generar?"],
   video: ["vídeo", "video", "video"],
@@ -159,7 +164,10 @@ const S = {
   scenesWord: ["cenas", "scenes", "escenas"],
   making: ["Montando as cenas e os prompts…", "Building scenes and prompts…", "Armando las escenas y los prompts…"],
   ready: ["Pronto! Mande para o Flow:", "Done! Send it to Flow:", "¡Listo! Envíalo a Flow:"],
-  pack: ["Copiar pacote e abrir o Flow", "Copy package and open Flow", "Copiar paquete y abrir Flow"],
+  pack: ["Enviar de novo para o Flow", "Send to Flow again", "Enviar de nuevo a Flow"],
+  sending: ["Enviando para o Flow…", "Sending to Flow…", "Enviando a Flow…"],
+  sentOk: ["Enviado! A extensão abre o Flow e gera as imagens e os vídeos sozinha. Eles aparecem aqui.", "Sent! The extension opens Flow and generates the images and videos by itself. They show up here.", "¡Enviado! La extensión abre Flow y genera las imágenes y los videos sola. Aparecen aquí."],
+  sentManual: ["A extensão não respondeu. Abri o Flow em outra aba: confira se a extensão está ligada e toque em Enviar de novo.", "The extension did not answer. I opened Flow in another tab: check that the extension is on and tap Send again.", "La extensión no respondió. Abrí Flow en otra pestaña: revisa que la extensión esté activa y toca Enviar de nuevo."],
   onlyPrompts: ["Copiar só os prompts", "Copy prompts only", "Copiar solo los prompts"],
   nextSteps: ["Sugestões de próximos passos", "Suggested next steps", "Pasos sugeridos"],
   more: ["Fazer mais vídeos com outra abertura", "Make more videos with another hook", "Hacer más videos con otro gancho"],
@@ -295,6 +303,7 @@ export function InfluencerChat() {
   const [summaries, setSummaries] = useState<string[]>([]);
   const [videoCount, setVideoCount] = useState(1);
   const [sceneCount, setSceneCount] = useState(DEFAULT_SCENES);
+  const [qStep, setQStep] = useState(0);
   const SCENES = sceneCount;
   const [style, setStyle] = useState<StyleState>(DEFAULT_STYLE);
   const [vary, setVary] = useState<{ hook: boolean; body: boolean; cta: boolean }>({ hook: true, body: false, cta: false });
@@ -628,9 +637,47 @@ export function InfluencerChat() {
     app: "clipgringa-flow", version: 1, sceneCount: board?.scenes.length ?? 0, model: chosen.name, flowModel: chosen.needle, lowerPriority: lower, fallbackModels: lower ? ["Lite", "Omni", "Fast"] : [], mode: "frames",
     videos: boards.map((item, v) => ({
       title: `${persona.name || "Influencer"} ${v + 1}`,
-      scenes: item.scenes.map((_, index) => ({ imagePrompt: item.imagePrompts[index] ?? "", videoPrompt: item.videoPrompts[index] ?? "", file: `Video${String(v + 1).padStart(2, "0")}_Cena${String(index + 1).padStart(2, "0")}.mp4` })),
+      label: `Vídeo ${String(v + 1).padStart(2, "0")}`,
+      base: v,
+      scenes: item.scenes.map((_, index) => ({ imagePrompt: item.imagePrompts[index] ?? "", videoPrompt: item.videoPrompts[index] ?? "", file: `Video${String(v + 1).padStart(2, "0")}_Cena${String(index + 1).padStart(2, "0")}.mp4`, src: index })),
     })),
   }, null, 2);
+
+  // Pacote pronto = vai sozinho para a extensão, que abre o Flow e gera as imagens e os vídeos. Sem copiar e colar.
+  const flowLabel = () => productName || prompt.slice(0, 60) || "Influencer";
+  const sentFor = useRef("");
+  const [flowSend, setFlowSend] = useState<"" | "sending" | "ok" | "manual">("");
+  const deliver = () => {
+    setFlowSend("sending");
+    void pushFlowPackage(flowPackage(), flowLabel()).then((ok) => {
+      if (ok) { setFlowSend("ok"); return; }
+      setFlowSend("manual");
+      window.open(FLOW_URL, "_blank", "noopener");
+    });
+  };
+  const boardsKey = boards.map((item) => item.videoPrompts.join("|")).join("##");
+  useEffect(() => {
+    if (phase !== "board" || busy !== "" || !boards.length || sentFor.current === boardsKey) return;
+    sentFor.current = boardsKey;
+    deliver();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, busy, boardsKey]);
+  // Mais um take de uma cena só: manda um pacote de uma cena; os outros vídeos continuam na biblioteca.
+  const retakes = useRef<Record<string, number>>({});
+  const retake = (vbase: number, sbase: number) => {
+    const item = boards[vbase];
+    if (!item) return;
+    const key = `${vbase}-${sbase}`;
+    const n = (retakes.current[key] ?? 1) + 1;
+    retakes.current[key] = n;
+    const pad2 = (x: number) => String(x).padStart(2, "0");
+    const pkg = JSON.parse(flowPackage()) as { videos: unknown[] };
+    pkg.videos = [{
+      title: `${persona.name || "Influencer"} ${vbase + 1}`, label: `Vídeo ${pad2(vbase + 1)} · take ${n}`, base: vbase,
+      scenes: [{ imagePrompt: item.imagePrompts[sbase] ?? "", videoPrompt: item.videoPrompts[sbase] ?? "", file: `Video${pad2(vbase + 1)}_Cena${pad2(sbase + 1)}_Take${n}.mp4`, src: sbase, label: `Cena ${pad2(sbase + 1)}` }],
+    }];
+    void pushFlowPackage(JSON.stringify(pkg, null, 2), flowLabel());
+  };
 
   async function copyOut(key: string, text: string) {
     try { await navigator.clipboard.writeText(text); setSent(key); window.setTimeout(() => setSent(""), 1800); } catch { /* o texto continua na tela */ }
@@ -745,7 +792,7 @@ export function InfluencerChat() {
       if (prompts.length) {
         await writePrompt(photo, pin, true, { persona: updated, extra });
         // Etapas depois do prompt: os roteiros antigos não valem mais, então volta para escolher de novo.
-        if (["count", "model", "cost", "board"].includes(keep)) { setBoards([]); setPhase("count"); }
+        if (["count", "model", "cost", "board"].includes(keep)) { setBoards([]); setQStep(0); setPhase("count"); }
       } else setPhase(keep === "ask" || keep === "intake" ? "approve" : keep);
       setSent(t("changeSent")); window.setTimeout(() => setSent(""), 2500);
     } catch { setError(t("error")); } finally { setBusy(""); }
@@ -857,7 +904,7 @@ export function InfluencerChat() {
       </div>
       {sent === t("changeSent") && <p role="status" className="mt-2 px-1 text-xs text-[#5BD69A]">✓ {sent}</p>}
       <p className="mt-2 px-1 text-[11px] text-muted-foreground" data-testid="cost-estimate">
-        {chosen.credits === 0 ? t("estFree") : `${t("estimate")}: ~${chosen.credits * SCENES} ${t("creditsWord")} / ${t("video")} (${SCENES} ${t("scenesWord")} × ${chosen.credits})`}
+        {chosen.credits === 0 ? t("estFree") : `${t("estimate")}: ~${chosen.credits * SCENES} ${t("creditsWord")} / ${t("video")} (${SCENES} ${SCENES === 1 ? t("scene").toLowerCase() : t("scenesWord")} × ${chosen.credits})`}
       </p>
     </div>
     </div>
@@ -1158,65 +1205,84 @@ export function InfluencerChat() {
           {phase === "prompt" && (
             <div className="flex flex-wrap gap-2">
               <Button type="button" variant="outline" className="rounded-full" onClick={() => setPhase("photos")}><ArrowLeft className="size-4" /> {t("back")}</Button>
-              <Button type="button" className="rounded-full" onClick={() => setPhase("count")}>{t("toVideos")} <ArrowRight className="size-4" /></Button>
+              <Button type="button" className="rounded-full" onClick={() => { setQStep(0); setPhase("count"); }}>{t("toVideos")} <ArrowRight className="size-4" /></Button>
             </div>
           )}
         </Msg>
       )}
 
-      {["count", "model", "cost", "board"].includes(phase) && (
-        <Msg testid="chat-style">
-          <p>{t("styleAsk")}</p>
-          {([
-            [`🎬 ${t("secVideo")}`, ["format", "camera", "product", "avatarMix"]],
-            [`📍 ${t("secScene")}`, ["setting"]],
-            [`🎙️ ${t("secVoice")}`, ["voice", "tone"]],
-            [`📣 ${t("secEnd")}`, ["cta", "captions"]],
-          ] as [string, string[]][]).map(([title, keys]) => (
-            <div key={title} className="space-y-3 rounded-[18px] border border-white/10 bg-white/[0.03] p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#A98BFF]">{title}</p>
-              {(STYLE_ROWS().filter(([key]) => keys.includes(key as string))).map(([key, label, opts]) => (
-                <div key={key} role="radiogroup" aria-label={label} className="space-y-1.5">
-                  <span className="block text-xs text-muted-foreground">{label}</span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {opts.map(([value, text]) => (
-                      <Chip key={String(value)} role="radio" on={(key === "product" ? (style.product ?? Boolean(productLook || productLink)) : style[key]) === value} onClick={() => { if (phase === "count") setStyle((current) => ({ ...current, [key]: value })); }}>{text}</Chip>
+      {phase === "count" && (() => {
+        type Step = { key: string; label: string; options: [string | boolean | number, string][]; value: unknown; set: (v: string | boolean | number) => void };
+        const rows = STYLE_ROWS();
+        const row = (key: string): Step => {
+          const found = rows.find(([k]) => k === key)!;
+          return { key, label: found[1], options: found[2], value: key === "product" ? (style.product ?? Boolean(productLook || productLink)) : style[key as keyof typeof style], set: (v) => setStyle((current) => ({ ...current, [key]: v })) };
+        };
+        const steps: Step[] = [
+          { key: "videos", label: t("howMany"), options: [1, 2, 3, 5, 10].map((n) => [n, `${n} ${n === 1 ? t("video") : t("videos")}`] as [number, string]), value: videoCount, set: (v) => setVideoCount(Number(v)) },
+          { key: "scenes", label: t("howScenes"), options: [1, 2, 3, 4, 5, 6].map((n) => [n, `${n} ${n === 1 ? t("scene").toLowerCase() : t("scenesWord")}`] as [number, string]), value: sceneCount, set: (v) => setSceneCount(Number(v)) },
+          row("format"), row("camera"), row("product"),
+          ...(videoCount > 1 ? [row("avatarMix")] : []),
+          row("setting"), row("voice"), row("tone"), row("cta"), row("captions"),
+        ];
+        const extra = videoCount > 1 ? 2 : 1; // variações (se houver) e o campo de alteração, por último
+        const total = steps.length + extra;
+        const at = Math.min(qStep, total - 1);
+        const current = steps[at];
+        const goBack = () => { if (at === 0) setPhase("prompt"); else setQStep(at - 1); };
+        const finish = () => setPhase(modelChosen ? "cost" : "model");
+        return (
+          <Msg testid="chat-style">
+            <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+              <span>{t("stepWord")} {at + 1} {t("ofWord")} {total}</span>
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A98BFF] transition-all duration-500" style={{ width: `${((at + 1) / total) * 100}%` }} /></div>
+            </div>
+            <div key={at} className="qc-in space-y-3">
+              {current && (
+                <>
+                  <p className="font-medium">{current.label}</p>
+                  <div role="radiogroup" aria-label={current.label} className="flex flex-wrap gap-2">
+                    {current.options.map(([value, text]) => (
+                      <Chip key={String(value)} role="radio" on={current.value === value} onClick={() => { current.set(value); setQStep(at + 1); }}>{text}</Chip>
                     ))}
                   </div>
-                </div>
-              ))}
+                </>
+              )}
+              {!current && videoCount > 1 && at === steps.length && (
+                <>
+                  <p className="font-medium">{t("vary")}</p>
+                  <div role="group" aria-label={t("vary")} className="flex flex-wrap gap-2">
+                    {([["hook", t("vHook")], ["body", t("vBody")], ["cta", t("vCta")]] as const).map(([key, label]) => (
+                      <Chip key={key} on={vary[key]} onClick={() => setVary({ ...vary, [key]: !vary[key] })}>{vary[key] ? "✓ " : ""}{label}</Chip>
+                    ))}
+                  </div>
+                  <Button type="button" className="rounded-full" onClick={() => setQStep(at + 1)}>{t("go")} <ArrowRight className="size-4" /></Button>
+                </>
+              )}
+              {!current && at === total - 1 && (
+                <>
+                  <p className="font-medium">{t("tweak")}</p>
+                  <input value={style.custom} onChange={(event) => setStyle((c) => ({ ...c, custom: event.target.value }))} maxLength={120} aria-label={t("styCustom")} placeholder={t("styCustom")} className="w-full rounded-full border border-border bg-background px-4 py-2 text-sm" />
+                  <Button type="button" className="rounded-full" onClick={finish}>{t("go")} <ArrowRight className="size-4" /></Button>
+                </>
+              )}
             </div>
-          ))}
-          <input value={style.custom} onChange={(event) => setStyle((current) => ({ ...current, custom: event.target.value }))} disabled={phase !== "count"} maxLength={120} aria-label={t("styCustom")} placeholder={t("styCustom")} className="w-full rounded-full border border-border bg-background px-4 py-2 text-sm" />
-        </Msg>
-      )}
-
-      {["count", "model", "cost", "board"].includes(phase) && (
+            <div className="flex items-center justify-between gap-2">
+              <Button type="button" variant="ghost" className="rounded-full" onClick={goBack}><ArrowLeft className="size-4" /> {t("back")}</Button>
+              {at < total - 1 && <button type="button" onClick={() => setQStep(total - 1)} className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground">{t("tweakLink")}</button>}
+            </div>
+          </Msg>
+        );
+      })()}
+      {["model", "cost", "board"].includes(phase) && (
         <Msg testid="video-count">
-          <p>{t("howMany")}</p>
-          <div role="radiogroup" aria-label={t("howMany")} className="flex flex-wrap gap-2">
-            {[1, 2, 3, 5, 10].map((n) => <Chip key={n} role="radio" on={videoCount === n} onClick={() => { if (phase === "count") setVideoCount(n); }}>{n} {n === 1 ? t("video") : t("videos")}</Chip>)}
+          <div className="flex flex-wrap gap-2" data-testid="style-summary">
+            {[`${videoCount} ${videoCount === 1 ? t("video") : t("videos")}`, `${sceneCount} ${sceneCount === 1 ? t("scene").toLowerCase() : t("scenesWord")}`, ...(["format", "camera", "setting", "voice", "tone", "cta"] as const).map((key) => {
+              const found = STYLE_ROWS().find(([k]) => k === key)?.[2].find(([value]) => value === style[key]);
+              return found && found[0] !== "" ? found[1] : "";
+            }), style.captions ? t("styCaptions") : "", style.custom].filter(Boolean).map((text) => <span key={text} className="rounded-full bg-muted/50 px-3 py-1 text-xs text-muted-foreground">✓ {text}</span>)}
           </div>
-          <p>{t("howScenes")}</p>
-          <div role="radiogroup" aria-label={t("howScenes")} className="flex flex-wrap gap-2">
-            {[1, 2, 3, 4, 5, 6].map((n) => <Chip key={n} role="radio" on={sceneCount === n} onClick={() => { if (phase === "count") setSceneCount(n); }}>{n} {n === 1 ? t("scene").toLowerCase() : t("scenesWord")}</Chip>)}
-          </div>
-          {videoCount > 1 && (
-            <div className="space-y-2">
-              <p className="text-muted-foreground">{t("vary")}</p>
-              <div role="group" aria-label={t("vary")} className="flex flex-wrap gap-2">
-                {([["hook", t("vHook")], ["body", t("vBody")], ["cta", t("vCta")]] as const).map(([key, label]) => (
-                  <Chip key={key} on={vary[key]} onClick={() => { if (phase === "count") setVary({ ...vary, [key]: !vary[key] }); }}>{vary[key] ? "✓ " : ""}{label}</Chip>
-                ))}
-              </div>
-            </div>
-          )}
-          {phase === "count" && (
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" className="rounded-full" onClick={() => setPhase("prompt")}><ArrowLeft className="size-4" /> {t("back")}</Button>
-              <Button type="button" className="rounded-full" onClick={() => setPhase(modelChosen ? "cost" : "model")}>{t("go")} <ArrowRight className="size-4" /></Button>
-            </div>
-          )}
+          {phase === "model" && <Button type="button" variant="ghost" className="rounded-full" onClick={() => setPhase("count")}><ArrowLeft className="size-4" /> {t("back")}</Button>}
         </Msg>
       )}
       {["model", "cost", "board"].includes(phase) && !modelChosen && (
@@ -1240,7 +1306,7 @@ export function InfluencerChat() {
           <p className="font-semibold">{t("approveGen")}</p>
           <div className="grid grid-cols-3 gap-2 text-center">
             <div className="rounded-[14px] border border-white/10 bg-white/[0.03] px-2 py-3"><p className="text-xl font-semibold tabular-nums">{videoCount}</p><p className="text-xs text-muted-foreground">{videoCount === 1 ? t("video") : t("videos")}</p></div>
-            <div className="rounded-[14px] border border-white/10 bg-white/[0.03] px-2 py-3"><p className="text-xl font-semibold tabular-nums">{SCENES}</p><p className="text-xs text-muted-foreground">{t("scenesWord")}</p></div>
+            <div className="rounded-[14px] border border-white/10 bg-white/[0.03] px-2 py-3"><p className="text-xl font-semibold tabular-nums">{SCENES}</p><p className="text-xs text-muted-foreground">{SCENES === 1 ? t("scene").toLowerCase() : t("scenesWord")}</p></div>
             <div className="rounded-[14px] border border-[#A98BFF]/40 bg-[#7B3FE4]/10 px-2 py-3"><p className="text-xl font-semibold tabular-nums">{totalCredits}</p><p className="text-xs text-muted-foreground">{lang === "en" ? "credits" : "créditos"}</p></div>
           </div>
           <p className="text-sm text-muted-foreground">{chosen.id === "lower" ? "Lower Priority" : chosen.name} · {t("spend")}: <b className="text-foreground">{totalCredits} {lang === "en" ? "credits" : "créditos"}</b></p>
@@ -1272,10 +1338,12 @@ export function InfluencerChat() {
               </li>
             ))}
           </ol>
+          <p data-testid="flow-send-status" className="text-sm text-muted-foreground">{flowSend === "sending" ? t("sending") : flowSend === "ok" ? t("sentOk") : flowSend === "manual" ? t("sentManual") : ""}</p>
+          <FlowRunPanel onRetake={retake} />
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => { const raw = flowPackage(); void copyOut("pack", raw); window.open(FLOW_URL, "_blank", "noopener"); void flowUploadInfo(productName || prompt.slice(0, 60) || "Influencer").then((upload) => window.postMessage({ source: "clipgringa-page", type: "flow-package", raw, upload }, window.location.origin)); }}
-              className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-4 py-2 text-sm font-medium text-white">
-              {sent === "pack" ? <Check className="size-4" /> : <ClipboardCopy className="size-4" />} {t("pack")}
+            <button type="button" onClick={deliver} disabled={flowSend === "sending"}
+              className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
+              {flowSend === "sending" ? <Loader2 className="size-4 animate-spin" /> : <ArrowRight className="size-4" />} {t("pack")}
             </button>
             <button type="button" onClick={() => void copyOut("all", board.scenes.map((scene, index) => `${t("scene").toUpperCase()} ${index + 1}\n${scene.line}\n${board.imagePrompts[index] ?? ""}\n${board.videoPrompts[index] ?? ""}`).join("\n\n"))}
               className="inline-flex items-center gap-1.5 rounded-full border border-border px-4 py-2 text-sm hover:text-foreground">
@@ -1288,7 +1356,7 @@ export function InfluencerChat() {
           <div className="space-y-1" data-testid="next-steps">
             <p className="text-muted-foreground">{t("nextSteps")}</p>
             <button type="button" onClick={saveAsSkill} disabled={skillSaved} className="block w-full rounded-[12px] px-2 py-2 text-left hover:bg-muted disabled:opacity-60">↳ {skillSaved ? `✓ ${t("saved")}` : t("saveSkill")}</button>
-            {([[t("more"), () => { setVideoCount(3); setBoards([]); setPhase("count"); }], [t("automation"), () => { window.location.href = "/automacao"; }]] as [string, () => void][]).map(([label, action]) => (
+            {([[t("more"), () => { setVideoCount(3); setBoards([]); setQStep(0); setPhase("count"); }], [t("automation"), () => { window.location.href = "/automacao"; }]] as [string, () => void][]).map(([label, action]) => (
               <button key={label} type="button" onClick={action} className="block w-full rounded-[12px] px-2 py-2 text-left hover:bg-muted">↳ {label}</button>
             ))}
           </div>
