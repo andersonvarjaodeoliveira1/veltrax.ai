@@ -30,6 +30,7 @@ export function QuestChat({ values, languages, models, onCount, onScenes, onLang
   const [text, setText] = useState("");
   const [answered, setAnswered] = useState<string[]>([]);
   const [oops, setOops] = useState(false);
+  const [picking, setPicking] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const num = (t: string, min: number, max: number) => { const n = parseInt((t.match(/\d+/) ?? [""])[0], 10); return Number.isFinite(n) && n >= min && n <= max ? n : null; };
 
@@ -127,6 +128,11 @@ export function QuestChat({ values, languages, models, onCount, onScenes, onLang
     const l = languages.find((x) => new RegExp(`\\b${x.text.toLowerCase()}\\b`).test(t.toLowerCase())); if (l) { onLanguage(l.value); done.push("language"); }
     return done;
   };
+  const pick = (value: string) => {
+    if (picking) return;
+    setPicking(value);
+    window.setTimeout(() => { setPicking(null); submit(value); }, 260);
+  };
   const submit = (picked?: string) => {
     if (!current) return;
     setOops(false);
@@ -144,7 +150,7 @@ export function QuestChat({ values, languages, models, onCount, onScenes, onLang
     <div className="space-y-3" data-testid="quest-chat">
       <ol className="space-y-2" aria-label="Suas escolhas">
         {steps.map((step, i) => ({ step, i })).filter(({ step, i }) => (answered.includes(step.id) && i !== at) || (i < at && !answered.includes(step.id))).map(({ step, i }) => (
-          <li key={step.id} className="flex flex-wrap items-center gap-2 text-sm">
+          <li key={step.id} className="qc-chip flex flex-wrap items-center gap-2 text-sm">
             <span className="text-muted-foreground">{step.question}</span>
             <button type="button" onClick={() => { setText(""); setOops(false); setAt(i); }} title="Mudar esta escolha"
               className="rounded-full border border-[#7B3FE4]/50 bg-[#7B3FE4]/20 px-3 py-1 text-xs font-medium text-white hover:bg-[#7B3FE4]/35">{step.answer} ✎</button>
@@ -152,14 +158,14 @@ export function QuestChat({ values, languages, models, onCount, onScenes, onLang
         ))}
       </ol>
       {current && (
-        <div className="cg-orbit relative" style={{ "--cg-r": "26px" } as React.CSSProperties}>
+        <div key={current.id} className="qc-in cg-orbit relative" style={{ "--cg-r": "26px" } as React.CSSProperties}>
           <div className="relative space-y-3 rounded-[26px] bg-[#1a191d] p-5 ring-1 ring-white/10 shadow-[0_20px_60px_-30px_#000]">
-            <p className="text-xs text-muted-foreground">Pergunta {at + 1} de {steps.length}</p>
+            <div className="flex items-center gap-3"><p className="whitespace-nowrap text-xs text-muted-foreground">Pergunta {at + 1} de {steps.length}</p><div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A98BFF] transition-all duration-500" style={{ width: `${Math.round((at / steps.length) * 100)}%` }} /></div></div>
             <p className="text-base font-semibold">{current.question}</p>
             <div className="flex flex-wrap gap-2" role="group" aria-label={`Opções · ${current.question}`}>
               {current.options.map((o) => (
-                <button key={o.value} type="button" onClick={() => submit(o.value)}
-                  className="rounded-full border border-white/15 px-4 py-2 text-sm transition hover:border-[#7B3FE4] hover:bg-[#7B3FE4]/20">{o.label}</button>
+                <button key={o.value} type="button" onClick={() => pick(o.value)}
+                  className={`rounded-full border border-white/15 px-4 py-2 text-sm transition hover:border-[#7B3FE4] hover:bg-[#7B3FE4]/20 ${picking === o.value ? "qc-pick" : ""}`}>{picking === o.value ? "✓ " : ""}{o.label}</button>
               ))}
             </div>
             <div className="flex items-end gap-2">

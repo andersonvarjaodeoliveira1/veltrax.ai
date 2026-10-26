@@ -20,6 +20,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       .catch((e) => sendResponse({ ok: false, error: String((e && e.message) || e) }));
     return true;
   }
+  if (message && message.type === "clipgringa-key" && _sender.tab) {
+    trustedEnter(_sender.tab.id)
+      .then(() => sendResponse({ ok: true }))
+      .catch((e) => sendResponse({ ok: false, error: String((e && e.message) || e) }));
+    return true;
+  }
   if (message && message.type === "clipgringa-click" && _sender.tab) {
     trustedClick(_sender.tab.id, Number(message.x), Number(message.y))
       .then(() => sendResponse({ ok: true }))
@@ -45,6 +51,21 @@ async function trustedClick(tabId, x, y) {
     await send("mouseMoved", { buttons: 0 });
     await send("mousePressed", { buttons: 1, clickCount: 1 });
     await send("mouseReleased", { buttons: 0, clickCount: 1 });
+  } finally {
+    if (attached) { try { await chrome.debugger.detach(target); } catch (_) {} }
+  }
+}
+
+// Enter "de verdade" (a caixa de prompt já está com o foco): outro jeito de enviar quando a seta não responde.
+async function trustedEnter(tabId) {
+  const target = { tabId };
+  let attached = false;
+  try { await chrome.debugger.attach(target, "1.3"); attached = true; } catch (e) { if (!/already attached/i.test(String(e && e.message))) throw e; }
+  try {
+    const key = { key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 };
+    await chrome.debugger.sendCommand(target, "Input.dispatchKeyEvent", { type: "rawKeyDown", ...key });
+    await chrome.debugger.sendCommand(target, "Input.dispatchKeyEvent", { type: "char", text: "\r", ...key });
+    await chrome.debugger.sendCommand(target, "Input.dispatchKeyEvent", { type: "keyUp", ...key });
   } finally {
     if (attached) { try { await chrome.debugger.detach(target); } catch (_) {} }
   }

@@ -219,12 +219,21 @@
   }
 
   const generateButton = () => {
-    const box = promptBox() || document;
-    const all = $$("button", box).filter(visible);
-    return all.find((b) => text(b).split("\n").map((x) => x.trim()).includes("arrow_forward"))
-      || all.find((b) => /gerar|criar|enviar|generate|create|send|submit/i.test(b.getAttribute("aria-label") || b.title || ""))
-      // último recurso: o botão redondo mais à direita da caixa de prompt (a seta)
-      || all.filter((b) => !text(b).trim() || /arrow|send/i.test(text(b))).sort((x, y) => y.getBoundingClientRect().right - x.getBoundingClientRect().right)[0];
+    const ed = editor();
+    const isArrow = (b) => text(b).split("\n").map((x) => x.trim()).includes("arrow_forward");
+    // sobe da caixa de texto até achar o container que tem a seta de enviar (o promptBox() pode ser só a parte do texto)
+    let node = ed;
+    for (let i = 0; node && i < 10; i += 1, node = node.parentElement) {
+      const hit = $$("button", node).filter(visible).find((b) => isArrow(b) || /gerar|criar|enviar|generate|create|send|submit/i.test(b.getAttribute("aria-label") || b.title || ""));
+      if (hit) return hit;
+    }
+    // último recurso: a seta visível mais perto da caixa de texto, em qualquer lugar da página
+    const all = $$("button", document).filter(visible).filter((b) => isArrow(b) || /arrow_upward|send/.test(text(b)));
+    if (!all.length) return undefined;
+    if (!ed) return all[0];
+    const er = ed.getBoundingClientRect();
+    const dist = (b) => { const r = b.getBoundingClientRect(); return Math.hypot(r.left + r.width / 2 - (er.right), r.top + r.height / 2 - (er.bottom)); };
+    return all.sort((x, y) => dist(x) - dist(y))[0];
   };
 
   async function pressGenerate() {
@@ -247,10 +256,12 @@
     if (await settle()) return;
     btn.click();
     if (await settle()) return;
-    // 3) Enter na caixa de prompt
+    // 3) Enter de verdade na caixa de prompt, depois Enter simulado
     const ed = editor();
     if (ed) {
       ed.focus();
+      try { await chrome.runtime.sendMessage({ type: "clipgringa-key" }); } catch (_) {}
+      if (await settle()) return;
       for (const type of ["keydown", "keypress", "keyup"]) ed.dispatchEvent(new KeyboardEvent(type, { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true }));
       if (await settle()) return;
     }
