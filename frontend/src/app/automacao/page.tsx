@@ -439,7 +439,12 @@ export default function AutomationPage() {
         </section>
       )}
 
-      {tab === "clonagem" && <CloneWizard />}
+      {tab === "clonagem" && (
+        <>
+          <CloneWizard />
+          <FlowLibrary kind="video" compact />
+        </>
+      )}
       {tab === "videos" && <FlowLibrary kind="video" />}
       {tab === "imagens" && <FlowLibrary kind="image" />}
 

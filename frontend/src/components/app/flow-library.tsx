@@ -9,7 +9,7 @@ const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString("pt-BR"
 
 const mb = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 
-export function FlowLibrary({ kind }: { kind: "video" | "image" }) {
+export function FlowLibrary({ kind, compact = false }: { kind: "video" | "image"; compact?: boolean }) {
   const [videos, setVideos] = useState<FlowVideo[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [confirm, setConfirm] = useState<string | null>(null);
@@ -46,6 +46,13 @@ export function FlowLibrary({ kind }: { kind: "video" | "image" }) {
     groups.set(key, [...(groups.get(key) ?? []), video]);
   }
 
+  if (compact) {
+    const recent = [...groups.values()].flat().sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? "")).slice(0, 8);
+    groups.clear();
+    if (recent.length) groups.set("Seus vídeos criados", recent);
+    if (videos === null || recent.length === 0) return null;
+  }
+
   return (
     <div className="space-y-6">
       {videos === null && <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Carregando seus vídeos…</p>}
@@ -58,7 +65,7 @@ export function FlowLibrary({ kind }: { kind: "video" | "image" }) {
       )}
       {[...groups.entries()].map(([name, items]) => (
         <section key={name} className="space-y-3" data-testid="flow-videos-group">
-          <h2 className="text-sm font-semibold">{name} <span className="font-normal text-muted-foreground">· {items.length} {items.length === 1 ? "vídeo" : "vídeos"}</span></h2>
+          <h2 className="text-sm font-semibold">{name} <span className="font-normal text-muted-foreground">· {compact ? `os ${items.length} mais recentes` : `${items.length} ${items.length === 1 ? "vídeo" : "vídeos"}`}</span></h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {items.map((video) => (
               <article key={video.id} className="overflow-hidden rounded-[18px] border border-border bg-card">
@@ -67,7 +74,7 @@ export function FlowLibrary({ kind }: { kind: "video" | "image" }) {
                   <p className="truncate text-sm font-medium" title={video.file}>{video.file}</p>
                   <p className="text-[11px] text-muted-foreground">{video.created_at ? `Criado em ${when(video.created_at)} · ` : ""}{mb(video.size)}</p>
                   <div className="flex items-center gap-2">
-                    <a href={`/api/multiplier/flow-videos/${video.id}/file?download=1`} download={video.file}
+                    <a href={`/api/multiplier/flow-videos/${video.id}/file?download=1`} download={video.file} aria-label={`Baixar ${video.file}`}
                       className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-3 py-1.5 text-xs font-medium text-white">
                       <Download className="size-3.5" /> Baixar
                     </a>

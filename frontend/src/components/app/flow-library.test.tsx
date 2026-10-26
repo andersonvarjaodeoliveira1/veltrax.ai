@@ -38,3 +38,17 @@ it("image bank shows only images, with thumbnail and download", async () => {
   expect(screen.queryByText("Video01_Cena01.mp4")).not.toBeInTheDocument();
   expect(screen.getByText(/Criada em/)).toBeInTheDocument();
 });
+
+it("compact mode shows only the latest videos under a friendly title, and nothing when there are none", async () => {
+  const many = Array.from({ length: 10 }, (_, n) => ({ id: `v${n}`, package: "P", file: `Video${n}.mp4`, kind: "video", size: 1000, created_at: `2026-10-${String(10 + n).padStart(2, "0")}T12:00:00Z` }));
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ videos: many }), { status: 200 })));
+  const { unmount } = render(<FlowLibrary kind="video" compact />);
+  expect(await screen.findByText(/Seus vídeos criados/)).toBeInTheDocument();
+  expect(screen.getAllByRole("link", { name: /Baixar/ })).toHaveLength(8);
+  expect(screen.getByRole("link", { name: "Baixar Video9.mp4" })).toBeInTheDocument();
+  unmount();
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ videos: [] }), { status: 200 })));
+  const empty = render(<FlowLibrary kind="video" compact />);
+  await waitFor(() => expect(vi.mocked(fetch)).toHaveBeenCalled());
+  expect(empty.container).toBeEmptyDOMElement();
+});
