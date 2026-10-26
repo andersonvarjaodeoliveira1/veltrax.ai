@@ -808,7 +808,7 @@ async def _claude_search(name: str, key: str, custom_prompt: str = "") -> tuple[
     prompt = custom_prompt or prompt
     body = {
         "model": "claude-sonnet-5-5", "max_tokens": 700,
-        "tools": [{"type": "web_search_20250305", "name": "web_search", "max_uses": 3, "user_location": {"type": "approximate", "country": "BR"}}],
+        "tools": [{"type": "web_search_20250305", "name": "web_search", "max_uses": 2, "user_location": {"type": "approximate", "country": "BR"}}],
         "messages": [{"role": "user", "content": prompt}],
     }
     try:
@@ -991,27 +991,36 @@ async def product_search(request: Request, db: AsyncSession = Depends(get_db)):
     set_server_blocked((await get_balance(db, user_id))["exhausted"])
 
     def search() -> tuple[list[dict[str, str]], list[dict[str, str]]]:
-        out: dict[str, list[dict[str, str]]] = {"web": [], "reddit": []}
-        if token:
+        from concurrent.futures import ThreadPoolExecutor
+
+        queries = (("web", f"{name} comprar"), ("reddit", f"site:reddit.com {name}"))
+        # Primeiro a busca simples (segundos), as duas ao mesmo tempo. O Apify só entra se ela não achar nada.
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            found = dict(zip((key for key, _ in queries), pool.map(lambda item: _ddg_search(item[1]), queries)))
+        out: dict[str, list[dict[str, str]]] = {"web": found["web"], "reddit": found["reddit"]}
+        if token and not out["web"]:
             from apify_client import ApifyClient
 
             client = ApifyClient(token)
-        for key, query in (("web", name), ("reddit", f"site:reddit.com {name}")):
-            if not token:
-                break
-            try:
-                call = client.actor(GOOGLE_ACTOR).call(
-                    run_input={"queries": query, "maxPagesPerQuery": 1, "resultsPerPage": 8, "countryCode": "br", "languageCode": "pt-BR", "saveHtmlToKeyValueStore": False},
-                    timeout_secs=90,
-                )
-                for page in client.dataset(call["defaultDatasetId"]).iterate_items():
-                    for item in page.get("organicResults") or []:
-                        out[key].append({"url": str(item.get("url") or ""), "title": str(item.get("title") or ""), "text": str(item.get("description") or "")})
-            except Exception:
-                logger.warning("product search failed (%s)", key, exc_info=True)
-        for key, query in (("web", f"{name} comprar"), ("reddit", f"site:reddit.com {name}")):
-            if not out[key]:
-                out[key] = _ddg_search(query)
+
+            def google(query: str) -> list[dict[str, str]]:
+                rows: list[dict[str, str]] = []
+                try:
+                    call = client.actor(GOOGLE_ACTOR).call(
+                        run_input={"queries": query, "maxPagesPerQuery": 1, "resultsPerPage": 8, "countryCode": "br", "languageCode": "pt-BR", "saveHtmlToKeyValueStore": False},
+                        timeout_secs=45,
+                    )
+                    for page in client.dataset(call["defaultDatasetId"]).iterate_items():
+                        for item in page.get("organicResults") or []:
+                            rows.append({"url": str(item.get("url") or ""), "title": str(item.get("title") or ""), "text": str(item.get("description") or "")})
+                except Exception:
+                    logger.warning("product search failed (%s)", query, exc_info=True)
+                return rows
+
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                web_rows, reddit_rows = pool.map(google, (name, f"site:reddit.com {name}"))
+            out["web"] = web_rows or out["web"]
+            out["reddit"] = reddit_rows or out["reddit"]
         return out["web"], out["reddit"]
 
     from ...integrations import current_keys
@@ -1025,7 +1034,7 @@ async def product_search(request: Request, db: AsyncSession = Depends(get_db)):
         web, reddit, claude_summary, corrected = await _claude_search(name, claude_key)
     try:
         if not web and not reddit:
-            web, reddit = await asyncio.wait_for(asyncio.to_thread(search), timeout=150)
+            web, reddit = await asyncio.wait_for(asyncio.to_thread(search), timeout=70)
     except asyncio.TimeoutError:
         raise HTTPException(status_code=504, detail="The search took too long. Try again.")
     if not web and not reddit:
