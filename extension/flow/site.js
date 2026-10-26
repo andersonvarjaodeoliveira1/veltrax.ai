@@ -40,6 +40,17 @@
     try { const d = (await chrome.storage.local.get(PROGRESS))[PROGRESS]; if (d) window.postMessage({ source: "clipgringa-flow", type: "progress", data: d }, window.location.origin); } catch (_e) { /* ignore */ }
   });
 
+  const IMAGES = "clipgringa-flow-images-v1";
+  try {
+    chrome.storage.onChanged.addListener((changes) => {
+      if (changes[IMAGES] && changes[IMAGES].newValue) window.postMessage({ source: "clipgringa-flow", type: "images", data: changes[IMAGES].newValue }, window.location.origin);
+    });
+  } catch (_e) { /* extensão recarregada */ }
+  window.addEventListener("message", async (event) => {
+    if (event.source !== window || !event.data || event.data.source !== "clipgringa-page" || event.data.type !== "images?") return;
+    try { const d = (await chrome.storage.local.get(IMAGES))[IMAGES]; if (d) window.postMessage({ source: "clipgringa-flow", type: "images", data: d }, window.location.origin); } catch (_e) { /* ignore */ }
+  });
+
   window.addEventListener("message", async (event) => {
     if (event.source !== window || !event.data || event.data.source !== "clipgringa-page" || event.data.type !== "flow-status?") return;
     let data = {};

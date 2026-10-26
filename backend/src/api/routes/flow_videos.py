@@ -31,7 +31,14 @@ router = APIRouter(prefix="/multiplier/flow-videos", tags=["flow-videos"])
 TOKEN_TTL_SECONDS = 12 * 3600
 MAX_VIDEO_BYTES = 150 * 1024 * 1024
 MAX_USER_BYTES = 4 * 1024 * 1024 * 1024
-MAX_USER_FILES = 400
+MAX_IMAGE_BYTES = 15 * 1024 * 1024
+MAX_USER_FILES = 800
+IMAGE_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
+
+
+def _image_ext(name: str) -> str | None:
+    ext = Path(name.lower()).suffix
+    return ext if ext in IMAGE_TYPES else None
 
 
 def _secret() -> bytes:
@@ -84,23 +91,25 @@ async def create_token(request: Request, db: AsyncSession = Depends(get_db)):
 async def upload_video(request: Request, token: str = "", package: str = "", file: str = "", db: AsyncSession = Depends(get_db)):
     user_id = read_token(token)
     package, file = _clean(package, 120), _clean(file, 160) or "video.mp4"
+    image_ext = _image_ext(file)
+    limit = MAX_IMAGE_BYTES if image_ext else MAX_VIDEO_BYTES
     declared = int(request.headers.get("content-length") or 0)
-    if declared > MAX_VIDEO_BYTES:
-        raise HTTPException(status_code=413, detail="Video too large")
+    if declared > limit:
+        raise HTTPException(status_code=413, detail="File too large")
     usage = (await db.execute(text("SELECT COUNT(*) AS n, COALESCE(SUM(size), 0) AS total FROM flow_videos WHERE user_id = :u AND deleted_at IS NULL"), {"u": user_id})).fetchone()
     if usage and (usage.n >= MAX_USER_FILES or int(usage.total) + declared > MAX_USER_BYTES):
         raise HTTPException(status_code=413, detail="Storage limit reached; delete old videos")
     video_id = str(uuid.uuid4())
     folder = _root() / user_id
     folder.mkdir(parents=True, exist_ok=True)
-    path = folder / f"{video_id}.mp4"
+    path = folder / f"{video_id}{image_ext or '.mp4'}"
     size = 0
     try:
         with open(path, "wb") as handle:
             async for chunk in request.stream():
                 size += len(chunk)
-                if size > MAX_VIDEO_BYTES:
-                    raise HTTPException(status_code=413, detail="Video too large")
+                if size > limit:
+                    raise HTTPException(status_code=413, detail="File too large")
                 handle.write(chunk)
         if size < 1024:
             raise HTTPException(status_code=400, detail="Empty video")
@@ -120,8 +129,8 @@ async def upload_video(request: Request, token: str = "", package: str = "", fil
 async def list_videos(request: Request, db: AsyncSession = Depends(get_db)):
     user_id = await _user_id(request, db)
     rows = (await db.execute(text(
-        "SELECT id, package, file, size, created_at FROM flow_videos WHERE user_id = :u AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 400"), {"u": user_id})).fetchall()
-    return {"videos": [{"id": r.id, "package": r.package, "file": r.file, "size": int(r.size), "created_at": r.created_at.isoformat() if r.created_at else None} for r in rows]}
+        "SELECT id, package, file, size, created_at FROM flow_videos WHERE user_id = :u AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 800"), {"u": user_id})).fetchall()
+    return {"videos": [{"id": r.id, "package": r.package, "file": r.file, "kind": "image" if _image_ext(r.file or "") else "video", "size": int(r.size), "created_at": r.created_at.isoformat() if r.created_at else None} for r in rows]}
 
 
 async def _own(video_id: str, user_id: str, db: AsyncSession):
@@ -142,7 +151,7 @@ async def video_file(video_id: str, request: Request, download: int = 0, db: Asy
     path = Path(row.path)
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Video file is gone")
-    return FileResponse(path, media_type="video/mp4", filename=row.file if download else None, content_disposition_type="attachment" if download else "inline")
+    return FileResponse(path, media_type=IMAGE_TYPES.get(_image_ext(row.file or "") or "", "video/mp4"), filename=row.file if download else None, content_disposition_type="attachment" if download else "inline")
 
 
 @router.delete("/{video_id}")

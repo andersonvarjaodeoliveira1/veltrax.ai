@@ -672,3 +672,31 @@ test("a single sentence answers several quest questions at once", async () => {
   expect(screen.getAllByText(/2 vídeos/).length).toBeGreaterThan(0);
   expect(screen.getAllByText(/5 cenas/).length).toBeGreaterThan(0);
 }, 30000);
+
+test("shows the created videos panel with time, remaining, progress, photo and download arrows", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    if (String(url).includes("/flow-videos")) return new Response(JSON.stringify({ videos: [{ id: "abc", file: "Video01_Cena01.mp4" }] }), { status: 200 });
+    return new Response(JSON.stringify({ detail: "nope" }), { status: 500 });
+  }));
+  window.localStorage.setItem("gv-clonagem-view-v2", "simple");
+  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ sceneCount: 2, count: 1, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora.", scenes: scenes.slice(0, 2), variations: variations.slice(0, 1), images: prompts.slice(0, 1), videos: prompts.slice(0, 1), ctaLocked: true }));
+  render(<CloneWizard />);
+  await screen.findByText(/Tudo pronto: 1 vídeo/);
+  const send = (data: unknown) => window.dispatchEvent(new MessageEvent("message", { data, source: window, origin: window.location.origin }));
+  await act(async () => {
+    const at = Date.now();
+    send({ source: "clipgringa-flow", type: "progress", data: { at, running: true, total: 2, done: 1, errors: 0, phase: "vídeo", now: "Animando", current: { vi: 0, si: 1 }, startedAt: at - 90000, jobStartedAt: at - 5000, dur: { "0-0": 75 }, jobs: [
+      { key: "0-0", vi: 0, si: 0, file: "Video01_Cena01.mp4", done: true, error: "" },
+      { key: "0-1", vi: 0, si: 1, file: "Video01_Cena02.mp4", done: false, error: "", pct: 40 },
+    ] } });
+    send({ source: "clipgringa-flow", type: "images", data: { "0-0": { file: "Video01_Cena01.jpg", data: "data:image/jpeg;base64,AAAA" } } });
+    await new Promise((resolve) => setTimeout(resolve, 80));
+  });
+  const panel = await screen.findByTestId("flow-progress");
+  expect(panel).toHaveTextContent("prontas");
+  expect(panel).toHaveTextContent("faltam");
+  expect(panel).toHaveTextContent("pronta · 1:15");
+  expect(panel).toHaveTextContent("40%");
+  expect(await screen.findByLabelText("Baixar a foto da cena 1 do vídeo 1")).toHaveAttribute("download", "Video01_Cena01.jpg");
+  expect(await screen.findByLabelText("Baixar o vídeo da cena 1 do vídeo 1")).toHaveAttribute("href", expect.stringContaining("/flow-videos/abc/file"));
+}, 30000);

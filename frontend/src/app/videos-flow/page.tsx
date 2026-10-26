@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Clapperboard, Download, Loader2, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
 
-type FlowVideo = { id: string; package: string; file: string; size: number; created_at: string | null };
+type FlowVideo = { id: string; package: string; file: string; kind?: "video" | "image"; size: number; created_at: string | null };
 
 const mb = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 
@@ -39,8 +39,9 @@ export default function FlowVideosPage() {
     await fetch(`/api/multiplier/flow-videos/${id}`, { method: "DELETE" }).catch(() => undefined);
   }
 
+  const images = (videos ?? []).filter((item) => item.kind === "image");
   const groups = new Map<string, FlowVideo[]>();
-  for (const video of videos ?? []) {
+  for (const video of (videos ?? []).filter((item) => item.kind !== "image")) {
     const key = video.package || "Sem pacote";
     groups.set(key, [...(groups.get(key) ?? []), video]);
   }
@@ -84,6 +85,23 @@ export default function FlowVideosPage() {
           </div>
         </section>
       ))}
+      {images.length > 0 && (
+        <section className="space-y-3" data-testid="flow-images">
+          <h2 className="text-sm font-semibold">Banco de imagens <span className="font-normal text-muted-foreground">· {images.length} {images.length === 1 ? "imagem" : "imagens"} · só você vê</span></h2>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            {images.map((image) => (
+              <article key={image.id} className="overflow-hidden rounded-[14px] border border-border bg-card">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={`/api/multiplier/flow-videos/${image.id}/file`} alt={image.file} loading="lazy" className="aspect-[9/16] w-full bg-black object-cover" />
+                <div className="flex items-center justify-between gap-2 p-2">
+                  <p className="truncate text-[11px] text-muted-foreground" title={image.package}>{image.file}</p>
+                  <a href={`/api/multiplier/flow-videos/${image.id}/file?download=1`} download={image.file} aria-label={`Baixar ${image.file}`} className="grid size-7 shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white"><Download className="size-3.5" /></a>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

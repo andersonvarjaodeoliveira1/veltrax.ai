@@ -15,7 +15,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
   if (message && message.type === "clipgringa-upload") {
-    postVideo(message.upload, base64ToBlob(String(message.b64 || "")), String(message.file || ""))
+    postVideo(message.upload, base64ToBlob(String(message.b64 || ""), /\.(jpe?g|png|webp)$/i.test(String(message.file || "")) ? "image/jpeg" : "video/mp4"), String(message.file || ""))
       .then((r) => sendResponse(r))
       .catch((e) => sendResponse({ ok: false, error: String((e && e.message) || e) }));
     return true;
@@ -71,11 +71,11 @@ async function trustedEnter(tabId) {
   }
 }
 
-function base64ToBlob(b64) {
+function base64ToBlob(b64, mime) {
   const bin = atob(b64);
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
-  return new Blob([bytes], { type: "video/mp4" });
+  return new Blob([bytes], { type: mime || "video/mp4" });
 }
 
 // Envia o vídeo para o ClipGringa (fica visível em "Vídeos do Flow"). Nunca interrompe a geração.
@@ -86,7 +86,7 @@ async function postVideo(upload, blob, file) {
   url.searchParams.set("token", upload.token);
   url.searchParams.set("package", upload.package || "");
   url.searchParams.set("file", file || "video.mp4");
-  const res = await fetch(url.toString(), { method: "POST", headers: { "Content-Type": "video/mp4" }, body: blob });
+  const res = await fetch(url.toString(), { method: "POST", headers: { "Content-Type": blob.type || "video/mp4" }, body: blob });
   return res.ok ? { ok: true } : { ok: false, error: `ClipGringa respondeu ${res.status}` };
 }
 

@@ -535,6 +535,8 @@
   function setNow(msg) { nowText = msg; el("now").textContent = msg; publish(); }
   // Conta o andamento ao site do ClipGringa (barra de progresso, tempo de cada vídeo, o que está fazendo).
   const PROGRESS_KEY = "clipgringa-flow-progress-v1";
+  const IMAGES_KEY = "clipgringa-flow-images-v1";
+  const jobPct = {}; // porcentagem em andamento de cada cena (só na memória)
   let lastPublish = 0;
   function publish(force) {
     if (!force && Date.now() - lastPublish < 800) return;
@@ -550,7 +552,7 @@
         current: cur ? { vi: cur.vi, si: cur.si } : null,
         startedAt: runAt || 0, jobStartedAt: jobAt || 0,
         dur: state.dur || {},
-        jobs: jobs.map((j) => ({ key: j.key, vi: j.vi, si: j.si, file: j.file, done: !!state.done[j.key], error: state.errors[j.key] || "" })),
+        jobs: jobs.map((j) => ({ key: j.key, vi: j.vi, si: j.si, file: j.file, done: !!state.done[j.key], error: state.errors[j.key] || "", pct: typeof jobPct[j.key] === "number" ? jobPct[j.key] : null })),
       } });
     } catch (_e) { /* extensão recarregada */ }
   }
@@ -651,8 +653,30 @@
       const before = tileKeys();
       await pressGenerate();
       setNow(`${label}: gerando a imagem (cerca de 15 segundos)…`);
-      return waitNewTile(before, "image", IMAGE_WAIT_MS, (p) => { if (p != null) setNow(`${label}: gerando a imagem… ${p}%`); });
-    });
+      return waitNewTile(before, "image", IMAGE_WAIT_MS, (p) => { if (p != null) { jobPct[job.key] = p; setNow(`${label}: gerando a imagem… ${p}%`); } });
+    }).then(async (image) => { jobPct[job.key] = 100; await keepImage(job, image); delete jobPct[job.key]; return image; });
+  }
+
+  // Guarda uma miniatura da imagem da cena (para o ClipGringa mostrar e deixar baixar). Nunca atrapalha a geração.
+  async function keepImage(job, image) {
+    try {
+      const url = `${baseSrc(image.src)}=s1080`;
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) return;
+      const bitmap = await createImageBitmap(await res.blob());
+      const scale = Math.min(1, 1080 / Math.max(bitmap.width, bitmap.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(bitmap.width * scale); canvas.height = Math.round(bitmap.height * scale);
+      canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
+      const all = (await chrome.storage.local.get(IMAGES_KEY))[IMAGES_KEY] || {};
+      all[job.key] = { file: job.file.replace(/\.mp4$/i, ".jpg"), data: dataUrl };
+      await chrome.storage.local.set({ [IMAGES_KEY]: all });
+      // Guarda também no banco de imagens da conta (somente o dono vê).
+      if (uploadInfo) {
+        try { await chrome.runtime.sendMessage({ type: "clipgringa-upload", upload: uploadInfo, file: all[job.key].file, b64: dataUrl.split(",")[1] }); } catch (_e) { /* ignora */ }
+      }
+    } catch (_e) { /* sem miniatura: tudo o resto segue */ }
   }
 
   async function finishJob(job, video, label) {
@@ -690,7 +714,7 @@
       const before = tileKeys();
       await pressGenerate();
       setNow(`${label}: o Flow está animando${isLowerPriority() ? " em Lower Priority" : ""}. Pode levar de 1 a 6 minutos, não feche esta aba.`);
-      return waitNewTile(before, "video", VIDEO_WAIT_MS, (p) => { if (p != null) setNow(`${label}: animando${isLowerPriority() ? " em Lower Priority" : ""}… ${p}%`); });
+      return waitNewTile(before, "video", VIDEO_WAIT_MS, (p) => { if (p != null) { jobPct[job.key] = p; setNow(`${label}: animando${isLowerPriority() ? " em Lower Priority" : ""}… ${p}%`); } });
     });
 
     // 3) enviar para o ClipGringa e 4) baixar
@@ -752,7 +776,7 @@
           jobAt = b.rec.t0;
           try { await finishJob(b.job, t, labelOf(b.job)); } catch (e) { if (e.message === "STOP") throw e; failJob(b.job, e.message); }
           await persist(); render();
-        } else { const pct = (t.info.match(/(\d+)\s*%/) || [])[1]; pcts.push(`${labelOf(b.job)} ${pct ? pct + "%" : "na fila"}`); }
+        } else { const pct = (t.info.match(/(\d+)\s*%/) || [])[1]; if (pct) jobPct[key] = Number(pct); pcts.push(`${labelOf(b.job)} ${pct ? pct + "%" : "na fila"}`); }
       }
       if (pcts.length) setNow(`Animando ${pcts.length} cena(s) ao mesmo tempo no Flow: ${pcts.join(" · ")}`);
       if (Date.now() > end) { for (const [, b] of waiting) failJob(b.job, "O Flow demorou demais para terminar."); return; }
@@ -836,6 +860,7 @@
       if (!state.jobs.length || raw !== (state.raw || "")) {
         const parsed = parsePackage(raw);
         state = { jobs: parsed.jobs, done: {}, errors: {}, cloud: {}, raw };
+        try { chrome.storage.local.remove(IMAGES_KEY); } catch (_e) { /* ignora */ }
         el("pkg").value = raw;
       }
     } catch (e) { setError(e.message); return; }
