@@ -6,6 +6,7 @@ import { TAKE_KINDS, type TakeKind } from "@/lib/take-kinds";
 
 export type FlowProgress = {
   at: number; running: boolean; total: number; done: number; errors: number; phase: string; now: string;
+  limit?: { since: number; resumeAt: number; known: boolean; kind: "limit" | "credits"; message: string } | null;
   current: { vi: number; si: number } | null; startedAt: number; jobStartedAt: number; dur: Record<string, number>;
   jobs: { key: string; vi: number; si: number; vname?: string; sname?: string; vbase?: number; sbase?: number; file: string; done: boolean; error: string; pct?: number | null }[];
 };
@@ -26,6 +27,13 @@ export function FlowRunPanel({ onRetake }: { onRetake: (vbase: number, sbase: nu
     window.postMessage({ source: "clipgringa-page", type: "images?" }, window.location.origin);
     return () => window.removeEventListener("message", onImages);
   }, []);
+  const [tick, setTick] = useState(() => Date.now());
+  const limit = flowProg?.limit && Date.now() - flowProg.at < 15_000 ? flowProg.limit : null;
+  useEffect(() => {
+    if (!limit) return;
+    const t = window.setInterval(() => setTick(Date.now()), 1000);
+    return () => window.clearInterval(t);
+  }, [limit]);
   const flowActive = !!flowProg && flowProg.total > 0 && flowProg.done < flowProg.total;
   useEffect(() => {
     if (!flowProg || flowProg.total === 0) return;
@@ -72,6 +80,26 @@ export function FlowRunPanel({ onRetake }: { onRetake: (vbase: number, sbase: nu
             <div className="rounded-[14px] border border-white/10 bg-black/20 px-3 py-2"><p className="text-lg font-semibold tabular-nums text-[#A98BFF]">{fmtTime(total)}</p><p className="text-muted-foreground">tempo</p></div>
           </div>
         </div>
+        {limit && (() => {
+          const secs = Math.max(0, Math.round((limit.resumeAt - tick) / 1000));
+          const clock = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
+          const credits = limit.kind === "credits";
+          return (
+            <div role="alert" data-testid="flow-limit" className="space-y-3 rounded-[18px] border border-[#F5B454]/50 bg-[#F5B454]/10 p-4">
+              <p className="text-sm font-semibold text-[#F5B454]">{credits ? "Os créditos desta conta do Flow acabaram" : "Esta conta do Flow atingiu o limite"}</p>
+              <p className="text-xs text-foreground/85">
+                {limit.known
+                  ? <>O Flow informou o tempo de espera. Retomamos sozinhos em <strong className="tabular-nums">{clock}</strong>.</>
+                  : <>O Flow não disse quanto tempo falta. Tentamos de novo a cada 2 minutos; a próxima tentativa é em <strong className="tabular-nums">{clock}</strong>.</>}
+              </p>
+              <div className="grid gap-2 text-xs sm:grid-cols-2">
+                <p className="rounded-[14px] border border-white/10 bg-black/20 p-3"><strong>Esperar</strong><br />Pode deixar esta aba aberta. Quando o tempo acabar, a geração continua de onde parou, sem refazer as cenas prontas.</p>
+                <p className="rounded-[14px] border border-white/10 bg-black/20 p-3"><strong>Trocar de conta</strong><br />No Flow, clique na sua foto do Google e escolha outra conta. Ao detectar créditos novos, continuamos na hora.</p>
+              </div>
+              {limit.message && <p className="text-[11px] text-muted-foreground">Mensagem do Flow: “{limit.message}”</p>}
+            </div>
+          );
+        })()}
         <div className="h-2.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A98BFF] transition-all duration-700" style={{ width: `${pct}%` }} /></div>
         <div className="space-y-4">
           {videos.map((vi) => {

@@ -540,6 +540,7 @@
   // Conta o andamento ao site do ClipGringa (barra de progresso, tempo de cada vídeo, o que está fazendo).
   const PROGRESS_KEY = "clipgringa-flow-progress-v1";
   const IMAGES_KEY = "clipgringa-flow-images-v1";
+  let limitState = null; // aviso de limite do Flow em andamento (publicado ao site)
   const jobPct = {}; // porcentagem em andamento de cada cena (só na memória)
   let lastPublish = 0;
   function publish(force) {
@@ -552,7 +553,7 @@
         at: Date.now(), running: !!running, total: jobs.length,
         done: jobs.filter((j) => state.done[j.key]).length,
         errors: Object.keys(state.errors || {}).length,
-        phase: state.phase || "", now: nowText,
+        phase: state.phase || "", now: nowText, limit: limitState,
         current: cur ? { vi: cur.vi, si: cur.si } : null,
         startedAt: runAt || 0, jobStartedAt: jobAt || 0,
         dur: state.dur || {},
@@ -626,6 +627,52 @@
     await storage.set({ jobs: state.jobs, done: state.done, errors: state.errors, cloud: state.cloud, dur: state.dur || {}, upload: uploadInfo, raw: el("pkg").value, auto: autoRun });
   }
 
+  /* ---------- limite do Flow: avisa, cronometra e retoma ---------- */
+  const LIMIT_RE = /limite|limit|quota|cota|muitas|too many|esperar|aguarde|wait|try again|tente novamente|cr[eé]ditos? (?:insuficientes?|esgotados?)|(?:n[aã]o (?:tem|h[aá])|sem) cr[eé]ditos?|not enough credits|out of credits/i;
+  const isLimited = (msg) => LIMIT_RE.test(String(msg || ""));
+  const noCredits = (msg) => /cr[eé]ditos?|credits?/i.test(String(msg)) && /insuficien|esgot|acab|not enough|out of|run out|no (?:more )?credits/i.test(String(msg)) || /(?:n[aã]o (?:tem|h[aá])|sem) cr[eé]ditos?/i.test(String(msg));
+  // Lê o tempo que o próprio Flow informou ("tente novamente em 5 minutos", "in 2 hours"…). Sem tempo informado → null.
+  function parseWaitSeconds(msg) {
+    const t = String(msg || "").toLowerCase();
+    let total = 0; let found = false;
+    const re = /(\d+(?:[.,]\d+)?)\s*(horas?|hours?|hrs?|h|minutos?|minutes?|mins?|min|segundos?|seconds?|secs?|s)\b/g;
+    let m;
+    while ((m = re.exec(t))) {
+      const n = parseFloat(m[1].replace(",", "."));
+      const u = m[2];
+      total += /^h/.test(u) ? n * 3600 : /^m/.test(u) ? n * 60 : n;
+      found = true;
+    }
+    return found && total > 0 ? Math.min(Math.round(total), 24 * 3600) : null;
+  }
+  const LIMIT_RETRY_SECONDS = 120; // sem tempo informado pelo Flow: tenta de novo a cada 2 min
+  async function readCredits() {
+    try { const a = (await chrome.storage.local.get("clipgringa-flow-account-v1"))["clipgringa-flow-account-v1"]; return a && typeof a.credits === "number" ? a.credits : null; } catch (_e) { return null; }
+  }
+  async function waitForLimit(label, message) {
+    const known = parseWaitSeconds(message);
+    const seconds = known ? known + 5 : LIMIT_RETRY_SECONDS;
+    const startCredits = await readCredits();
+    const since = Date.now();
+    let resumeAt = since + seconds * 1000;
+    limitState = { since, resumeAt, known: !!known, kind: noCredits(message) ? "credits" : "limit", message: String(message || "").slice(0, 200) };
+    publish(true);
+    let tick = 0;
+    try {
+      while (Date.now() < resumeAt) {
+        if (stopFlag) throw new Error("STOP");
+        const left = Math.max(0, Math.round((resumeAt - Date.now()) / 1000));
+        setNow(`${label}: ${known ? "limite do Flow" : "o Flow pediu para esperar"}. Retomando em ${fmt(left)}. Para continuar já, troque de conta no Flow.`);
+        tick += 1;
+        if (tick % 5 === 0) {
+          const now = await readCredits();
+          if (now !== null && (startCredits === null ? now > 0 && limitState.kind === "credits" : now > startCredits)) { setNow(`${label}: créditos novos detectados (outra conta?). Continuando…`); break; }
+        }
+        await sleep(1000);
+      }
+    } finally { limitState = null; publish(true); }
+  }
+
   async function withRetry(label, fn) {
     let lastError;
     for (let attempt = 0; attempt <= RETRIES; attempt += 1) {
@@ -633,11 +680,10 @@
       try { return await fn(attempt); } catch (e) {
         lastError = e;
         if (e.message === "STOP") throw e;
+        if (isLimited(e.message)) { await waitForLimit(label, e.message); attempt -= 1; continue; } // limite não gasta tentativas: espera e repete
         if (attempt < RETRIES) {
-          const limited = /limite|limit|quota|cota|muitas|too many|esperar|wait|try again|tente novamente/i.test(String(e.message));
-          const wait = limited ? 20 + attempt * 30 : 3;
-          const why = limited ? "o Flow pediu para esperar" : `não deu certo (${String(e.message).slice(0, 90)})`;
-          for (let s = wait; s > 0; s -= 1) {
+          const why = `não deu certo (${String(e.message).slice(0, 90)})`;
+          for (let s = 3; s > 0; s -= 1) {
             if (stopFlag) throw new Error("STOP");
             setNow(`${label}: ${why}. Tentando de novo em ${s}s (tentativa ${attempt + 2} de ${RETRIES + 1})…`);
             await sleep(1000);
