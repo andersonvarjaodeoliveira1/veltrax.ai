@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Download, ImageDown } from "lucide-react";
+import { TAKE_KINDS, type TakeKind } from "@/lib/take-kinds";
 
 export type FlowProgress = {
   at: number; running: boolean; total: number; done: number; errors: number; phase: string; now: string;
@@ -10,7 +11,8 @@ export type FlowProgress = {
 };
 
 /** Painel do que a extensão está gerando no Flow: progresso, tempo, vídeos para assistir/baixar, fotos e "+ take". */
-export function FlowRunPanel({ onRetake }: { onRetake: (vbase: number, sbase: number) => void }) {
+export function FlowRunPanel({ onRetake }: { onRetake: (vbase: number, sbase: number, kind: TakeKind) => void }) {
+  const [menu, setMenu] = useState<string | null>(null);
   const [flowProg, setFlowProg] = useState<FlowProgress | null>(null);
   const [flowImages, setFlowImages] = useState<Record<string, { file: string; data: string }>>({});
   const [watching, setWatching] = useState<string | null>(null);
@@ -109,8 +111,20 @@ export function FlowRunPanel({ onRetake }: { onRetake: (vbase: number, sbase: nu
                         </div>
                         <div className="flex shrink-0 gap-1">
                           {job.done && !flowProg.running && (
-                            <button type="button" onClick={() => onRetake(job.vbase ?? job.vi, job.sbase ?? job.si)} aria-label={`Mais um take da cena ${(job.sbase ?? job.si) + 1} do vídeo ${(job.vbase ?? job.vi) + 1}`} title="Mais um take desta cena" className="grid h-8 place-items-center rounded-full border border-border px-2 text-[11px] text-muted-foreground hover:text-foreground">+ take</button>
-                          )}
+                          <div className="relative">
+                            <button type="button" onClick={() => setMenu(menu === job.key ? null : job.key)} aria-expanded={menu === job.key} aria-label={`Mais um take da cena ${(job.sbase ?? job.si) + 1} do vídeo ${(job.vbase ?? job.vi) + 1}`} title="Mais um take desta cena" className="grid h-8 place-items-center rounded-full border border-border px-2 text-[11px] text-muted-foreground hover:text-foreground">+ take</button>
+                            {menu === job.key && (
+                              <div role="menu" aria-label="Tipo de take" className="absolute right-0 z-20 mt-1 w-64 space-y-1 rounded-[14px] border border-white/10 bg-card p-2 shadow-xl">
+                                {TAKE_KINDS.map((kind) => (
+                                  <button key={kind.id} type="button" role="menuitem" onClick={() => { setMenu(null); onRetake(job.vbase ?? job.vi, job.sbase ?? job.si, kind.id); }} className="block w-full rounded-[10px] px-3 py-2 text-left hover:bg-white/5">
+                                    <span className="block text-sm font-medium">{kind.label}</span>
+                                    <span className="block text-[11px] text-muted-foreground">{kind.hint}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
                           {image && <a href={image.data} download={image.file} aria-label={`Baixar a foto da cena ${job.si + 1} do vídeo ${vi + 1}`} title="Baixar a foto" className="grid size-8 place-items-center rounded-full border border-border text-muted-foreground hover:text-foreground"><ImageDown className="size-4" /></a>}
                           {videoId && <a href={`/api/multiplier/flow-videos/${videoId}/file?download=1`} download={job.file} aria-label={`Baixar o vídeo da cena ${job.si + 1} do vídeo ${vi + 1}`} title="Baixar o vídeo" className="grid size-8 place-items-center rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white"><Download className="size-4" /></a>}
                         </div>

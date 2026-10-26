@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { takeKind, takeTag, withTake, type TakeKind } from "@/lib/take-kinds";
 import { FlowRunPanel } from "@/components/app/flow-run-panel";
 import { QuestChat } from "./clone-quest-chat";
 import { ArrowUp, Check, ClipboardCopy, Download, ExternalLink, Loader2, Lock, Pencil, Plus, RefreshCw, Sparkles, Trash2, Unlock, Upload, X } from "lucide-react";
@@ -32,7 +33,7 @@ type Project = {
   notes: string;
   changes: string;
   ownCopy?: string;
-  copySource?: "video" | "own";
+  copySource?: "video" | "own" | "describe";
   product: string;
   productInfo: string;
   productLook: string;
@@ -40,6 +41,7 @@ type Project = {
   keepCase: boolean;
   sceneCount: number;
   takes?: number;
+  takeKind?: TakeKind;
   flowModel: string;
   language: string;
   cta: string;
@@ -266,8 +268,9 @@ async function callStage(stage: Stage, proj: Project): Promise<{ items?: unknown
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       stage,
-      reference: proj.copySource === "own" && (proj.ownCopy ?? "").trim().length >= 20 ? proj.ownCopy!.trim() : proj.reference,
+      reference: (proj.copySource === "own" || proj.copySource === "describe") && (proj.ownCopy ?? "").trim().length >= 20 ? proj.ownCopy!.trim() : proj.reference,
       own_copy: proj.copySource === "own" && (proj.ownCopy ?? "").trim().length >= 20,
+      copy_brief: proj.copySource === "describe" && (proj.ownCopy ?? "").trim().length >= 20,
       notes: proj.notes,
       changes: proj.changes ?? "",
       product: proj.product,
@@ -1090,12 +1093,12 @@ export function CloneWizard() {
     lowerPriority: lowPriority,
     videos: Array.from({ length: p.takes ?? 1 }, (_, t) => p.variations.map((variation, vi) => ({
       title: variation.title,
-      label: t === 0 ? `Vídeo ${pad(vi + 1)}` : `Vídeo ${pad(vi + 1)} · take ${t + 1}`,
+      label: t === 0 ? `Vídeo ${pad(vi + 1)}` : `Vídeo ${pad(vi + 1)} · take ${t + 1}${(p.takeKind ?? "same") === "same" ? "" : ` · ${takeKind(p.takeKind).label.toLowerCase()}`}`,
       base: vi,
       scenes: Array.from({ length: p.sceneCount }, (_, si) => ({
-        imagePrompt: p.images[vi]?.prompts[si] ?? "",
-        videoPrompt: p.videos[vi]?.prompts[si] ?? "",
-        file: fileName(vi, si, "x.mp4").replace(/(\.\w+)$/, t === 0 ? "$1" : `_Take${t + 1}$1`),
+        imagePrompt: t === 0 ? (p.images[vi]?.prompts[si] ?? "") : withTake(p.images[vi]?.prompts[si] ?? "", p.takeKind),
+        videoPrompt: t === 0 ? (p.videos[vi]?.prompts[si] ?? "") : withTake(p.videos[vi]?.prompts[si] ?? "", p.takeKind),
+        file: fileName(vi, si, "x.mp4").replace(/(\.\w+)$/, t === 0 ? "$1" : `${takeTag(t + 1, p.takeKind)}$1`),
         src: si,
       })),
     }))).flat(),
@@ -1103,16 +1106,16 @@ export function CloneWizard() {
 
   // Mais um take de uma cena só: manda um pacote de uma cena para a extensão (os outros ficam na biblioteca).
   const retakes = useRef<Record<string, number>>({});
-  const retake = (vbase: number, sbase: number) => {
+  const retake = (vbase: number, sbase: number, kind: TakeKind = "same") => {
     const key = `${vbase}-${sbase}`;
     const n = (retakes.current[key] ?? (p.takes ?? 1)) + 1;
     retakes.current[key] = n;
     const pkg = JSON.parse(flowPackage()) as { videos: unknown[] };
     pkg.videos = [{
-      title: p.variations[vbase]?.title ?? "", label: `Vídeo ${pad(vbase + 1)} · take ${n}`, base: vbase,
+      title: p.variations[vbase]?.title ?? "", label: `Vídeo ${pad(vbase + 1)} · take ${n}${kind === "same" ? "" : ` · ${takeKind(kind).label.toLowerCase()}`}`, base: vbase,
       scenes: [{
-        imagePrompt: p.images[vbase]?.prompts[sbase] ?? "", videoPrompt: p.videos[vbase]?.prompts[sbase] ?? "",
-        file: fileName(vbase, sbase, "x.mp4").replace(/(\.\w+)$/, `_Take${n}$1`), src: sbase, label: `Cena ${pad(sbase + 1)}`,
+        imagePrompt: withTake(p.images[vbase]?.prompts[sbase] ?? "", kind), videoPrompt: withTake(p.videos[vbase]?.prompts[sbase] ?? "", kind),
+        file: fileName(vbase, sbase, "x.mp4").replace(/(\.\w+)$/, `${takeTag(n, kind)}$1`), src: sbase, label: `Cena ${pad(sbase + 1)}`,
       }],
     }];
     void pushPackage(JSON.stringify(pkg, null, 2));
@@ -1548,12 +1551,13 @@ export function CloneWizard() {
                   {(questHold || hasReference || !!refFile) ? (
                   <div ref={chatRef} className="scroll-mt-4">
                   <QuestChat
-                    values={{ cta: p.cta, product: p.product, count: p.count, sceneCount: p.sceneCount, takes: p.takes ?? 1, language: p.language, copySource: p.copySource ?? "video", ownCopy: p.ownCopy ?? "", keyword: p.keyword, flowModel: flowModelId }}
+                    values={{ cta: p.cta, product: p.product, count: p.count, sceneCount: p.sceneCount, takes: p.takes ?? 1, takeKind: p.takeKind ?? "same", language: p.language, copySource: p.copySource ?? "video", ownCopy: p.ownCopy ?? "", keyword: p.keyword, flowModel: flowModelId }}
                     languages={LANGUAGES.map((l) => ({ value: l.value, text: l.text }))}
                     models={visibleFlowChoices(flowAccount.plan).map((m) => ({ id: m.id, name: m.id === "lower" ? "Lower Priority" : m.name, credits: m.credits }))}
                     onCount={(n) => patch({ count: n })}
                     onScenes={(n) => patch({ sceneCount: n })}
                     onTakes={(n) => patch({ takes: n })}
+                    onTakeKind={(kind) => patch({ takeKind: kind as TakeKind })}
                     onLanguage={(value) => chooseLanguage(value)}
                     onCopy={(source, text) => patch({ copySource: source, ownCopy: text })}
                     onKeyword={(value) => patch({ keyword: value })}

@@ -7,6 +7,7 @@ import { useSession } from "@/lib/auth-client";
 import { FLOW_CHOICES, defaultFlowCategory, effectiveFlowId, saveFlowCategory, visibleFlowChoices } from "@/lib/flow-models";
 import { useFlowConnection } from "@/hooks/use-flow-connection";
 import { LanguageSwitcher, useI18n } from "@/lib/i18n";
+import { takeKind, takeTag, withTake, type TakeKind } from "@/lib/take-kinds";
 import { pushFlowPackage } from "@/lib/flow-push";
 import { FlowRunPanel } from "@/components/app/flow-run-panel";
 import { EXAMPLES, SKILLS, type Lang3, type SkillId } from "@/lib/influencer-examples";
@@ -664,7 +665,7 @@ export function InfluencerChat() {
   }, [phase, busy, boardsKey]);
   // Mais um take de uma cena só: manda um pacote de uma cena; os outros vídeos continuam na biblioteca.
   const retakes = useRef<Record<string, number>>({});
-  const retake = (vbase: number, sbase: number) => {
+  const retake = (vbase: number, sbase: number, kind: TakeKind = "same") => {
     const item = boards[vbase];
     if (!item) return;
     const key = `${vbase}-${sbase}`;
@@ -673,8 +674,8 @@ export function InfluencerChat() {
     const pad2 = (x: number) => String(x).padStart(2, "0");
     const pkg = JSON.parse(flowPackage()) as { videos: unknown[] };
     pkg.videos = [{
-      title: `${persona.name || "Influencer"} ${vbase + 1}`, label: `Vídeo ${pad2(vbase + 1)} · take ${n}`, base: vbase,
-      scenes: [{ imagePrompt: item.imagePrompts[sbase] ?? "", videoPrompt: item.videoPrompts[sbase] ?? "", file: `Video${pad2(vbase + 1)}_Cena${pad2(sbase + 1)}_Take${n}.mp4`, src: sbase, label: `Cena ${pad2(sbase + 1)}` }],
+      title: `${persona.name || "Influencer"} ${vbase + 1}`, label: `Vídeo ${pad2(vbase + 1)} · take ${n}${kind === "same" ? "" : ` · ${takeKind(kind).label.toLowerCase()}`}`, base: vbase,
+      scenes: [{ imagePrompt: withTake(item.imagePrompts[sbase] ?? "", kind), videoPrompt: withTake(item.videoPrompts[sbase] ?? "", kind), file: `Video${pad2(vbase + 1)}_Cena${pad2(sbase + 1)}${takeTag(n, kind)}.mp4`, src: sbase, label: `Cena ${pad2(sbase + 1)}` }],
     }];
     void pushFlowPackage(JSON.stringify(pkg, null, 2), flowLabel());
   };

@@ -650,7 +650,7 @@ test("the quest chat collects the choices step by step with Enter and then offer
   await user.click(await screen.findByRole("button", { name: "4 cenas" }));
   await user.click(await screen.findByRole("button", { name: "1 take" }));
   await user.click(await screen.findByRole("button", { name: "Português" }));
-  await user.type(await screen.findByLabelText("Qual copy usar nos takes?"), "Minha copy própria para os takes do vídeo hoje.{Enter}");
+  await user.type(await screen.findByLabelText("Qual copy usar no vídeo?"), "Minha copy própria para os takes do vídeo hoje.{Enter}");
   await user.click(await screen.findByRole("button", { name: "Assistir o vídeo completo" }));
   await user.click(await screen.findByRole("button", { name: "QUERO" }));
   await user.click(await screen.findByRole("button", { name: "Não, só o vídeo" }));
@@ -669,9 +669,16 @@ test("a single sentence answers several quest questions at once", async () => {
   render(<CloneWizard />);
   await user.upload(await screen.findByLabelText("Escolher o vídeo para clonar"), videoFile());
   await user.type(await screen.findByLabelText("Quantos vídeos você quer?"), "2 vídeos de 5 cenas 2 takes em inglês{Enter}");
-  expect(await screen.findByLabelText("Qual copy usar nos takes?")).toBeInTheDocument();
+  // 2 takes: pergunta o tipo do take antes da copy.
+  await user.click(await screen.findByRole("button", { name: "Variação" }));
+  expect(await screen.findByLabelText("Qual copy usar no vídeo?")).toBeInTheDocument();
   expect(screen.getAllByText(/2 vídeos/).length).toBeGreaterThan(0);
   expect(screen.getAllByText(/5 cenas/).length).toBeGreaterThan(0);
+  // Em vez de colar a copy, a pessoa pode descrever e a IA cria.
+  await user.click(screen.getByRole("button", { name: "Descrever e a IA cria a copy" }));
+  await user.type(await screen.findByLabelText("Descreva o que você vende e para quem"), "Suplemento natural para dormir melhor, para mulheres de 40 anos ou mais.{Enter}");
+  expect(await screen.findByLabelText("Qual ação você quer que a pessoa faça no final do vídeo? (CTA)")).toBeInTheDocument();
+  expect(screen.getByText(/IA cria a copy: Suplemento natural/)).toBeInTheDocument();
 }, 30000);
 
 test("shows the created videos panel with time, remaining, progress, photo and download arrows", async () => {
@@ -717,13 +724,15 @@ test("shows the created videos panel with time, remaining, progress, photo and d
     ] } });
   });
   await userEvent.setup().click(await screen.findByLabelText("Mais um take da cena 2 do vídeo 1"));
+  await userEvent.setup().click(await screen.findByRole("menuitem", { name: /Continuidade/ }));
   await waitFor(() => expect(sent.length).toBe(1));
   window.removeEventListener("message", listen);
   const pack = JSON.parse(sent[0]);
   expect(pack.videos).toHaveLength(1);
-  expect(pack.videos[0]).toMatchObject({ label: "Vídeo 01 · take 2", base: 0 });
+  expect(pack.videos[0]).toMatchObject({ label: "Vídeo 01 · take 2 · continuidade", base: 0 });
   expect(pack.videos[0].scenes).toHaveLength(1);
-  expect(pack.videos[0].scenes[0]).toMatchObject({ file: "Video01_Cena02_Take2.mp4", src: 1, label: "Cena 02" });
+  expect(pack.videos[0].scenes[0]).toMatchObject({ file: "Video01_Cena02_Take2_continue.mp4", src: 1, label: "Cena 02" });
+  expect(pack.videos[0].scenes[0].videoPrompt).toContain("seamless continuity");
 }, 30000);
 
 test("with 2 takes the package carries every scene twice, the second with the Take2 file name", async () => {

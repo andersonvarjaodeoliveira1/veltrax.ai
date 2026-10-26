@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ArrowUp } from "lucide-react";
+import { TAKE_KINDS } from "@/lib/take-kinds";
 
 type Opt = { value: string; label: string };
-export type QuestValues = { cta: string; product: string; count: number; sceneCount: number; takes: number; language: string; copySource: "video" | "own"; ownCopy: string; keyword: string; flowModel: string };
+export type QuestValues = { cta: string; product: string; count: number; sceneCount: number; takes: number; takeKind: string; language: string; copySource: "video" | "own" | "describe"; ownCopy: string; keyword: string; flowModel: string };
 type Props = {
   values: QuestValues;
   languages: { value: string; text: string }[];
@@ -13,7 +14,8 @@ type Props = {
   onScenes: (n: number) => void;
   onTakes: (n: number) => void;
   onLanguage: (value: string) => void;
-  onCopy: (source: "video" | "own", text: string) => void;
+  onCopy: (source: "video" | "own" | "describe", text: string) => void;
+  onTakeKind: (kind: string) => void;
   onKeyword: (value: string) => void;
   onModel: (id: string) => void;
   onCta: (value: string) => void;
@@ -26,12 +28,13 @@ type Props = {
 type Step = { id: string; question: string; hint: string; options: Opt[]; answer: string; apply: (text: string, picked?: string) => boolean };
 
 /** Conversa guiada: cada pergunta tem opções para tocar e também aceita digitar + Enter. As escolhas ficam sempre visíveis. */
-export function QuestChat({ values, languages, models, onCount, onScenes, onTakes, onLanguage, onCopy, onKeyword, onModel, onCta, onProduct, onExtra, onFinish, hasVideo }: Props) {
+export function QuestChat({ values, languages, models, onCount, onScenes, onTakes, onTakeKind, onLanguage, onCopy, onKeyword, onModel, onCta, onProduct, onExtra, onFinish, hasVideo }: Props) {
   const [at, setAt] = useState(0);
   const [text, setText] = useState("");
   const [answered, setAnswered] = useState<string[]>([]);
   const [oops, setOops] = useState(false);
   const [picking, setPicking] = useState<string | null>(null);
+  const [copyMode, setCopyMode] = useState<"own" | "describe">("own");
   const endRef = useRef<HTMLDivElement>(null);
   const num = (t: string, min: number, max: number) => { const n = parseInt((t.match(/\d+/) ?? [""])[0], 10); return Number.isFinite(n) && n >= min && n <= max ? n : null; };
 
@@ -48,6 +51,14 @@ export function QuestChat({ values, languages, models, onCount, onScenes, onTake
       options: [1, 2, 3].map((n) => ({ value: String(n), label: n === 1 ? "1 take" : `${n} takes` })),
       answer: values.takes === 1 ? "1 take" : `${values.takes} takes`,
       apply: (t, picked) => { const n = num(picked ?? t, 1, 3); if (n === null) return false; onTakes(n); return true; } },
+    ...(values.takes > 1 ? [{ id: "takekind", question: "Que tipo de take você quer?", hint: "Toque numa opção. Cada take é gerado como o tipo escolhido.",
+      options: TAKE_KINDS.map((k) => ({ value: k.id, label: k.label })),
+      answer: TAKE_KINDS.find((k) => k.id === values.takeKind)?.label ?? "Outra versão",
+      apply: (t: string, picked?: string) => {
+        const key = (picked ?? t).trim().toLowerCase();
+        const found = TAKE_KINDS.find((k) => k.id === picked || k.label.toLowerCase().startsWith(key) || (key.length > 3 && k.label.toLowerCase().includes(key)));
+        if (!found || !key) return false; onTakeKind(found.id); return true;
+      } } satisfies Step] : []),
     { id: "language", question: "Em que idioma a pessoa fala?", hint: "Toque numa opção ou digite o idioma.",
       options: languages.map((l) => ({ value: l.value, label: l.text })),
       answer: languages.find((l) => l.value === values.language)?.text ?? values.language,
@@ -56,12 +67,14 @@ export function QuestChat({ values, languages, models, onCount, onScenes, onTake
         const found = languages.find((l) => l.value === picked || l.value.toLowerCase() === key || l.text.toLowerCase().startsWith(key) || (key.length > 2 && l.text.toLowerCase().includes(key)));
         if (!found) return false; onLanguage(found.value); return true;
       } },
-    { id: "copy", question: "Qual copy usar nos takes?", hint: "Toque numa opção ou escreva a sua copy aqui e aperte Enter.",
-      options: [{ value: "video", label: "Usar a copy do vídeo" }],
-      answer: values.copySource === "own" && values.ownCopy.trim().length >= 20 ? `Minha copy: ${values.ownCopy.trim().slice(0, 40)}${values.ownCopy.trim().length > 40 ? "…" : ""}` : "Copy do vídeo",
+    { id: "copy", question: copyMode === "describe" ? "Descreva o que você vende e para quem" : "Qual copy usar no vídeo?",
+      hint: copyMode === "describe" ? "Ex.: suplemento natural para dormir melhor, para mulheres de 40+. A IA cria a copy a partir disso." : "Toque numa opção ou escreva a sua copy aqui e aperte Enter.",
+      options: copyMode === "describe" ? [] : [{ value: "video", label: "Usar a copy do vídeo" }, { value: "describe", label: "Descrever e a IA cria a copy" }],
+      answer: values.copySource === "describe" ? `IA cria a copy: ${values.ownCopy.trim().slice(0, 36)}${values.ownCopy.trim().length > 36 ? "…" : ""}` : values.copySource === "own" && values.ownCopy.trim().length >= 20 ? `Minha copy: ${values.ownCopy.trim().slice(0, 40)}${values.ownCopy.trim().length > 40 ? "…" : ""}` : "Copy do vídeo",
       apply: (t, picked) => {
+        if (picked === "describe") { setCopyMode("describe"); return false; }
         if (picked === "video" || /^(v[ií]deo|usar|pular|igual|a do v[ií]deo)/i.test(t.trim())) { onCopy("video", ""); return true; }
-        if (t.trim().length >= 20) { onCopy("own", t.trim()); return true; }
+        if (t.trim().length >= 20) { onCopy(copyMode === "describe" ? "describe" : "own", t.trim()); setCopyMode("own"); return true; }
         return false;
       } },
     { id: "cta", question: "Qual ação você quer que a pessoa faça no final do vídeo? (CTA)", hint: "Toque numa opção ou escreva a sua chamada e aperte Enter.",
@@ -117,6 +130,12 @@ export function QuestChat({ values, languages, models, onCount, onScenes, onTake
   const current = steps[at];
   useEffect(() => { endRef.current?.scrollIntoView?.({ block: "nearest", behavior: "smooth" }); }, [at, finished]);
 
+  // Se o número de takes passou de 1 numa frase solta, a pergunta do tipo de take volta para a fila.
+  useEffect(() => {
+    const k = steps.findIndex((x) => x.id === "takekind");
+    if (k >= 0 && !answered.includes("takekind") && at > k) setAt(k);
+  }, [values.takes]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const idx = (id: string) => steps.findIndex((x) => x.id === id);
   const advance = (done: string[], from: number) => {
     const all = Array.from(new Set([...answered, ...done]));
@@ -146,6 +165,7 @@ export function QuestChat({ values, languages, models, onCount, onScenes, onTake
       const done = smart(text);
       if (done.length) { setText(""); advance(done, at); return; }
     }
+    if (current.id === "copy" && picked === "describe") { setCopyMode("describe"); setOops(false); return; }
     const ok = current.apply(text, picked);
     if (!ok) { setOops(true); return; }
     setText("");
