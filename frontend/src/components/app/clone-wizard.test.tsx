@@ -540,7 +540,6 @@ it("does not ask for the video again once it was sent, and offers to retry", asy
   const user = userEvent.setup();
   render(<CloneWizard />);
   await user.upload(await screen.findByLabelText("Escolher o vídeo para clonar"), new File(["x"], "ref.mp4", { type: "video/mp4" }));
-  await user.click(await screen.findByRole("button", { name: "Usar o padrão no resto e escolher o vídeo" }));
   expect(await screen.findByRole("button", { name: "Tentar de novo" })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /Escolher o vídeo que quero clonar/ })).not.toBeInTheDocument();
 });
