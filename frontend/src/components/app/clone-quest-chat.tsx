@@ -4,13 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowUp } from "lucide-react";
 
 type Opt = { value: string; label: string };
-export type QuestValues = { cta: string; product: string; count: number; sceneCount: number; language: string; copySource: "video" | "own"; ownCopy: string; keyword: string; flowModel: string };
+export type QuestValues = { cta: string; product: string; count: number; sceneCount: number; takes: number; language: string; copySource: "video" | "own"; ownCopy: string; keyword: string; flowModel: string };
 type Props = {
   values: QuestValues;
   languages: { value: string; text: string }[];
   models: { id: string; name: string; credits: number }[];
   onCount: (n: number) => void;
   onScenes: (n: number) => void;
+  onTakes: (n: number) => void;
   onLanguage: (value: string) => void;
   onCopy: (source: "video" | "own", text: string) => void;
   onKeyword: (value: string) => void;
@@ -25,7 +26,7 @@ type Props = {
 type Step = { id: string; question: string; hint: string; options: Opt[]; answer: string; apply: (text: string, picked?: string) => boolean };
 
 /** Conversa guiada: cada pergunta tem opções para tocar e também aceita digitar + Enter. As escolhas ficam sempre visíveis. */
-export function QuestChat({ values, languages, models, onCount, onScenes, onLanguage, onCopy, onKeyword, onModel, onCta, onProduct, onExtra, onFinish, hasVideo }: Props) {
+export function QuestChat({ values, languages, models, onCount, onScenes, onTakes, onLanguage, onCopy, onKeyword, onModel, onCta, onProduct, onExtra, onFinish, hasVideo }: Props) {
   const [at, setAt] = useState(0);
   const [text, setText] = useState("");
   const [answered, setAnswered] = useState<string[]>([]);
@@ -43,6 +44,10 @@ export function QuestChat({ values, languages, models, onCount, onScenes, onLang
       options: [1, 2, 3, 4, 5, 6].map((n) => ({ value: String(n), label: n === 1 ? "1 cena" : `${n} cenas` })),
       answer: values.sceneCount === 1 ? "1 cena" : `${values.sceneCount} cenas`,
       apply: (t, picked) => { const n = num(picked ?? t, 1, 6); if (n === null) return false; onScenes(n); return true; } },
+    { id: "takes", question: "Quantos takes de cada cena?", hint: "Take é outra versão da mesma cena, para você escolher a melhor. Gasta mais créditos.",
+      options: [1, 2, 3].map((n) => ({ value: String(n), label: n === 1 ? "1 take" : `${n} takes` })),
+      answer: values.takes === 1 ? "1 take" : `${values.takes} takes`,
+      apply: (t, picked) => { const n = num(picked ?? t, 1, 3); if (n === null) return false; onTakes(n); return true; } },
     { id: "language", question: "Em que idioma a pessoa fala?", hint: "Toque numa opção ou digite o idioma.",
       options: languages.map((l) => ({ value: l.value, label: l.text })),
       answer: languages.find((l) => l.value === values.language)?.text ?? values.language,
@@ -125,6 +130,7 @@ export function QuestChat({ values, languages, models, onCount, onScenes, onLang
     const done: string[] = [];
     const v = t.match(/(\d+)\s*v[ií]deos?/i); if (v) { const n = num(v[1], 1, 10); if (n) { onCount(n); done.push("count"); } }
     const c = t.match(/(\d+)\s*cenas?/i); if (c) { const n = num(c[1], 1, 6); if (n) { onScenes(n); done.push("scenes"); } }
+    const k = t.match(/(\d+)\s*takes?/i); if (k) { const n = num(k[1], 1, 3); if (n) { onTakes(n); done.push("takes"); } }
     const l = languages.find((x) => new RegExp(`\\b${x.text.toLowerCase()}\\b`).test(t.toLowerCase())); if (l) { onLanguage(l.value); done.push("language"); }
     return done;
   };

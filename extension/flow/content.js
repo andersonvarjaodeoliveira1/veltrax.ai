@@ -71,6 +71,10 @@
         jobs.push({
           key: `${vi}-${si}`,
           vi, si,
+          vname: String(video.label || `Vídeo ${pad(vi + 1)}`),
+          sname: String(scene.label || `Cena ${pad(si + 1)}`),
+          vbase: Number.isInteger(video.base) ? video.base : vi,
+          sbase: Number.isInteger(scene.src) ? scene.src : si,
           title: video.title || `Vídeo ${pad(vi + 1)}`,
           imagePrompt: String(scene.imagePrompt),
           videoPrompt: String(scene.videoPrompt),
@@ -552,7 +556,7 @@
         current: cur ? { vi: cur.vi, si: cur.si } : null,
         startedAt: runAt || 0, jobStartedAt: jobAt || 0,
         dur: state.dur || {},
-        jobs: jobs.map((j) => ({ key: j.key, vi: j.vi, si: j.si, file: j.file, done: !!state.done[j.key], error: state.errors[j.key] || "", pct: typeof jobPct[j.key] === "number" ? jobPct[j.key] : null })),
+        jobs: jobs.map((j) => ({ key: j.key, vi: j.vi, si: j.si, vname: j.vname, sname: j.sname, vbase: j.vbase, sbase: j.sbase, file: j.file, done: !!state.done[j.key], error: state.errors[j.key] || "", pct: typeof jobPct[j.key] === "number" ? jobPct[j.key] : null })),
       } });
     } catch (_e) { /* extensão recarregada */ }
   }
@@ -608,7 +612,7 @@
     const done = state.jobs.filter((j) => state.done[j.key]).length;
     el("fill").style.width = total ? `${Math.round((done / total) * 100)}%` : "0";
     el("list").innerHTML = state.jobs.map((j) => {
-      const label = `Vídeo ${pad(j.vi + 1)} · Cena ${pad(j.si + 1)}`;
+      const label = `${j.vname} · ${j.sname}`;
       let st = "<span class='st-wait'>na fila</span>";
       if (state.done[j.key]) st = `<span class='st-done'>baixado${state.cloud[j.key] === "ok" ? " · no ClipGringa" : state.cloud[j.key] ? " · não enviado" : ""}</span>`;
       else if (state.errors[j.key]) st = "<span class='st-err'>erro</span>";
@@ -694,7 +698,7 @@
   }
 
   async function runJob(job, onlyFirst) {
-    const label = `Vídeo ${pad(job.vi + 1)} · Cena ${pad(job.si + 1)}`;
+    const label = `${job.vname} · ${job.sname}`;
     state.current = job.key; jobAt = Date.now();
 
     // 1) imagem (primeiro passo: a imagem da cena)
@@ -726,7 +730,7 @@
   const VIDEO_PARALLEL = 3;
   const tilesNow = () => firstTiles(40);
   const generatingNow = (info) => /\d+\s*%/.test(info) || /gerando|generating/i.test(info);
-  const labelOf = (job) => `Vídeo ${pad(job.vi + 1)} · Cena ${pad(job.si + 1)}`;
+  const labelOf = (job) => `${job.vname} · ${job.sname}`;
 
   function locateTile(rec) {
     if (rec.tile && rec.tile.isConnected) {
@@ -888,7 +892,7 @@
           try { await runJob(job, onlyFirst); } catch (e) {
             if (e.message === "STOP") { stopFlag = true; break; }
             state.errors[job.key] = e.message;
-            setError(`${`Vídeo ${pad(job.vi + 1)} · Cena ${pad(job.si + 1)}`}: ${e.message}`);
+            setError(`${`${job.vname} · ${job.sname}`}: ${e.message}`);
             await persist();
           }
           render();

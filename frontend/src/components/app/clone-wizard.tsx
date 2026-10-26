@@ -38,6 +38,7 @@ type Project = {
   keyword: string;
   keepCase: boolean;
   sceneCount: number;
+  takes?: number;
   flowModel: string;
   language: string;
   cta: string;
@@ -71,7 +72,7 @@ const WAIT_FLOW_MS = 2 * 60 * 60 * 1000; // depois de enviar ao Flow a pessoa pr
 type FlowProgress = {
   at: number; running: boolean; total: number; done: number; errors: number; phase: string; now: string;
   current: { vi: number; si: number } | null; startedAt: number; jobStartedAt: number; dur: Record<string, number>;
-  jobs: { key: string; vi: number; si: number; file: string; done: boolean; error: string; pct?: number | null }[];
+  jobs: { key: string; vi: number; si: number; vname?: string; sname?: string; vbase?: number; sbase?: number; file: string; done: boolean; error: string; pct?: number | null }[];
 };
 // Vídeo já enviado e transcrito antes? Reconhece pelo "RG" do arquivo (tamanho, nome e amostras do começo e do fim) e pula o envio.
 const REF_CACHE_KEY = "cg-ref-cache-v1";
@@ -1128,15 +1129,35 @@ export function CloneWizard() {
     model: (FLOW_CHOICES.find((m) => m.id === flowModelId) ?? FLOW_MODELS[0]).name,
     flowModel: (FLOW_CHOICES.find((m) => m.id === flowModelId) ?? FLOW_MODELS[0]).needle,
     lowerPriority: lowPriority,
-    videos: p.variations.map((variation, vi) => ({
+    videos: Array.from({ length: p.takes ?? 1 }, (_, t) => p.variations.map((variation, vi) => ({
       title: variation.title,
+      label: t === 0 ? `Vídeo ${pad(vi + 1)}` : `Vídeo ${pad(vi + 1)} · take ${t + 1}`,
+      base: vi,
       scenes: Array.from({ length: p.sceneCount }, (_, si) => ({
         imagePrompt: p.images[vi]?.prompts[si] ?? "",
         videoPrompt: p.videos[vi]?.prompts[si] ?? "",
-        file: fileName(vi, si, "x.mp4"),
+        file: fileName(vi, si, "x.mp4").replace(/(\.\w+)$/, t === 0 ? "$1" : `_Take${t + 1}$1`),
+        src: si,
       })),
-    })),
+    }))).flat(),
   }, null, 2);
+
+  // Mais um take de uma cena só: manda um pacote de uma cena para a extensão (os outros ficam na biblioteca).
+  const retakes = useRef<Record<string, number>>({});
+  const retake = (vbase: number, sbase: number) => {
+    const key = `${vbase}-${sbase}`;
+    const n = (retakes.current[key] ?? (p.takes ?? 1)) + 1;
+    retakes.current[key] = n;
+    const pkg = JSON.parse(flowPackage()) as { videos: unknown[] };
+    pkg.videos = [{
+      title: p.variations[vbase]?.title ?? "", label: `Vídeo ${pad(vbase + 1)} · take ${n}`, base: vbase,
+      scenes: [{
+        imagePrompt: p.images[vbase]?.prompts[sbase] ?? "", videoPrompt: p.videos[vbase]?.prompts[sbase] ?? "",
+        file: fileName(vbase, sbase, "x.mp4").replace(/(\.\w+)$/, `_Take${n}$1`), src: sbase, label: `Cena ${pad(sbase + 1)}`,
+      }],
+    }];
+    void pushPackage(JSON.stringify(pkg, null, 2));
+  };
 
   // Só quem NÃO tem Lower Priority escolhe o modelo, vendo quantos créditos cada vídeo gasta.
   const modelChooser = () => {
@@ -1568,11 +1589,12 @@ export function CloneWizard() {
                   {(questHold || hasReference || !!refFile) ? (
                   <div ref={chatRef} className="scroll-mt-4">
                   <QuestChat
-                    values={{ cta: p.cta, product: p.product, count: p.count, sceneCount: p.sceneCount, language: p.language, copySource: p.copySource ?? "video", ownCopy: p.ownCopy ?? "", keyword: p.keyword, flowModel: flowModelId }}
+                    values={{ cta: p.cta, product: p.product, count: p.count, sceneCount: p.sceneCount, takes: p.takes ?? 1, language: p.language, copySource: p.copySource ?? "video", ownCopy: p.ownCopy ?? "", keyword: p.keyword, flowModel: flowModelId }}
                     languages={LANGUAGES.map((l) => ({ value: l.value, text: l.text }))}
                     models={visibleFlowChoices(flowAccount.plan).map((m) => ({ id: m.id, name: m.id === "lower" ? "Lower Priority" : m.name, credits: m.credits }))}
                     onCount={(n) => patch({ count: n })}
                     onScenes={(n) => patch({ sceneCount: n })}
+                    onTakes={(n) => patch({ takes: n })}
                     onLanguage={(value) => chooseLanguage(value)}
                     onCopy={(source, text) => patch({ copySource: source, ownCopy: text })}
                     onKeyword={(value) => patch({ keyword: value })}
@@ -1640,7 +1662,7 @@ export function CloneWizard() {
                   const doneN = mine.filter((j) => j.done).length;
                   return (
                     <div key={vi} className="space-y-2">
-                      <p className="text-sm font-medium">Vídeo {String(vi + 1).padStart(2, "0")} <span className="font-normal text-muted-foreground">· {doneN}/{mine.length} cenas</span></p>
+                      <p className="text-sm font-medium">{mine[0]?.vname ?? `Vídeo ${String(vi + 1).padStart(2, "0")}`} <span className="font-normal text-muted-foreground">· {doneN}/{mine.length} cenas</span></p>
                       <ul className="grid gap-2 sm:grid-cols-2">
                         {mine.map((job) => {
                           const running = flowProg.running && flowProg.current?.vi === job.vi && flowProg.current?.si === job.si;
@@ -1658,7 +1680,7 @@ export function CloneWizard() {
                               )}
                               <div className="min-w-0 flex-1 space-y-1.5">
                                 <div className="flex items-center justify-between gap-2 text-xs">
-                                  <span className="truncate font-medium">Cena {String(job.si + 1).padStart(2, "0")}</span>
+                                  <span className="truncate font-medium">{job.sname ?? `Cena ${String(job.si + 1).padStart(2, "0")}`}</span>
                                   <span className={job.error ? "text-[#F0466B]" : job.done ? "text-[#5BD69A]" : "text-muted-foreground"}>
                                     {job.error ? "erro" : job.done ? `pronta${secs ? ` · ${fmtTime(secs)}` : ""}` : running || typeof job.pct === "number" ? `${value}%` : "na fila"}
                                   </span>
@@ -1666,6 +1688,9 @@ export function CloneWizard() {
                                 <div className="h-1.5 overflow-hidden rounded-full bg-white/10"><div className={`h-full rounded-full transition-all duration-700 ${job.done ? "bg-[#5BD69A]" : "bg-gradient-to-r from-[#8B5CF6] to-[#A98BFF]"}`} style={{ width: `${value}%` }} /></div>
                               </div>
                               <div className="flex shrink-0 gap-1">
+                                {job.done && !flowProg.running && (
+                                  <button type="button" onClick={() => retake(job.vbase ?? job.vi, job.sbase ?? job.si)} aria-label={`Mais um take da cena ${(job.sbase ?? job.si) + 1} do vídeo ${(job.vbase ?? job.vi) + 1}`} title="Mais um take desta cena" className="grid h-8 place-items-center rounded-full border border-border px-2 text-[11px] text-muted-foreground hover:text-foreground">+ take</button>
+                                )}
                                 {image && <a href={image.data} download={image.file} aria-label={`Baixar a foto da cena ${job.si + 1} do vídeo ${vi + 1}`} title="Baixar a foto" className="grid size-8 place-items-center rounded-full border border-border text-muted-foreground hover:text-foreground"><ImageDown className="size-4" /></a>}
                                 {videoId && <a href={`/api/multiplier/flow-videos/${videoId}/file?download=1`} download={job.file} aria-label={`Baixar o vídeo da cena ${job.si + 1} do vídeo ${vi + 1}`} title="Baixar o vídeo" className="grid size-8 place-items-center rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white"><Download className="size-4" /></a>}
                               </div>
@@ -1683,7 +1708,7 @@ export function CloneWizard() {
 
         {ready && (redirectIn !== null || redirectBlocked) && (
           <section role="status" className="space-y-2 rounded-[18px] border border-[#7B3FE4]/60 bg-[#7B3FE4]/15 p-4" data-testid="flow-redirect">
-            <p className="text-sm font-semibold">{redirectBlocked ? "A extensão não respondeu. Recarregue esta página (F5) e confira se a extensão 1.10.2 está ligada; ou abra o Flow pelo botão abaixo." : `Abrindo o Flow e enviando tudo em ${redirectIn}s…`}</p>
+            <p className="text-sm font-semibold">{redirectBlocked ? "A extensão não respondeu. Recarregue esta página (F5) e confira se a extensão 1.11.0 está ligada; ou abra o Flow pelo botão abaixo." : `Abrindo o Flow e enviando tudo em ${redirectIn}s…`}</p>
             <div className="h-1.5 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A98BFF] transition-all duration-1000" style={{ width: `${redirectBlocked ? 100 : ((1 - (redirectIn ?? 1)) / 1) * 100}%` }} /></div>
             <p className="text-xs text-muted-foreground">Tudo pronto. A extensão recebe o pacote, abre um projeto novo e gera as imagens e os vídeos sozinha. Você não precisa copiar nem colar nada.</p>
             <div className="flex gap-2">
@@ -1696,7 +1721,7 @@ export function CloneWizard() {
         {ready && (
           <>
             <section className="space-y-4 rounded-[18px] border border-[#5BD69A]/40 bg-[#5BD69A]/10 p-5">
-              <p className="text-lg font-semibold">Tudo pronto: {p.variations.length} {p.variations.length === 1 ? "vídeo" : "vídeos"} × {p.sceneCount} {p.sceneCount === 1 ? "cena" : "cenas"}</p>
+              <p className="text-lg font-semibold">Tudo pronto: {p.variations.length} {p.variations.length === 1 ? "vídeo" : "vídeos"} × {p.sceneCount} {p.sceneCount === 1 ? "cena" : "cenas"}{(p.takes ?? 1) > 1 ? ` × ${p.takes} takes` : ""}</p>
               <ul className="space-y-1 text-sm text-muted-foreground">
                 {p.variations.map((variation, vi) => (
                   <li key={vi}>Vídeo {pad(vi + 1)} · {variation.title}</li>
