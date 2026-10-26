@@ -103,14 +103,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div data-app-shell={user ? "" : undefined} className={cn(user && "flex min-h-dvh bg-canvas")}>
       {user ? <aside
         className={cn(
-          "sticky top-0 hidden h-dvh shrink-0 flex-col border-r border-sidebar-border bg-sidebar md:flex",
+          "sticky top-0 hidden h-dvh shrink-0 flex-col overflow-y-auto border-r border-sidebar-border bg-sidebar md:flex",
           compact ? "w-16 items-center px-2" : "w-60 px-3",
         )}
       >
-        <Link href="/" className={cn("flex h-14 items-center gap-2 font-display text-lg font-bold tracking-tight", compact ? "justify-center" : "px-2")}>
-          <Image src="/logo.png" alt="" width={24} height={24} className="size-6" priority />
-          {!compact && "ClipGringa"}
-        </Link>
+        <div className={cn("flex h-14 shrink-0 items-center", compact ? "flex-col justify-center" : "justify-between")}>
+          <Link href="/" className={cn("flex items-center gap-2 font-display text-lg font-bold tracking-tight", compact ? "justify-center" : "px-2")}>
+            <Image src="/logo.png" alt="" width={24} height={24} className="size-6" priority />
+            {!compact && "ClipGringa"}
+          </Link>
+          {!compact && <QuickSignOut />}
+        </div>
 
 
         <div className="scrollbar-none min-h-0 w-full flex-1 overflow-y-auto">
@@ -181,6 +184,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
           <div className="flex items-center gap-1">
             <LanguageSwitcher />
+            <QuickSignOut />
             <Announcements key={user.id} userId={user.id} compact />
             <button type="button" onClick={() => setPaletteOpen(true)} aria-label="Search generations" className="rounded-lg p-2 text-muted-foreground hover:bg-accent">
               <Search className="size-5" />
@@ -289,6 +293,22 @@ function UsageCard({ billing }: { billing: NonNullable<ReturnType<typeof useBill
         <p className="mt-2 text-muted-foreground">{limit && upgrade?.remaining !== null ? `${upgrade?.remaining} left this period` : "videos this period"}</p>
       )}
     </Link>
+  );
+}
+
+/** Botão "Sair" sempre à vista (topo do menu / cabeçalho do celular), mesmo quando o rodapé não cabe na tela. */
+function QuickSignOut() {
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    setBusy(true);
+    try { await signOut(); window.location.assign("/sign-in"); }
+    catch { toast.error("Could not sign out. Please try again."); setBusy(false); }
+  };
+  return (
+    <button type="button" onClick={() => void go()} disabled={busy} aria-label="Sair da conta" data-no-translate
+      className="inline-flex h-8 items-center gap-1.5 rounded-full border border-sidebar-border px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground disabled:opacity-50">
+      <LogOut className="size-3.5" />{busy ? "Saindo…" : "Sair"}
+    </button>
   );
 }
 
