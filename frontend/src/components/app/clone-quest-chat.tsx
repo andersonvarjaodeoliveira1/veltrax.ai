@@ -18,13 +18,14 @@ type Props = {
   onCta: (value: string) => void;
   onProduct: (value: string) => void;
   onExtra: (value: string) => void;
-  children?: React.ReactNode; // aparece no fim da conversa (o botão de subir o vídeo)
+  onFinish?: () => void;
+  hasVideo?: boolean;
 };
 
 type Step = { id: string; question: string; hint: string; options: Opt[]; answer: string; apply: (text: string, picked?: string) => boolean };
 
 /** Conversa guiada: cada pergunta tem opções para tocar e também aceita digitar + Enter. As escolhas ficam sempre visíveis. */
-export function QuestChat({ values, languages, models, onCount, onScenes, onLanguage, onCopy, onKeyword, onModel, onCta, onProduct, onExtra, children }: Props) {
+export function QuestChat({ values, languages, models, onCount, onScenes, onLanguage, onCopy, onKeyword, onModel, onCta, onProduct, onExtra, onFinish, hasVideo }: Props) {
   const [at, setAt] = useState(0);
   const [text, setText] = useState("");
   const [answered, setAnswered] = useState<string[]>([]);
@@ -38,7 +39,7 @@ export function QuestChat({ values, languages, models, onCount, onScenes, onLang
       answer: values.count === 1 ? "1 vídeo" : `${values.count} vídeos`,
       apply: (t, picked) => { const n = num(picked ?? t, 1, 10); if (n === null) return false; onCount(n); return true; } },
     { id: "scenes", question: "Quantas cenas em cada vídeo?", hint: "Cada cena tem cerca de 8 segundos. Digite de 1 a 6.",
-      options: [2, 3, 4, 5, 6].map((n) => ({ value: String(n), label: `${n} cenas` })),
+      options: [1, 2, 3, 4, 5, 6].map((n) => ({ value: String(n), label: n === 1 ? "1 cena" : `${n} cenas` })),
       answer: values.sceneCount === 1 ? "1 cena" : `${values.sceneCount} cenas`,
       apply: (t, picked) => { const n = num(picked ?? t, 1, 6); if (n === null) return false; onScenes(n); return true; } },
     { id: "language", question: "Em que idioma a pessoa fala?", hint: "Toque numa opção ou digite o idioma.",
@@ -57,14 +58,26 @@ export function QuestChat({ values, languages, models, onCount, onScenes, onLang
         if (t.trim().length >= 20) { onCopy("own", t.trim()); return true; }
         return false;
       } },
-    { id: "keyword", question: "Qual palavra-chave fecha o vídeo?", hint: "É a palavra que a pessoa comenta (ex.: QUERO). Escreva e aperte Enter, ou pule.",
-      options: [{ value: "skip", label: "Pular" }],
-      answer: values.keyword.trim() ? values.keyword.trim().toUpperCase() : "Sem palavra-chave",
-      apply: (t, picked) => { if (picked === "skip" || !t.trim()) { onKeyword(""); return true; } const k = t.trim().slice(0, 30); onKeyword(k); return true; } },
-    { id: "cta", question: "Qual frase fecha o vídeo?", hint: "Ex.: Comente QUERO para receber. Escreva e aperte Enter, ou use a padrão.",
-      options: [{ value: "default", label: "Usar a frase padrão" }],
-      answer: values.cta.trim() ? values.cta.trim().slice(0, 40) : "Frase padrão",
-      apply: (t, picked) => { if (picked === "default" || !t.trim()) { return true; } onCta(t.trim().slice(0, 200)); return true; } },
+    { id: "cta", question: "Qual ação você quer que a pessoa faça no final do vídeo? (CTA)", hint: "Toque numa opção ou escreva a sua chamada e aperte Enter.",
+      options: [
+        { value: "full", label: "Assistir o vídeo completo" },
+        { value: "link", label: "Receber o link no direct" },
+        { value: "material", label: "Baixar um material grátis" },
+        { value: "whats", label: "Falar comigo no WhatsApp" },
+      ],
+      answer: values.cta.trim() ? values.cta.trim().replace("{KEYWORD}", "…").slice(0, 44) : "Assistir o vídeo completo",
+      apply: (t, picked) => {
+        const map: Record<string, string> = { full: "", link: "Comente {KEYWORD} que eu te envio o link no direct", material: "Comente {KEYWORD} e receba o material grátis", whats: "Comente {KEYWORD} e eu te chamo no WhatsApp" };
+        if (picked) { onCta(map[picked] ?? ""); return true; }
+        const typed = t.trim().slice(0, 190);
+        if (typed.length < 8) return false;
+        onCta(typed.includes("{KEYWORD}") ? typed : `${typed.replace(/[.!\s]+$/, "")}. Comente {KEYWORD} para receber`);
+        return true;
+      } },
+    { id: "keyword", question: "Qual palavra a pessoa vai comentar?", hint: "É a palavra que dispara a sua automação de comentários (ex.: QUERO). Escreva e aperte Enter.",
+      options: [{ value: "QUERO", label: "QUERO" }, { value: "LINK", label: "LINK" }, { value: "EU QUERO", label: "EU QUERO" }, { value: "INFO", label: "INFO" }],
+      answer: values.keyword.trim() ? values.keyword.trim().toUpperCase() : "QUERO",
+      apply: (t, picked) => { const k = (picked ?? t).trim().slice(0, 30); if (!k) return false; onKeyword(k); return true; } },
     { id: "product", question: "Vai falar de algum produto?", hint: "Escreva o nome do produto e aperte Enter, ou pule.",
       options: [{ value: "skip", label: "Não, só o vídeo" }],
       answer: values.product.trim() ? values.product.trim().slice(0, 40) : "Sem produto",
@@ -94,6 +107,7 @@ export function QuestChat({ values, languages, models, onCount, onScenes, onLang
   ];
 
   const finished = at >= steps.length;
+  useEffect(() => { if (finished) onFinish?.(); }, [finished]); // eslint-disable-line react-hooks/exhaustive-deps
   const current = steps[at];
   useEffect(() => { endRef.current?.scrollIntoView?.({ block: "nearest", behavior: "smooth" }); }, [at, finished]);
 
@@ -163,8 +177,7 @@ export function QuestChat({ values, languages, models, onCount, onScenes, onLang
       )}
       {finished && (
         <div className="space-y-3">
-          <p className="text-sm font-medium text-[#C9BBFA]">Perfeito. Agora escolha o vídeo: o resto é automático e abre o Flow sozinho.</p>
-          {children}
+          <p className="text-sm font-medium text-[#C9BBFA]">{hasVideo ? "Perfeito. Preparando tudo e abrindo o Flow sozinho…" : "Perfeito. Falta só escolher o vídeo, no botão roxo acima."}</p>
         </div>
       )}
       <div ref={endRef} />

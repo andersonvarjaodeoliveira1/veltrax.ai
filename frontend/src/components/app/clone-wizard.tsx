@@ -1157,6 +1157,10 @@ export function CloneWizard() {
   const [changeText, setChangeText] = useState("");
   const [paused, setPaused] = useState(false);
   const [changeDemo, setChangeDemo] = useState("");
+  const [questHold, setQuestHold] = useState(false);
+  const [questDone, setQuestDone] = useState(false);
+  const [readDone, setReadDone] = useState(false);
+  const [questName, setQuestName] = useState("");
   const [copyDemo, setCopyDemo] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
   const [manualMode, setManualMode] = useState<"closed" | "open" | "hidden">("closed");
@@ -1250,6 +1254,15 @@ export function CloneWizard() {
     timer = window.setTimeout(tick, 600);
     return () => window.clearTimeout(timer);
   }, [copyBoxShown]);
+
+  // Vídeo escolhido primeiro: lê enquanto a pessoa responde a conversa; ao terminar as duas coisas, prepara tudo e abre o Flow.
+  useEffect(() => {
+    if (!questHold || !readDone) return;
+    if (projRef.current.reference.trim().length < 20) { setQuestHold(false); setReadDone(false); return; }
+    if (!questDone) return;
+    setQuestHold(false); setReadDone(false);
+    void runAll(true);
+  }, [questHold, questDone, readDone]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (simple) {
     const ready = p.videos.length > 0 && p.ctaLocked;
@@ -1436,8 +1449,8 @@ export function CloneWizard() {
         {!ready && !working && !askProduct && (
           <section className="space-y-4 rounded-[18px] border border-border bg-card p-5">
             <input ref={fileRef} type="file" accept="video/*" className="sr-only" aria-label="Escolher o vídeo para clonar"
-              onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void startSimple(file); }} />
-            {hasReference || refFile ? (
+              onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (!file) return; if (questDone) { void startSimple(file); return; } setQuestName(file.name); setQuestHold(true); setReadDone(false); void readReference(file).finally(() => setReadDone(true)); }} />
+            {(hasReference || refFile) && !questHold ? (
               <>
                 <p className="text-sm text-muted-foreground">{hasReference ? "O vídeo já foi lido. Falta preparar as cenas, as variações e os prompts." : `Recebi o seu vídeo${refFile ? ` (${refFile.name})` : ""}, mas ainda não consegui ler a fala. Se quiser tentar de novo, escolha outro vídeo.`}</p>
                 <div className="flex flex-wrap gap-2">
@@ -1447,7 +1460,7 @@ export function CloneWizard() {
                 </div>
               </>
             ) : null}
-            {hasReference || refFile ? (
+            {(hasReference || refFile) && !questHold ? (
             <div className="space-y-4">
               {!hasReference && (
                 <label className="block space-y-2 rounded-[18px] border border-[#F5B454]/40 bg-[#F5B454]/5 p-4 text-sm">
@@ -1482,7 +1495,7 @@ export function CloneWizard() {
               <div className="space-y-4" data-testid="start-quest">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-xs font-semibold">
-                    <span className="text-[#A98BFF]">Escolha o vídeo · o resto é automático</span>
+                    <span className="text-[#A98BFF]">1º escolha o vídeo · depois responda · o resto é automático</span>
                     <span>Leitura, cenas, textos e Flow</span>
                   </div>
                   <div role="progressbar" aria-label="Passos" aria-valuemin={0} aria-valuemax={4} aria-valuenow={0} className="h-2.5 overflow-hidden rounded-full bg-border">
@@ -1490,20 +1503,6 @@ export function CloneWizard() {
                   </div>
                 </div>
                 <div className="gt-pop space-y-3">
-                  <QuestChat
-                    values={{ cta: p.cta, product: p.product, count: p.count, sceneCount: p.sceneCount, language: p.language, copySource: p.copySource ?? "video", ownCopy: p.ownCopy ?? "", keyword: p.keyword, flowModel: flowModelId }}
-                    languages={LANGUAGES.map((l) => ({ value: l.value, text: l.text }))}
-                    models={visibleFlowChoices(flowAccount.plan).map((m) => ({ id: m.id, name: m.id === "lower" ? "Lower Priority" : m.name, credits: m.credits }))}
-                    onCount={(n) => patch({ count: n })}
-                    onScenes={(n) => patch({ sceneCount: n })}
-                    onLanguage={(value) => chooseLanguage(value)}
-                    onCopy={(source, text) => patch({ copySource: source, ownCopy: text })}
-                    onKeyword={(value) => patch({ keyword: value })}
-                    onModel={(id) => chooseModel(id)}
-                    onCta={(value) => patch({ cta: value })}
-                    onProduct={(value) => patch({ product: value })}
-                    onExtra={(value) => setP((cur) => ({ ...cur, changes: [cur.changes, value].filter(Boolean).join(" | ").slice(0, 600) }))}
-                  >
                   <div className="cg-orbit relative w-full" style={{ "--cg-r": "22px" } as React.CSSProperties}>
                     <button type="button" onClick={() => fileRef.current?.click()}
                       className="relative flex w-full items-center gap-4 rounded-[22px] border border-transparent bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-6 py-6 text-left text-white shadow-[0_14px_36px_-14px_#7B3FE4] transition-transform hover:-translate-y-0.5">
@@ -1514,7 +1513,21 @@ export function CloneWizard() {
                       </span>
                     </button>
                   </div>
-                  </QuestChat>
+                  {questHold && <p role="status" className="rounded-[14px] border border-[#5BD69A]/40 bg-[#5BD69A]/10 p-3 text-sm">✓ Vídeo escolhido{questName ? `: ${questName}` : ""}. {readDone ? "Já li. Responda as perguntas e eu sigo." : "Lendo a fala enquanto você responde…"}</p>}
+                  <QuestChat
+                    values={{ cta: p.cta, product: p.product, count: p.count, sceneCount: p.sceneCount, language: p.language, copySource: p.copySource ?? "video", ownCopy: p.ownCopy ?? "", keyword: p.keyword, flowModel: flowModelId }}
+                    languages={LANGUAGES.map((l) => ({ value: l.value, text: l.text }))}
+                    models={visibleFlowChoices(flowAccount.plan).map((m) => ({ id: m.id, name: m.id === "lower" ? "Lower Priority" : m.name, credits: m.credits }))}
+                    onCount={(n) => patch({ count: n })}
+                    onScenes={(n) => patch({ sceneCount: n })}
+                    onLanguage={(value) => chooseLanguage(value)}
+                    onCopy={(source, text) => patch({ copySource: source, ownCopy: text })}
+                    onKeyword={(value) => patch({ keyword: value })}
+                    onModel={(id) => chooseModel(id)}
+                    onCta={(value) => patch({ cta: value || (LANGUAGES.find((l) => l.value === p.language)?.cta ?? p.cta) })}
+                    onProduct={(value) => patch({ product: value })}
+                    onExtra={(value) => setP((cur) => ({ ...cur, changes: [cur.changes, value].filter(Boolean).join(" | ").slice(0, 600) }))}
+                   onFinish={() => { setQuestDone(true); setP((cur) => (cur.keyword.trim() ? cur : { ...cur, keyword: "QUERO" })); }} hasVideo={questHold || hasReference || !!refFile} />
                   <details className="group rounded-[18px] border border-white/10 bg-card p-4 text-sm" data-testid="quest-adjust">
                     <summary className="cursor-pointer list-none font-medium">Ajustes (opcional): idioma, quantidade, palavra-chave e frase final <span aria-hidden className="text-muted-foreground">⌄</span></summary>
                     <div className="mt-4 border-t border-white/10 pt-4">{adjustSections}</div>
