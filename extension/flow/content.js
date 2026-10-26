@@ -519,6 +519,7 @@
       <div class="row"><button class="b" id="go">Começar</button><button class="b o" id="stop" disabled>Parar</button><button class="b o" id="clear">Limpar</button></div>
       <details class="adv"><summary>Pacote (avançado)</summary>
         <textarea id="pkg" placeholder='Cole aqui o pacote do ClipGringa'></textarea>
+        <label class="chk"><input type="checkbox" id="fast" checked> Modo rápido BETA (várias cenas ao mesmo tempo)</label>
         <label class="chk"><input type="checkbox" id="test"> Só a primeira cena (teste)</label>
       </details>
     </div>
@@ -641,13 +642,9 @@
     throw lastError;
   }
 
-  async function runJob(job, onlyFirst) {
-    const label = `Vídeo ${pad(job.vi + 1)} · Cena ${pad(job.si + 1)}`;
-    state.current = job.key; jobAt = Date.now();
-
-    // 1) imagem (primeiro passo: a imagem da cena)
+  async function makeImage(job, label) {
     setPhase("imagem");
-    const image = await withRetry(`${label} (imagem)`, async () => {
+    return withRetry(`${label} (imagem)`, async () => {
       setNow(`${label}: preparando o Flow para gerar a imagem…`);
       await configure("image");
       await setPrompt(job.imagePrompt);
@@ -656,6 +653,28 @@
       setNow(`${label}: gerando a imagem (cerca de 15 segundos)…`);
       return waitNewTile(before, "image", IMAGE_WAIT_MS, (p) => { if (p != null) setNow(`${label}: gerando a imagem… ${p}%`); });
     });
+  }
+
+  async function finishJob(job, video, label) {
+    state.current = job.key;
+    setPhase("enviando");
+    setNow(`${label}: enviando ${job.file} para o ClipGringa…`);
+    const sent = await uploadVideo(video, job);
+    setPhase("baixando");
+    setNow(`${label}: baixando ${job.file}…`);
+    await withRetry(`${label} (download)`, () => downloadTile(video, job.file, sent || !uploadInfo ? null : uploadInfo));
+    state.done[job.key] = true;
+    state.dur = { ...(state.dur || {}), [job.key]: Math.round((Date.now() - jobAt) / 1000) };
+    delete state.errors[job.key];
+    await persist();
+  }
+
+  async function runJob(job, onlyFirst) {
+    const label = `Vídeo ${pad(job.vi + 1)} · Cena ${pad(job.si + 1)}`;
+    state.current = job.key; jobAt = Date.now();
+
+    // 1) imagem (primeiro passo: a imagem da cena)
+    const image = await makeImage(job, label);
 
     // 2) vídeo: anima a imagem aprovada, em Lower Priority
     setPhase("vídeo");
@@ -675,17 +694,99 @@
     });
 
     // 3) enviar para o ClipGringa e 4) baixar
-    setPhase("enviando");
-    setNow(`${label}: enviando ${job.file} para o ClipGringa…`);
-    const sent = await uploadVideo(video, job);
-    setPhase("baixando");
-    setNow(`${label}: baixando ${job.file}…`);
-    await withRetry(`${label} (download)`, () => downloadTile(video, job.file, sent || !uploadInfo ? null : uploadInfo));
-    state.done[job.key] = true;
-    state.dur = { ...(state.dur || {}), [job.key]: Math.round((Date.now() - jobAt) / 1000) };
-    delete state.errors[job.key];
-    await persist();
+    await finishJob(job, video, label);
     if (onlyFirst) stopFlag = true;
+  }
+
+  /* ---------- modo rápido (BETA): o Flow anima várias cenas ao mesmo tempo ---------- */
+  const VIDEO_PARALLEL = 3;
+  const tilesNow = () => firstTiles(40);
+  const generatingNow = (info) => /\d+\s*%/.test(info) || /gerando|generating/i.test(info);
+  const labelOf = (job) => `Vídeo ${pad(job.vi + 1)} · Cena ${pad(job.si + 1)}`;
+
+  function locateTile(rec) {
+    if (rec.tile && rec.tile.isConnected) {
+      const img = rec.tile.querySelector("img");
+      if (img) return { src: baseSrc(img.src), img, tile: rec.tile, info: rec.tile.innerText || "" };
+    }
+    return tilesNow().find((t) => t.src === rec.src) || null;
+  }
+
+  // Manda animar uma cena e volta assim que o Flow começa (sem esperar o vídeo ficar pronto).
+  async function submitVideo(job, image, label, attemptNo) {
+    setPhase("vídeo");
+    setNow(`${label}: mandando animar (as outras cenas continuam em paralelo)…`);
+    await configure("video");
+    try { await chooseStartFrame(image.src); } catch (pickErr) {
+      if (/vi:|Início|Incluir/.test(String(pickErr.message)) && attemptNo >= RETRIES) setNow(`${label}: não consegui escolher a imagem inicial, animando só pelo texto.`);
+      else throw pickErr;
+    }
+    await setPrompt(job.videoPrompt);
+    const known = new Set(tilesNow().map((t) => t.src));
+    const count0 = known.size;
+    await pressGenerate();
+    const appeared = await waitFor(() => { const now = tilesNow(); return now.length > count0 ? now.find((t) => !known.has(t.src)) || null : null; }, 30000, 700);
+    if (!appeared) throw new Error("O Flow não começou a animar esta cena.");
+    return { src: appeared.src, tile: appeared.tile, t0: Date.now() };
+  }
+
+  function failJob(job, message) {
+    state.errors[job.key] = message;
+    setError(`${labelOf(job)}: ${message}`);
+  }
+
+  async function collectVideos(batch) {
+    const end = Date.now() + VIDEO_WAIT_MS;
+    const waiting = new Map(batch.map((b) => [b.job.key, { ...b, since: Date.now() }]));
+    while (waiting.size) {
+      if (stopFlag) throw new Error("STOP");
+      const pcts = [];
+      for (const [key, b] of Array.from(waiting)) {
+        const t = locateTile(b.rec);
+        if (!t) { if (Date.now() - b.since > 90000) { failJob(b.job, "não achei esta cena na grade do Flow"); waiting.delete(key); } continue; }
+        b.since = Date.now();
+        if (/falha|failed|erro|error/i.test(t.info.replace(/arrow_forward/g, ""))) { failJob(b.job, "O Flow marcou esta geração como falha."); waiting.delete(key); continue; }
+        const done = !generatingNow(t.info) && (/play_circle|videocam|movie/.test(t.info) || t.tile.querySelector("video"));
+        if (done) {
+          waiting.delete(key);
+          jobAt = b.rec.t0;
+          try { await finishJob(b.job, t, labelOf(b.job)); } catch (e) { if (e.message === "STOP") throw e; failJob(b.job, e.message); }
+          await persist(); render();
+        } else { const pct = (t.info.match(/(\d+)\s*%/) || [])[1]; pcts.push(`${labelOf(b.job)} ${pct ? pct + "%" : "na fila"}`); }
+      }
+      if (pcts.length) setNow(`Animando ${pcts.length} cena(s) ao mesmo tempo no Flow: ${pcts.join(" · ")}`);
+      if (Date.now() > end) { for (const [, b] of waiting) failJob(b.job, "O Flow demorou demais para terminar."); return; }
+      await sleep(1500);
+    }
+  }
+
+  async function runPipeline() {
+    const jobs = state.jobs.filter((j) => !state.done[j.key]);
+    const images = {};
+    // 1) todas as imagens, uma depois da outra (rápido: cerca de 15 segundos cada)
+    for (const job of jobs) {
+      if (stopFlag) return;
+      state.current = job.key; jobAt = Date.now();
+      try { images[job.key] = await makeImage(job, labelOf(job)); } catch (e) {
+        if (e.message === "STOP") { stopFlag = true; return; }
+        failJob(job, e.message); await persist();
+      }
+      render();
+    }
+    // 2) as animações em grupos: manda 3 de uma vez e recolhe enquanto o Flow trabalha
+    const ready = jobs.filter((j) => images[j.key]);
+    for (let i = 0; i < ready.length && !stopFlag; i += VIDEO_PARALLEL) {
+      const batch = [];
+      for (const job of ready.slice(i, i + VIDEO_PARALLEL)) {
+        if (stopFlag) break;
+        state.current = job.key; render();
+        try {
+          const rec = await withRetry(`${labelOf(job)} (vídeo)`, (attemptNo) => submitVideo(job, images[job.key], labelOf(job), attemptNo));
+          batch.push({ job, rec });
+        } catch (e) { if (e.message === "STOP") { stopFlag = true; return; } failJob(job, e.message); await persist(); }
+      }
+      try { await collectVideos(batch); } catch (e) { if (e.message === "STOP") { stopFlag = true; return; } throw e; }
+    }
   }
 
   const FLOW_HOME = "https://labs.google/fx/pt/tools/flow";
@@ -750,6 +851,11 @@
           if (!pending.length) break;
           setNow(`Tentando de novo ${pending.length} cena(s) que não saíram na primeira rodada…`);
           setError("");
+        }
+        if (round === 0 && !onlyFirst && el("fast").checked && state.jobs.filter((j) => !state.done[j.key]).length > 1) {
+          try { await runPipeline(); } catch (e) { if (e.message === "STOP") stopFlag = true; else setError(`Modo rápido: ${e.message}. Vou tentar cena por cena.`); }
+          render();
+          continue;
         }
         for (const job of state.jobs) {
           if (state.done[job.key]) continue;
