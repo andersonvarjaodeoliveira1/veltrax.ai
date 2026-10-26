@@ -5,6 +5,8 @@ import { Download, Loader2, Trash2 } from "lucide-react";
 
 type FlowVideo = { id: string; package: string; file: string; kind?: "video" | "image"; size: number; created_at: string | null };
 
+const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "");
+
 const mb = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 
 export function FlowLibrary({ kind }: { kind: "video" | "image" }) {
@@ -63,7 +65,7 @@ export function FlowLibrary({ kind }: { kind: "video" | "image" }) {
                 <video controls preload="metadata" playsInline src={`/api/multiplier/flow-videos/${video.id}/file`} className="aspect-[9/16] w-full bg-black object-contain" aria-label={video.file} />
                 <div className="space-y-2 p-3">
                   <p className="truncate text-sm font-medium" title={video.file}>{video.file}</p>
-                  <p className="text-[11px] text-muted-foreground">{mb(video.size)}{video.created_at ? ` · ${new Date(video.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}` : ""}</p>
+                  <p className="text-[11px] text-muted-foreground">{video.created_at ? `Criado em ${when(video.created_at)} · ` : ""}{mb(video.size)}</p>
                   <div className="flex items-center gap-2">
                     <a href={`/api/multiplier/flow-videos/${video.id}/file?download=1`} download={video.file}
                       className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-3 py-1.5 text-xs font-medium text-white">
@@ -90,7 +92,7 @@ export function FlowLibrary({ kind }: { kind: "video" | "image" }) {
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={`/api/multiplier/flow-videos/${image.id}/file`} alt={image.file} loading="lazy" className="aspect-[9/16] w-full bg-black object-cover" />
                 <div className="flex items-center justify-between gap-2 p-2">
-                  <p className="truncate text-[11px] text-muted-foreground" title={image.package}>{image.file}</p>
+                  <div className="min-w-0"><p className="truncate text-[11px]" title={image.package}>{image.file}</p>{image.created_at && <p className="truncate text-[10px] text-muted-foreground">Criada em {when(image.created_at)}</p>}</div>
                   <a href={`/api/multiplier/flow-videos/${image.id}/file?download=1`} download={image.file} aria-label={`Baixar ${image.file}`} className="grid size-7 shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white"><Download className="size-3.5" /></a>
                 </div>
               </article>

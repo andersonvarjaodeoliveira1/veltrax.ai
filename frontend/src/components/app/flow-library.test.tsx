@@ -29,11 +29,12 @@ it("lists videos by package with a download link and deletes after confirmation"
 
 it("image bank shows only images, with thumbnail and download", async () => {
   vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ videos: [
-    { id: "i1", package: "Wipink", file: "Video01_Cena01.jpg", kind: "image", size: 1000, created_at: null },
+    { id: "i1", package: "Wipink", file: "Video01_Cena01.jpg", kind: "image", size: 1000, created_at: "2026-10-26T12:00:00Z" },
     { id: "v1", package: "Wipink", file: "Video01_Cena01.mp4", kind: "video", size: 1000, created_at: null },
   ] }), { status: 200 })));
   render(<FlowLibrary kind="image" />);
   expect(await screen.findByTestId("flow-images")).toBeInTheDocument();
   expect(screen.getByRole("link", { name: /Baixar Video01_Cena01.jpg/ })).toHaveAttribute("href", "/api/multiplier/flow-videos/i1/file?download=1");
   expect(screen.queryByText("Video01_Cena01.mp4")).not.toBeInTheDocument();
+  expect(screen.getByText(/Criada em/)).toBeInTheDocument();
 });
