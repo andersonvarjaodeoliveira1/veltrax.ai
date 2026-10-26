@@ -114,6 +114,7 @@ const S = {
   toneSoft: ["Suave", "Soft", "Suave"],
   toneYoung: ["Jovem", "Young", "Joven"],
   toneMature: ["Madura", "Mature", "Madura"],
+  perScene: ["por cena (8 s)", "per scene (8 s)", "por escena (8 s)"],
   creditsWord: ["créditos", "credits", "créditos"],
   quota: ["A IA está no limite de uso agora. Espere alguns minutos e tente de novo.", "The AI is at its usage limit right now. Wait a few minutes and try again.", "La IA está en su límite de uso ahora. Espera unos minutos e inténtalo de nuevo."],
   hint1: ["Isso pode levar até 1 minuto", "This can take up to 1 minute", "Esto puede tardar hasta 1 minuto"],
@@ -121,7 +122,7 @@ const S = {
   hint3: ["Quase lá…", "Almost there…", "Casi listo…"],
   noPhotoHint: ["Sem foto, eu escolho uma modelo de IA como referência e crio com ela.", "Without a photo, I pick an AI model as reference and create with it.", "Sin foto, elijo una modelo de IA como referencia y creo con ella."],
   estimate: ["Estimativa de gasto", "Estimated cost", "Gasto estimado"],
-  estFree: ["Sem custo no Lower Priority. Se a sua conta não tiver, usa o Lite (~40 créditos por vídeo).", "Free with Lower Priority. If your account has none, it uses Lite (~40 credits per video).", "Sin costo con Lower Priority. Si tu cuenta no lo tiene, usa Lite (~40 créditos por video)."],
+  estFree: ["Sem custo no Lower Priority. Se a sua conta não tiver, usa o Lite (10 créditos por cena).", "Free with Lower Priority. If your account has none, it uses Lite (10 credits per scene).", "Sin costo con Lower Priority. Si tu cuenta no lo tiene, usa Lite (~40 créditos por video)."],
   seeMore: ["Ver mais", "See more", "Ver más"],
   navLib: ["Biblioteca", "Library", "Biblioteca"],
   navFolders: ["Pastas", "Folders", "Carpetas"],
@@ -888,7 +889,7 @@ export function InfluencerChat() {
         {attached.length > 0 && !started && <button type="button" aria-label={t("stop")} onClick={() => setAttached([])} className="text-muted-foreground hover:text-foreground"><X className="size-3.5" /></button>}
         <select aria-label={t("modelLabel")} value={effectiveFlowId(model, flowAcct.plan)} onChange={(event) => { setModel(event.target.value); saveFlowCategory(event.target.value); setModelChosen(true); }} disabled={started}
           className="max-w-[14rem] truncate rounded-full bg-white/5 px-3 py-1.5 text-xs font-medium text-foreground disabled:opacity-60 [&>option]:bg-[#1a191d] [&>option]:text-white">
-          {visibleFlowChoices(flowAcct.plan).map((item) => <option key={item.id} value={item.id}>{item.id === "lower" ? "Lower Priority" : item.name} · {item.credits === 0 ? `0 ${t("creditsWord")}` : `~${item.credits * SCENES} ${t("creditsWord")}/${t("video")}`}</option>)}
+          {visibleFlowChoices(flowAcct.plan).map((item) => <option key={item.id} value={item.id}>{item.id === "lower" ? "Lower Priority" : item.name} · {item.credits === 0 ? `0 ${t("creditsWord")}` : `${item.credits} ${t("creditsWord")}/${t("scene").toLowerCase()}`}</option>)}
         </select>
         {projects.length > 0 && (
           <select aria-label={t("projects")} value={project} onChange={(event) => setProject(event.target.value)} disabled={started}
@@ -905,7 +906,7 @@ export function InfluencerChat() {
       </div>
       {sent === t("changeSent") && <p role="status" className="mt-2 px-1 text-xs text-[#5BD69A]">✓ {sent}</p>}
       <p className="mt-2 px-1 text-[11px] text-muted-foreground" data-testid="cost-estimate">
-        {chosen.credits === 0 ? t("estFree") : `${t("estimate")}: ~${chosen.credits * SCENES} ${t("creditsWord")} / ${t("video")} (${SCENES} ${SCENES === 1 ? t("scene").toLowerCase() : t("scenesWord")} × ${chosen.credits})`}
+        {chosen.credits === 0 ? t("estFree") : `${t("estimate")}: ${chosen.credits} ${t("creditsWord")} ${t("perScene")} · ${SCENES} ${SCENES === 1 ? t("scene").toLowerCase() : t("scenesWord")} = ~${chosen.credits * SCENES} ${t("creditsWord")} / ${t("video")}`}
       </p>
     </div>
     </div>
