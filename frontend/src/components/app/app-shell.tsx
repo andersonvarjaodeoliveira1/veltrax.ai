@@ -113,6 +113,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </Link>
 
 
+        <div className="scrollbar-none min-h-0 w-full flex-1 overflow-y-auto">
         <nav aria-label="Main navigation" className="flex w-full flex-col gap-0.5">
           {items.map((item, index) => {
             const active = item.match(pathname);
@@ -162,8 +163,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Search className="size-4 shrink-0" />
           {!compact && <><span className="flex-1 text-left">Search</span><Kbd>⌘K</Kbd></>}
         </button>
+        </div>
 
-        <div className="mt-auto w-full space-y-2 pb-3">
+        <div className="w-full shrink-0 space-y-2 border-t border-sidebar-border/60 pb-3 pt-2">
           <Announcements key={user.id} userId={user.id} compact={compact} />
           {!compact && <LanguageSwitcher className="w-full justify-between" />}
           {!compact && tokens && !tokens.unlimited && <TokenCard balance={tokens} />}
