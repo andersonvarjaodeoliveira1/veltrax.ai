@@ -476,3 +476,59 @@ def burn_ass_subtitles_ffmpeg(
         str(output_path),
     ]
     return run_ffmpeg_command(command).returncode == 0
+
+
+def stream_signature(video_path: Path) -> Tuple | None:
+    """Everything that must match for clips to be joined without re-encoding (None when it can't be read)."""
+    result = run_ffmpeg_command(
+        [
+            "ffprobe", "-v", "error", "-show_entries",
+            "stream=codec_type,codec_name,width,height,pix_fmt,r_frame_rate,sample_rate,channels,profile",
+            "-of", "json", str(video_path),
+        ],
+        timeout=60,
+    )
+    if result.returncode != 0:
+        return None
+    try:
+        streams = json.loads(result.stdout).get("streams", [])
+    except ValueError:
+        return None
+    video = next((s for s in streams if s.get("codec_type") == "video"), None)
+    audio = next((s for s in streams if s.get("codec_type") == "audio"), None)
+    if not video or not audio:
+        return None
+    return (
+        video.get("codec_name"), video.get("width"), video.get("height"), video.get("pix_fmt"), video.get("r_frame_rate"), video.get("profile"),
+        audio.get("codec_name"), audio.get("sample_rate"), audio.get("channels"),
+    )
+
+
+def can_join_without_reencoding(parts: List[Path], width: int, height: int) -> bool:
+    """True when every clip is H.264/AAC with the same size, rate and format as the output."""
+    signatures = [stream_signature(part) for part in parts]
+    if not signatures or any(sig is None for sig in signatures) or len(set(signatures)) != 1:
+        return False
+    codec, w, h, *_rest, a_codec, _rate, _channels = signatures[0]
+    return codec == "h264" and a_codec == "aac" and (w, h) == (width, height)
+
+
+_NVENC: bool | None = None
+
+
+def h264_encode_args(crf: int = 21, preset: str = "veryfast") -> List[str]:
+    """GPU (NVENC) encoder when this machine has one, otherwise libx264. Same look, much faster on GPU."""
+    global _NVENC
+    if _NVENC is None:
+        try:
+            listing = run_ffmpeg_command(["ffmpeg", "-hide_banner", "-encoders"], timeout=30)
+            probe = run_ffmpeg_command(
+                ["ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=black:s=256x256:d=0.2",
+                 "-c:v", "h264_nvenc", "-f", "null", "-"], timeout=30,
+            ) if "h264_nvenc" in (listing.stdout or "") else None
+            _NVENC = bool(probe and probe.returncode == 0)
+        except Exception:
+            _NVENC = False
+    if _NVENC:
+        return ["-c:v", "h264_nvenc", "-preset", "p4", "-rc", "vbr", "-cq", str(crf + 2), "-b:v", "0"]
+    return ["-c:v", "libx264", "-preset", preset, "-crf", str(crf), "-threads", "0"]

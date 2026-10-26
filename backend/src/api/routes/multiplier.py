@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...auth_headers import resolve_authenticated_user_id
 from ...config import get_config
 from ...database import AsyncSessionLocal, get_db
-from ...media.ffmpeg import ffprobe_duration, ffprobe_has_audio, run_ffmpeg_command
+from ...media.ffmpeg import can_join_without_reencoding, ffprobe_duration, ffprobe_has_audio, h264_encode_args, run_ffmpeg_command
 from ...utils.async_helpers import run_in_thread
 
 logger = logging.getLogger(__name__)
@@ -367,7 +367,24 @@ def ensure_audio(path: Path) -> Path:
 def render_combination(
     parts: list[Path], output: Path, width: int, height: int
 ) -> None:
-    """Concatenate Hook + Body + CTA into one H.264/AAC mp4 of the given size."""
+    """Concatenate Hook + Body + CTA into one H.264/AAC mp4 of the given size.
+
+    Fast path: when every clip already has the same codec, size and rate (the Flow's videos do), the clips are joined by
+    copying the streams, which takes about a second. Otherwise they are re-encoded (on the GPU when there is one)."""
+    if len(parts) > 1 and can_join_without_reencoding(parts, width, height):
+        listing = output.with_suffix(".txt")
+        listing.write_text("".join("file '" + str(part.resolve()).replace("'", "'\\''") + "'\n" for part in parts), encoding="utf-8")
+        try:
+            fast = run_ffmpeg_command(
+                ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", str(listing),
+                 "-c", "copy", "-movflags", "+faststart", str(output)],
+                timeout=300,
+            )
+        finally:
+            listing.unlink(missing_ok=True)
+        if fast.returncode == 0 and output.exists() and output.stat().st_size > 0:
+            return
+        output.unlink(missing_ok=True)
     command: list[str] = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error"]
     for part in parts:
         command += ["-i", str(part)]
@@ -383,7 +400,7 @@ def render_combination(
     command += [
         "-filter_complex", ";".join(filters),
         "-map", "[v]", "-map", "[a]",
-        "-c:v", "libx264", "-preset", "veryfast", "-crf", "21",
+        *h264_encode_args(21),
         "-pix_fmt", "yuv420p", "-profile:v", "high",
         "-c:a", "aac", "-b:a", "160k", "-ar", "48000",
         "-movflags", "+faststart",
