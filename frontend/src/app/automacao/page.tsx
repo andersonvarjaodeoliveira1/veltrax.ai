@@ -5,6 +5,7 @@ import { Check, ClipboardCopy, Download, Loader2, Sparkles, Trash2, Upload, X } 
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
+import { FlowLibrary } from "@/components/app/flow-library";
 import { CloneWizard } from "@/components/app/clone-wizard";
 
 type Status = "copy" | "awaiting" | "ready";
@@ -18,12 +19,16 @@ type Creative = {
   status: Status;
   prompt: string;
 };
-type TabKey = "criar" | "copys" | "flow" | "prontos" | "clonagem" | "ajustes";
+type TabKey = "criar" | "copys" | "flow" | "prontos" | "clonagem" | "ajustes" | "videos" | "imagens";
 
 const STORAGE_KEY = "gv-automacao-v1";
 const TONES = ["Direto e amigável", "Emocional", "Urgente", "Divertido"];
 // Clonagem é o caminho principal; as demais abas ficam como apoio (modo manual).
 const MAIN_TAB = { key: "clonagem" as const, label: "Clonar um vídeo", hint: "suba o vídeo e o resto é automático" };
+const RESULT_TABS: { key: TabKey; label: string }[] = [
+  { key: "videos", label: "Vídeos criados" },
+  { key: "imagens", label: "Banco de imagens" },
+];
 const TABS: { key: TabKey; label: string; hint: string }[] = [
   { key: "criar", label: "Criar", hint: "pedir criativos novos" },
   { key: "copys", label: "Copys", hint: "revisar e aprovar" },
@@ -64,6 +69,10 @@ function captionOf(item: Creative) {
 export default function AutomationPage() {
   const [ready, setReady] = useState(false);
   const [tab, setTab] = useState<TabKey>("clonagem");
+  useEffect(() => {
+    const aba = new URLSearchParams(window.location.search).get("aba");
+    if (aba === "videos" || aba === "imagens") setTab(aba);
+  }, []);
   const [creatives, setCreatives] = useState<Creative[]>([]);
   const [niches, setNiches] = useState<string[]>(["Geral"]);
   const [tone, setTone] = useState(TONES[0]);
@@ -224,7 +233,7 @@ export default function AutomationPage() {
         </p>
       </div>
 
-      {tab !== "clonagem" && (
+      {tab !== "clonagem" && tab !== "videos" && tab !== "imagens" && (
       <Alert>
         <AlertDescription>
           Os textos e os prompts de vídeo são gerados pela IA. O vídeo é gerado por você no Flow, em lower priority, e enviado aqui. Para criar variações, baixe o vídeo e envie na aba Variações do Multiplicador. Os vídeos ficam só nesta página: se você atualizar, envie de novo.
@@ -239,6 +248,13 @@ export default function AutomationPage() {
               tab === MAIN_TAB.key ? "border-transparent bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white" : "border-[#A98BFF]/50 text-foreground hover:border-[#A98BFF]")}>
             {MAIN_TAB.label} <span className="ml-1 rounded-full bg-white/20 px-1.5 py-0.5 text-[9px] font-semibold">BETA</span>
           </button>
+          {RESULT_TABS.map((item) => (
+            <button key={item.key} type="button" onClick={() => setTab(item.key)} aria-current={tab === item.key}
+              className={cn("rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                tab === item.key ? "border-transparent bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:text-foreground")}>
+              {item.label}
+            </button>
+          ))}
           <span className="mx-1 text-[11px] uppercase tracking-wide text-muted-foreground">Modo manual</span>
           {TABS.map((item) => {
             const count = item.key === "criar" || item.key === "ajustes" ? 0 : counts[item.key as "copys" | "flow" | "prontos"];
@@ -424,6 +440,8 @@ export default function AutomationPage() {
       )}
 
       {tab === "clonagem" && <CloneWizard />}
+      {tab === "videos" && <FlowLibrary kind="video" />}
+      {tab === "imagens" && <FlowLibrary kind="image" />}
 
       {tab === "ajustes" && (
         <section className="space-y-5 rounded-[18px] border border-border bg-card p-5">

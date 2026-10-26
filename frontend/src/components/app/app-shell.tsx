@@ -5,7 +5,7 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowRight, Clapperboard, Coins, CornerDownLeft, Download, Film, FolderOpen, LogOut, KeyRound, Link2, MessageCircle, Plus, Scissors, Search, Shield, ShoppingCart, UserRound, Workflow,
+  ArrowRight, Coins, CornerDownLeft, Download, Film, FolderOpen, LogOut, KeyRound, Link2, MessageCircle, Plus, Scissors, Search, Shield, ShoppingCart, UserRound, Workflow,
 } from "lucide-react";
 import { toast } from "sonner";
 import { signOut, useSession } from "@/lib/auth-client";
@@ -40,7 +40,6 @@ const NAV: NavItem[] = [
   { href: "/list", label: "Library", sub: "Cortes para TikTok", icon: Film, match: (p) => p.startsWith("/list") || p.startsWith("/tasks") },
   { href: "/folders", label: "Folders", sub: "Cortes para TikTok", icon: FolderOpen, match: (p) => p.startsWith("/folders") },
   { href: DOWNLOADER_URL, label: "Baixar vídeo", sub: "Cortes para TikTok", icon: Download, match: () => false, external: true },
-  { href: "/videos-flow", label: "Vídeos do Flow", group: "Minha conta", icon: Clapperboard, match: (p) => p.startsWith("/videos-flow"), badge: "BETA" },
   { href: "/conectar-flow", label: "Conectar ao Flow", icon: Link2, match: (p) => p.startsWith("/conectar-flow") },
   { href: "/minhas-apis", label: "Minhas APIs", icon: KeyRound, match: (p) => p.startsWith("/minhas-apis") },
   { href: WHATSAPP_URL, label: "API e Flow", group: "Comprar", icon: ShoppingCart, match: () => false, external: true },
