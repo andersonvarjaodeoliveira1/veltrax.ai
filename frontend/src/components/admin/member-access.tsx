@@ -36,7 +36,7 @@ function InviteCard({ onDone }: { onDone: () => void }) {
       const response = await fetch("/api/admin/invite", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, tokens: Number(tokens) || undefined, testDays: testDays ? Number(testDays) : undefined }) });
       const data = await response.json().catch(() => ({}));
       if (response.ok) {
-        setResult({ ok: true, text: `${data.created ? "Usuário criado" : "Usuário já existia"} e e-mail enviado para ${email.trim().toLowerCase()}. Ele escolhe a senha pelo link.${data.tokensGranted ? ` Tokens liberados: ${fmt.format(data.tokensGranted)}.` : ""}` });
+        setResult({ ok: true, text: `${data.created ? "Usuário criado" : "Usuário já existia"} e e-mail enviado para ${email.trim().toLowerCase()}. Ele escolhe a senha pelo link.${data.testUntil ? ` Conta de teste ativa até ${new Date(data.testUntil).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}.` : ""}${data.tokensGranted ? ` Tokens liberados: ${fmt.format(data.tokensGranted)}.` : ""}` });
         setEmail(""); setTokens(""); setTestDays(""); onDone();
       } else if (response.status === 403) {
         setResult({ ok: false, text: "Destrave o Admin (senha da conta) e tente de novo." });
