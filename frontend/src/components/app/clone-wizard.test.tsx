@@ -506,8 +506,10 @@ describe("Passos do começo", () => {
     window.localStorage.clear();
     render(<CloneWizard />);
     const quest = await screen.findByTestId("start-quest");
-    expect(quest).toHaveTextContent("o resto é automático");
-    expect(screen.getByRole("button", { name: /Escolher o vídeo que quero clonar/ })).toBeInTheDocument();
+    expect(quest).toHaveTextContent("Quantos vídeos você quer?");
+    expect(screen.queryByRole("button", { name: /Escolher o vídeo que quero clonar/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Usar o padrão no resto e escolher o vídeo" }));
+    expect(await screen.findByRole("button", { name: /Escolher o vídeo que quero clonar/ })).toBeInTheDocument();
   });
 });
 
@@ -627,28 +629,17 @@ test("the change box pauses the Flow and sends the requested change to every sta
   await waitFor(() => expect(calls.some((c) => c.body.changes === "troque o cenário para uma cozinha")).toBe(true), { timeout: 15000 });
 }, 30000);
 
-test("own copy option sends the member's script as the reference of the takes", async () => {
-  const calls = mockApi();
-  window.localStorage.setItem("gv-clonagem-view-v2", "simple");
-  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ sceneCount: 3, copySource: "own", ownCopy: "Minha copy própria para os takes do vídeo hoje." }));
-  render(<CloneWizard />);
-  const box = await screen.findByLabelText("Sua copy");
-  expect((box as HTMLTextAreaElement).value).toContain("Minha copy própria");
-  expect(screen.getByRole("button", { name: "Escrever a minha copy" })).toHaveAttribute("aria-pressed", "true");
-  expect(calls.length).toBe(0);
-});
-
-test("each scene row has a pencil to edit its prompts and an X to remove it", async () => {
+test("the quest chat collects the choices step by step with Enter and then offers the video", async () => {
   mockApi();
   window.localStorage.setItem("gv-clonagem-view-v2", "simple");
-  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ sceneCount: 3, count: 2, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora.", scenes, variations, images: prompts, videos: prompts, ctaLocked: true }));
+  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ sceneCount: 3 }));
   const user = userEvent.setup();
   render(<CloneWizard />);
-  await user.click(await screen.findByLabelText("Editar a cena 01 do vídeo 01"));
-  const box = await screen.findByLabelText("Prompt da imagem");
-  await user.clear(box);
-  await user.type(box, "novo prompt");
-  expect((box as HTMLTextAreaElement).value).toBe("novo prompt");
-  await user.click(screen.getAllByLabelText("Remover a cena 03")[0]);
-  expect(screen.queryByLabelText("Remover a cena 03")).toBeNull();
+  await user.type(await screen.findByLabelText("Quantos vídeos você quer?"), "3{Enter}");
+  await user.click(await screen.findByRole("button", { name: "4 cenas" }));
+  await user.click(await screen.findByRole("button", { name: "Português" }));
+  await user.type(await screen.findByLabelText("Qual copy usar nos takes?"), "Minha copy própria para os takes do vídeo hoje.{Enter}");
+  await user.click(await screen.findByRole("button", { name: "Pular" }));
+  expect((await screen.findAllByText(/3 vídeos/)).length).toBeGreaterThan(0);
+  expect(screen.getByText(/Minha copy: Minha copy própria/)).toBeInTheDocument();
 }, 30000);

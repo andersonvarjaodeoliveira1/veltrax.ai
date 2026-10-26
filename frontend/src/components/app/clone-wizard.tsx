@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { QuestChat } from "./clone-quest-chat";
 import { ArrowUp, Check, ClipboardCopy, Download, ExternalLink, Loader2, Lock, Pencil, Plus, RefreshCw, Sparkles, Trash2, Unlock, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -1489,6 +1490,17 @@ export function CloneWizard() {
                   </div>
                 </div>
                 <div className="gt-pop space-y-3">
+                  <QuestChat
+                    values={{ count: p.count, sceneCount: p.sceneCount, language: p.language, copySource: p.copySource ?? "video", ownCopy: p.ownCopy ?? "", keyword: p.keyword, flowModel: flowModelId }}
+                    languages={LANGUAGES.map((l) => ({ value: l.value, text: l.text }))}
+                    models={visibleFlowChoices(flowAccount.plan).map((m) => ({ id: m.id, name: m.id === "lower" ? "Lower Priority" : m.name, credits: m.credits }))}
+                    onCount={(n) => patch({ count: n })}
+                    onScenes={(n) => patch({ sceneCount: n })}
+                    onLanguage={(value) => chooseLanguage(value)}
+                    onCopy={(source, text) => patch({ copySource: source, ownCopy: text })}
+                    onKeyword={(value) => patch({ keyword: value })}
+                    onModel={(id) => chooseModel(id)}
+                  >
                   <div className="cg-orbit relative w-full" style={{ "--cg-r": "22px" } as React.CSSProperties}>
                     <button type="button" onClick={() => fileRef.current?.click()}
                       className="relative flex w-full items-center gap-4 rounded-[22px] border border-transparent bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-6 py-6 text-left text-white shadow-[0_14px_36px_-14px_#7B3FE4] transition-transform hover:-translate-y-0.5">
@@ -1499,30 +1511,7 @@ export function CloneWizard() {
                       </span>
                     </button>
                   </div>
-                  <ol className="space-y-1 text-sm text-muted-foreground">
-                    <li>1. Você escolhe o vídeo (só uma vez).</li>
-                    <li>2. O ClipGringa lê, separa as cenas, escreve tudo e já abre o Flow sozinho.</li>
-                  </ol>
-                  <div className="space-y-3" data-testid="copy-source">
-                    <p className="text-sm font-medium">Copy dos takes</p>
-                    <div className="flex flex-wrap gap-2" role="group" aria-label="Copy dos takes">
-                      {([["video", "Usar a copy do vídeo"], ["own", "Escrever a minha copy"]] as const).map(([value, label]) => (
-                        <button key={value} type="button" aria-pressed={(p.copySource ?? "video") === value} onClick={() => patch({ copySource: value })}
-                          className={`rounded-full border px-4 py-2 text-sm transition ${(p.copySource ?? "video") === value ? "border-[#7B3FE4] bg-[#7B3FE4]/25 text-white" : "border-white/10 text-muted-foreground hover:text-foreground"}`}>{label}</button>
-                      ))}
-                    </div>
-                    {p.copySource === "own" && (
-                      <div className="cg-orbit relative">
-                        <div className="relative rounded-[26px] bg-[#1a191d] p-5 ring-1 ring-white/10 shadow-[0_20px_60px_-30px_#000]">
-                          <label className="sr-only" htmlFor="own-copy">Sua copy</label>
-                          <textarea id="own-copy" value={p.ownCopy ?? ""} onChange={(event) => patch({ ownCopy: event.target.value })} rows={4} maxLength={4000}
-                            placeholder={copyDemo ? `${copyDemo}▍` : "Escreva a fala do vídeo. Os takes de 8s saem desta copy."}
-                            className="min-h-[110px] w-full resize-none bg-transparent px-1 py-1 text-lg outline-none placeholder:text-muted-foreground/70" />
-                          <p className="mt-2 px-1 text-xs text-muted-foreground">{(p.ownCopy ?? "").trim().length >= 20 ? "Pronto: os takes seguem esta copy. O vídeo que você subir serve só de referência visual." : "Escreva pelo menos 20 letras. Sem copy, uso a do vídeo."}</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  </QuestChat>
                   <details className="group rounded-[18px] border border-white/10 bg-card p-4 text-sm" data-testid="quest-adjust">
                     <summary className="cursor-pointer list-none font-medium">Ajustes (opcional): idioma, quantidade, palavra-chave e frase final <span aria-hidden className="text-muted-foreground">⌄</span></summary>
                     <div className="mt-4 border-t border-white/10 pt-4">{adjustSections}</div>
