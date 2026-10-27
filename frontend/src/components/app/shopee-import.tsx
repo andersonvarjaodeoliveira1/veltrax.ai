@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { Download, Loader2, PackageSearch, Paperclip } from "lucide-react";
+import { normalizeShopeeUrl, readShopeeViaExtension } from "@/lib/shopee-bridge";
 
 type Found = { name: string; image: string };
 
@@ -35,7 +36,24 @@ export function ShopeeImport({ onUse, disabled }: { onUse: (files: File[], title
     } catch { setError("Não consegui importar agora. Tente de novo."); } finally { setBusy(false); }
   }
 
-  const fromLink = () => { const form = new FormData(); form.append("url", link.trim()); void run(form); };
+  async function fromLink() {
+    const shopee = normalizeShopeeUrl(link);
+    if (shopee) {
+      // A Shopee bloqueia o servidor, mas não o navegador da pessoa: a extensão abre o anúncio e lê as fotos da galeria do vendedor.
+      setBusy(true); setError("");
+      const read = await readShopeeViaExtension(shopee);
+      if (read.ok && read.images.length) {
+        const form = new FormData();
+        read.images.slice(0, 9).forEach((url) => form.append("image_urls", url));
+        form.append("title", read.title);
+        await run(form);
+        return;
+      }
+      if (!read.ok && read.error === "login") { setBusy(false); setError("A Shopee pediu login no seu navegador. Entre na Shopee e tente de novo."); return; }
+      setBusy(false);
+    }
+    const form = new FormData(); form.append("url", link.trim()); void run(form);
+  }
   const fromFiles = (files: FileList) => { const form = new FormData(); Array.from(files).slice(0, 20).forEach((file) => form.append("files", file)); void run(form); };
   const toggle = (index: number) => setPicked((current) => current.includes(index) ? current.filter((i) => i !== index) : current.length >= 3 ? current : [...current, index]);
 
@@ -45,7 +63,7 @@ export function ShopeeImport({ onUse, disabled }: { onUse: (files: File[], title
       <p className="rounded-[12px] border border-[#F5B454]/40 bg-[#F5B454]/10 p-3 text-xs text-foreground/90">
         Use só as <strong>fotos do anúncio do vendedor</strong> (a galeria do produto). Fotos de <strong>avaliações de clientes</strong> têm dono e podem gerar punição ou derrubar o vídeo. Pelo link, buscamos apenas a galeria do vendedor.
       </p>
-      <form className="flex flex-wrap gap-2" onSubmit={(event) => { event.preventDefault(); if (link.trim()) fromLink(); }}>
+      <form className="flex flex-wrap gap-2" onSubmit={(event) => { event.preventDefault(); if (link.trim()) void fromLink(); }}>
         <input value={link} onChange={(event) => setLink(event.target.value)} placeholder="Cole o link do produto da Shopee" aria-label="Link do produto da Shopee" className="min-w-0 flex-1 rounded-full border border-border bg-background px-4 py-2 text-sm" />
         <button type="submit" disabled={busy || disabled || !link.trim()} className="inline-flex items-center gap-2 rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
           {busy ? <Loader2 className="size-4 animate-spin" /> : null} Buscar imagens

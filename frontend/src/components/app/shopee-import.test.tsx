@@ -1,10 +1,14 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ShopeeImport } from "./shopee-import";
 
+const bridge = vi.hoisted(() => ({ read: vi.fn() }));
+vi.mock("@/lib/shopee-bridge", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/shopee-bridge")>()), readShopeeViaExtension: bridge.read }));
+
 const img = "data:image/jpeg;base64,/9j/4AAQ";
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); bridge.read.mockReset(); });
+beforeEach(() => bridge.read.mockResolvedValue({ ok: false, error: "no-extension" }));
 
 function stub(responses: { ok: boolean; body: unknown }[]) {
   const calls: { url: string; body?: BodyInit | null }[] = [];
@@ -57,5 +61,27 @@ describe("ShopeeImport", () => {
     fireEvent.change(input, { target: { files: [new File(["z"], "fotos.zip", { type: "application/zip" })] } });
     expect(await screen.findByLabelText("Foto 1 (escolhida)")).toBeInTheDocument();
     expect((calls[1].body as FormData).getAll("files")).toHaveLength(1);
+  });
+});
+
+describe("ShopeeImport · pela extensão", () => {
+  it("lê as fotos no navegador da pessoa e manda só os endereços ao servidor", async () => {
+    bridge.read.mockResolvedValue({ ok: true, title: "Bola PIC", videos: [], images: ["https://down-br.img.susercontent.com/file/br-1-aaaaaaaaaaaaaaaaaaaa", "https://down-br.img.susercontent.com/file/br-1-bbbbbbbbbbbbbbbbbbbb"] });
+    const calls = stub([{ ok: true, body: { title: "Bola PIC", seller_gallery: true, images: [{ name: "a", image: img }] } }]);
+    render(<ShopeeImport onUse={() => {}} />);
+    await userEvent.type(screen.getByLabelText("Link do produto da Shopee"), "https://shopee.com.br/Bola-i.1.2");
+    await userEvent.click(screen.getByRole("button", { name: /Buscar imagens/ }));
+    expect(await screen.findByText("Bola PIC")).toBeInTheDocument();
+    const form = calls[0].body as FormData;
+    expect(form.getAll("image_urls")).toHaveLength(2);
+    expect(form.get("url")).toBeNull();
+  });
+
+  it("avisa quando a Shopee pede login no navegador", async () => {
+    bridge.read.mockResolvedValue({ ok: false, error: "login" });
+    render(<ShopeeImport onUse={() => {}} />);
+    await userEvent.type(screen.getByLabelText("Link do produto da Shopee"), "https://shopee.com.br/Bola-i.1.2");
+    await userEvent.click(screen.getByRole("button", { name: /Buscar imagens/ }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("pediu login");
   });
 });

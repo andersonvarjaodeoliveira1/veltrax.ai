@@ -1917,6 +1917,15 @@ def _is_shopee_url(url: str) -> bool:
     return parsed.scheme == "https" and any(host == h or host.endswith("." + h) for h in SHOPEE_HOSTS)
 
 
+def _is_shopee_cdn(url: str) -> bool:
+    """Endereço de arquivo (foto ou vídeo) do CDN da Shopee. Só esses são baixados quando o navegador da pessoa indica o arquivo."""
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower()
+    return parsed.scheme == "https" and any(host == h or host.endswith("." + h) for h in ("susercontent.com", "shopee.com.br", "shopee.com"))
+
+
 def _shopee_page_images(html: str) -> tuple[str, list[str]]:
     """Título do produto e imagens da GALERIA DO VENDEDOR (og:image, JSON-LD e a lista "images" do anúncio).
     Fotos de avaliações de clientes, avatares, banners e produtos recomendados ficam de fora de propósito."""
@@ -2041,8 +2050,24 @@ async def shopee_images(request: Request, db: AsyncSession = Depends(get_db)):
         else:
             raw_files.append((name, data))
 
-    title = ""
+    title = str(form.get("title") or "")[:120]
     source = "files"
+    picked_urls = [str(u)[:500] for u in form.getlist("image_urls")[: SHOPEE_MAX_IMAGES] if isinstance(u, str)]
+    if not raw_files and picked_urls:
+        source = "browser"
+        headers = {"User-Agent": SHOPEE_BROWSER_UA, "Referer": "https://shopee.com.br/", "Accept": "image/*,*/*;q=0.8"}
+        async with httpx.AsyncClient(timeout=20, headers=headers) as http:
+            for image_url in picked_urls:
+                if not _is_shopee_cdn(image_url):
+                    continue
+                try:
+                    body, kind = await _safe_get(http, image_url, SHOPEE_MAX_ENTRY_BYTES)
+                except Exception:
+                    continue
+                if kind.startswith("image/") and len(body) > 8_000:
+                    raw_files.append((f"shopee-{len(raw_files) + 1}.jpg", body))
+        if not raw_files:
+            raise HTTPException(status_code=422, detail="Não consegui baixar essas fotos. Anexe as imagens (ou um .zip).")
     if not raw_files:
         if not link:
             raise HTTPException(status_code=400, detail="Cole o link do produto da Shopee ou anexe as imagens.")
@@ -2051,6 +2076,7 @@ async def shopee_images(request: Request, db: AsyncSession = Depends(get_db)):
         if not _is_shopee_url(link):
             raise HTTPException(status_code=400, detail="Esse link não é da Shopee.")
         source = "link"
+        title = ""
         headers = {"User-Agent": SHOPEE_BROWSER_UA, "Accept-Language": "pt-BR,pt;q=0.9", "Accept": "text/html,application/xhtml+xml,*/*;q=0.8"}
         try:
             async with httpx.AsyncClient(timeout=20, headers=headers) as http:
@@ -2081,7 +2107,7 @@ async def shopee_images(request: Request, db: AsyncSession = Depends(get_db)):
             break
     if not images:
         raise HTTPException(status_code=422, detail="Não achei imagens de produto nesse arquivo.")
-    return {"source": source, "title": title, "images": images, "seller_gallery": source == "link"}
+    return {"source": source, "title": title, "images": images, "seller_gallery": source in ("link", "browser")}
 
 
 # ---------------------------------------------------------------------------
@@ -2166,6 +2192,24 @@ async def video_from_link(request: Request, db: AsyncSession = Depends(get_db)):
         data = await request.json()
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON body")
+    cdn_url = str((data or {}).get("cdn_url") or "").strip()[:600]
+    if cdn_url:
+        # O navegador da pessoa achou o vídeo do anúncio: só baixamos arquivos do CDN da Shopee.
+        import httpx
+
+        if not _is_shopee_cdn(cdn_url):
+            raise HTTPException(status_code=400, detail="Endereço de vídeo não permitido.")
+        try:
+            async with httpx.AsyncClient(timeout=60, headers={"User-Agent": SHOPEE_BROWSER_UA, "Referer": "https://shopee.com.br/"}) as http:
+                body, kind = await _safe_get(http, cdn_url, 80 * 1024 * 1024)
+        except Exception:
+            body, kind = b"", ""
+        if len(body) < 30_000 or not (kind.startswith("video/") or kind == "application/octet-stream"):
+            raise HTTPException(status_code=422, detail="Não consegui baixar esse vídeo da Shopee. Baixe o vídeo e suba o arquivo.")
+        folder = tempfile.mkdtemp(prefix="linkvideo_")
+        target = Path(folder) / "video.mp4"
+        target.write_bytes(body)
+        return FileResponse(str(target), media_type="video/mp4", filename="video-shopee.mp4", background=BackgroundTask(shutil.rmtree, folder, True))
     url = str((data or {}).get("url") or "").strip()[:500]
     if url and not url.startswith("http"):
         url = "https://" + url

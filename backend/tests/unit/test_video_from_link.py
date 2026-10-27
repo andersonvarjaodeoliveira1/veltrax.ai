@@ -23,3 +23,12 @@ def test_shopee_page_videos_only_from_the_listing():
     urls = cp._shopee_page_videos(html)
     assert seller in urls
     assert review not in urls
+
+
+def test_cdn_downloads_are_limited_to_shopee_files():
+    assert cp._is_shopee_cdn("https://down-bs.vod.susercontent.com/api/v4/1/mms/x.mp4")
+    assert cp._is_shopee_cdn("https://down-br.img.susercontent.com/file/br-11134207-abc")
+    assert not cp._is_shopee_cdn("https://susercontent.com.evil.com/x.mp4")
+    assert not cp._is_shopee_cdn("http://down-br.img.susercontent.com/file/x")
+    assert not cp._is_shopee_cdn("https://169.254.169.254/latest/meta-data")
+    assert not cp._is_shopee_cdn("https://evil.com/?u=susercontent.com")

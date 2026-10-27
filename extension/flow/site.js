@@ -22,6 +22,22 @@
     window.postMessage({ source: "clipgringa-flow", type: "package-ack", ok }, window.location.origin);
   });
 
+  // O site pede para ler um anúncio da Shopee no navegador da pessoa (a Shopee bloqueia o servidor, não o navegador).
+  window.addEventListener("message", (event) => {
+    if (event.source !== window || !event.data || event.data.source !== "clipgringa-page" || event.data.type !== "shopee-read") return;
+    const id = String(event.data.id || "");
+    const url = String(event.data.url || "");
+    window.postMessage({ source: "clipgringa-flow", type: "shopee-ack", id }, window.location.origin);
+    try {
+      chrome.runtime.sendMessage({ type: "clipgringa-shopee", url }, (resp) => {
+        void chrome.runtime.lastError;
+        window.postMessage({ source: "clipgringa-flow", type: "shopee-result", id, data: resp || { ok: false, error: "failed" } }, window.location.origin);
+      });
+    } catch (_e) {
+      window.postMessage({ source: "clipgringa-flow", type: "shopee-result", id, data: { ok: false, error: "failed" } }, window.location.origin);
+    }
+  });
+
   // O usuário abriu o chat de mudanças: avisa a aba do Flow para parar na etapa atual.
   window.addEventListener("message", async (event) => {
     if (event.source !== window || !event.data || event.data.source !== "clipgringa-page" || event.data.type !== "flow-stop") return;
