@@ -3,7 +3,7 @@
 // (ideia geral de metrosir/consistent-ai-character-prompts, MIT) com texto próprio.
 import type { MyModel } from "./influencer-models";
 
-export type PresetModel = { id: string; name: string; scene: string; model: Omit<MyModel, "id" | "faces">; facePrompt: string };
+export type PresetModel = { id: string; photo?: string; /* caminho em /public, ex.: /influencers/presets/camila.jpg */  name: string; scene: string; model: Omit<MyModel, "id" | "faces">; facePrompt: string };
 
 const SKIN = "visible pores, micro-texture, natural skin imperfections, subtle peach fuzz, natural skin sheen, no airbushing, no smoothing filters";
 function face(look: string, scene: string, camera: string) {
