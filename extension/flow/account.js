@@ -10,6 +10,8 @@
     const out = [];
     document.querySelectorAll("button, a, span, div, p").forEach((el) => {
       if (el.children.length > 2) return;
+      // ignora elementos escondidos (ex.: um "Entrar" oculto não significa que a conta está desconectada)
+      if (el.offsetParent === null && getComputedStyle(el).position !== "fixed") return;
       const t = (el.innerText || "").trim();
       if (t && t.length <= 60) out.push(t);
     });
@@ -55,7 +57,13 @@
     } catch (_e) { /* extensão recarregada: ignora */ }
   }
 
-  setTimeout(save, 3000);
+  try {
+    // O site pede uma leitura nova na hora (sem esperar os 20 s) ao abrir "Conectar ao Flow".
+    chrome.runtime.onMessage.addListener((m, _s, reply) => {
+      if (m && m.type === "clipgringa-account-refresh") { save().then(() => reply({ ok: true })); return true; }
+    });
+  } catch (_e) { /* extensão recarregada */ }
+  setTimeout(save, 1500);
   setInterval(save, 20000);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) save(); });
 })();

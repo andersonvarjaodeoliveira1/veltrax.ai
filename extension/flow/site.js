@@ -75,6 +75,13 @@
   window.addEventListener("message", async (event) => {
     if (event.source !== window || !event.data || event.data.source !== "clipgringa-page" || event.data.type !== "flow-status?") return;
     let data = {};
+    let tabs = null;
+    try {
+      tabs = await new Promise((res) => {
+        const t = setTimeout(() => res(null), 2200);
+        chrome.runtime.sendMessage({ type: "clipgringa-refresh-account" }, (r) => { void chrome.runtime.lastError; clearTimeout(t); res(r && typeof r.tabs === "number" ? r.tabs : null); });
+      });
+    } catch (_e) { /* segue com o que está guardado */ }
     try {
       data = ((await chrome.storage.local.get(KEY))[KEY]) || {};
     } catch (_e) { return; /* extensão recarregada: sem resposta */ }
@@ -87,6 +94,7 @@
         plan: data.plan || null,
         credits: typeof data.credits === "number" ? data.credits : null,
         seenAt: data.seenAt || null,
+        flowTabs: tabs,
       },
       window.location.origin
     );

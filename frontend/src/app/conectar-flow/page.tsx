@@ -55,12 +55,20 @@ export default function ConnectFlowPage() {
           <p className="text-xs text-muted-foreground">
             {flowState === "connected"
               ? `${account.plan ? `Plano ${account.plan}` : "Plano não identificado"}${account.credits !== null ? ` · ${account.credits} créditos` : ""}. O ClipGringa só lê o plano e o saldo que o Flow mostra na tela.`
-              : flowState === "logged-out" ? "Abra o Flow e entre com a sua conta Google (passo 1). Avisamos aqui quando conectar."
+              : flowState === "logged-out" ? "Abra o Flow, entre com a sua conta Google e deixe essa aba aberta (passo 1). Avisamos aqui quando conectar."
               : flowState === "no-extension" ? "Instale ou ligue a extensão do ClipGringa no Chrome (passo 2)."
               : "Só um instante."}
           </p>
         </div>
       </section>
+
+      {flowState !== "no-extension" && flowState !== "unknown" && (
+        <p data-testid="flow-diagnostic" className="-mt-3 text-xs text-muted-foreground">
+          Extensão {account.version ?? "antiga"}
+          {account.version && account.version < "1.14.2" ? " — desatualizada: baixe a nova no passo 2, remova a antiga em chrome://extensions e carregue a nova." : ""}
+          {account.flowTabs === 0 ? " · Nenhuma aba do Flow aberta agora: abra o Flow (passo 1) para eu ler a conta." : account.flowTabs ? ` · ${account.flowTabs} aba(s) do Flow aberta(s).` : ""}
+        </p>
+      )}
 
       <section className="space-y-3 rounded-[18px] border border-border bg-card p-5" data-testid="step-category">
         <p className="font-medium">Sua categoria no Flow</p>
@@ -94,7 +102,7 @@ export default function ConnectFlowPage() {
       <section className="space-y-3 rounded-[18px] border border-border bg-card p-5" data-testid="step-extension">
         <p className="flex items-center gap-2 font-medium">
           <span className="grid size-6 place-items-center rounded-full bg-[#7B3FE4]/25 text-xs">{done.extension ? <Check className="size-3.5 text-[#5BD69A]" /> : "2"}</span>
-          Instale a extensão do ClipGringa (versão 1.14.1)
+          Instale a extensão do ClipGringa (versão 1.14.2)
         </p>
         <p className="text-xs text-muted-foreground">É ela que gera as imagens e os vídeos sozinha dentro do seu Flow.</p>
         <a href="/extensao/clipgringa-flow.zip" download onClick={() => mark({ extension: true })}

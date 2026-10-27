@@ -7,6 +7,18 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     pending = { filename: String(message.filename || ""), at: Date.now(), upload: message.upload || null };
     sendResponse({ ok: true });
   }
+  if (message && message.type === "clipgringa-refresh-account") {
+    // Pede a leitura da conta a todas as abas abertas do Flow e diz quantas há.
+    chrome.tabs.query({ url: ["https://labs.google/fx/*", "https://flow.google.com/*"] }, (tabs) => {
+      const list = (tabs || []).filter((t) => /\/tools\/flow|flow\.google\.com/.test(t.url || ""));
+      let left = list.length;
+      if (!left) { sendResponse({ ok: true, tabs: 0 }); return; }
+      const done = () => { left -= 1; if (left <= 0) sendResponse({ ok: true, tabs: list.length }); };
+      list.forEach((t) => chrome.tabs.sendMessage(t.id, { type: "clipgringa-account-refresh" }, () => { void chrome.runtime.lastError; done(); }));
+      setTimeout(() => sendResponse({ ok: true, tabs: list.length }), 2000);
+    });
+    return true;
+  }
   if (message && message.type === "clipgringa-open-flow") {
     // Abre o Flow sozinho (sem depender de pop-up do site) se ainda não houver uma aba dele.
     chrome.tabs.query({ url: ["https://labs.google/fx/*/tools/flow*", "https://labs.google/fx/*/tools/flow", "https://flow.google.com/*"] }, (tabs) => {

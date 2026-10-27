@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
-export type FlowAccount = { plan: string | null; credits: number | null; seenAt: number | null };
+export type FlowAccount = { plan: string | null; credits: number | null; seenAt: number | null; version?: string | null; flowTabs?: number | null };
 /** unknown = ainda checando · no-extension = extensão não encontrada · logged-out = Flow aberto sem login · connected = conta conectada */
 export type FlowState = "unknown" | "no-extension" | "logged-out" | "connected";
 
@@ -51,7 +51,7 @@ export function useFlowConnection(enabled: boolean, report = true) {
       if ((event.origin && event.origin !== window.location.origin) || !event.data || event.data.source !== "clipgringa-flow" || event.data.type !== "status") return;
       answered = true;
       const d = event.data;
-      const info: FlowAccount = { plan: d.plan ?? null, credits: typeof d.credits === "number" ? d.credits : null, seenAt: d.seenAt ?? null };
+      const info: FlowAccount = { plan: d.plan ?? null, credits: typeof d.credits === "number" ? d.credits : null, seenAt: d.seenAt ?? null, version: typeof d.version === "string" ? d.version : null, flowTabs: typeof d.flowTabs === "number" ? d.flowTabs : null };
       // desconectada só quando a extensão leu um sinal claro de login pendente; sem leitura ainda = conectada
       apply(d.loggedIn === false ? "logged-out" : "connected", info);
     };
