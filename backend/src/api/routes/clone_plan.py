@@ -589,13 +589,14 @@ async def product_look(request: Request, db: AsyncSession = Depends(get_db)):
 
     parts: list[Any] = ["Describe the product shown in these photos."]
     for photo in photos:
-        kind = (getattr(photo, "content_type", "") or "").lower()
         data = await photo.read()
-        if kind not in PHOTO_TYPES:
+        if len(data) > MAX_PHOTO_BYTES * 3:
+            raise HTTPException(status_code=413, detail="Each photo can have up to 15 MB")
+        # Lê pelo conteúdo, não pelo nome/tipo declarado: foto baixada da Shopee costuma ser WebP salvo como .jpg.
+        fixed = await asyncio.to_thread(_normalize_photo, data)
+        if not fixed:
             raise HTTPException(status_code=400, detail="Send PNG, JPG or WebP photos")
-        if len(data) > MAX_PHOTO_BYTES:
-            raise HTTPException(status_code=413, detail="Each photo can have up to 5 MB")
-        parts.append(BinaryContent(data=data, media_type=kind))
+        parts.append(BinaryContent(data=fixed[0], media_type=fixed[1]))
     _check_script_rate(user_id)
     out = await _run_parts(PRODUCT_LOOK_SYSTEM, _Look, parts)
     return {"look": _text(out.description, 500)}

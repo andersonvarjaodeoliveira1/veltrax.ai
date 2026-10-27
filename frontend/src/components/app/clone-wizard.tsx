@@ -1,5 +1,6 @@
 "use client";
 
+import { isImageFile, toJpegFile } from "@/lib/photo-file";
 import { LoadingTips } from "@/components/app/loading-tips";
 import { PolicyNotice } from "@/components/app/policy-notice";
 import { checkPolicy, policySignature } from "@/lib/shopee-policy";
@@ -647,7 +648,7 @@ export function CloneWizard() {
 
   /** Fotos do produto (até 3): a IA descreve o produto para ele aparecer igual nas cenas. Não bloqueia o resto se falhar. */
   async function addProductPhotos(files: File[]): Promise<string> {
-    const images = files.filter((file) => /^image\/(png|jpe?g|webp)$/i.test(file.type)).slice(0, 3);
+    const images = await Promise.all(files.filter(isImageFile).slice(0, 3).map((file) => toJpegFile(file)));
     if (!images.length) { setError("Envie fotos do produto em PNG, JPG ou WebP."); return ""; }
     setError(null);
     setProductPhotos((current) => { current.forEach((photo) => URL.revokeObjectURL(photo.url)); return images.map((file) => ({ url: URL.createObjectURL(file), name: file.name })); });
@@ -1306,7 +1307,7 @@ export function CloneWizard() {
                 <Group label="Fotos do produto (até 3)">
                   <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-dashed border-border px-4 py-2 text-sm hover:text-foreground">
                     <Upload className="size-4" /> {productPhotos.length ? "Trocar as fotos" : "Escolher fotos"}
-                    <input type="file" multiple accept="image/png,image/jpeg,image/webp" aria-label="Fotos do produto" className="sr-only"
+                    <input type="file" multiple accept="image/*" aria-label="Fotos do produto" className="sr-only"
                       onChange={(event) => { const files = Array.from(event.target.files ?? []); event.target.value = ""; if (files.length) void addProductPhotos(files); }} />
                   </label>
                   {productPhotos.length > 0 && (
@@ -1341,7 +1342,7 @@ export function CloneWizard() {
     };
     // Sem vídeo de referência: começa pela foto do produto. A IA descreve o produto e o vídeo é criado do zero (avatar apresentando o produto).
     const choosePhotos = (files: File[], title = "") => {
-      const images = files.filter((file) => /^image\/(png|jpe?g|webp)$/i.test(file.type));
+      const images = files.filter(isImageFile);
       if (!images.length) { setError("Envie fotos do produto em PNG, JPG ou WebP."); return; }
       setError(null);
       if (title && !p.product.trim()) patch({ product: title.slice(0, 120) });
@@ -1460,7 +1461,7 @@ export function CloneWizard() {
 
         {!ready && !working && !askProduct && (
           <section className="space-y-4 rounded-[18px] border border-border bg-card p-5">
-            <input ref={fileRef} type="file" multiple accept="video/*,image/png,image/jpeg,image/webp" className="sr-only" aria-label="Escolher o vídeo ou imagem para clonar ou criar"
+            <input ref={fileRef} type="file" multiple accept="video/*,image/*" className="sr-only" aria-label="Escolher o vídeo ou imagem para clonar ou criar"
               onChange={(event) => { const files = Array.from(event.target.files ?? []); event.target.value = ""; const video = files.find((file) => file.type.startsWith("video/")); if (video) chooseVideo(video); else if (files.length) choosePhotos(files.slice(0, 3)); }} />
             {(hasReference || refFile) && !questHold ? (
               <>
