@@ -25,7 +25,7 @@ function LinkLoading({ shopee }: { shopee: boolean }) {
 }
 
 /** Cola o link de um vídeo (TikTok, Instagram, YouTube...): o servidor baixa e o vídeo segue como se tivesse sido enviado. */
-export function LinkVideo({ onFile, onPhotos, disabled }: { onFile: (file: File) => void; onPhotos?: (files: File[], title: string) => void; disabled?: boolean }) {
+export function LinkVideo({ onFile, onPhotos, photoLabel, disabled }: { onFile: (file: File) => void; onPhotos?: (files: File[], title: string) => void; photoLabel?: string; disabled?: boolean }) {
   const [link, setLink] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -128,7 +128,7 @@ export function LinkVideo({ onFile, onPhotos, disabled }: { onFile: (file: File)
           </ul>
           {onPhotos && !photoNote && (
             <button type="button" disabled={busy || disabled} onClick={() => void applyPhotos()} className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-4 py-2 text-xs font-medium text-white disabled:opacity-50">
-              Usar essas fotos no meu produto
+              {photoLabel ?? "Usar essas fotos no meu produto"}
             </button>
           )}
           {photoNote && <p role="status" className="text-xs font-medium text-[#5BD69A]">{photoNote}</p>}

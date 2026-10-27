@@ -508,6 +508,21 @@ it("when the tokens run out it says so and links the administrator's WhatsApp", 
   expect(screen.getByRole("link", { name: /Chamar o administrador no WhatsApp/ })).toHaveAttribute("href", expect.stringContaining("wa.me/5511913142143"));
 });
 
+describe("Começar pela foto do produto", () => {
+  it("aceita foto (sem vídeo), lê o produto e segue como foto escolhida", async () => {
+    window.localStorage.clear();
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (String(url).includes("/product-look")) return new Response(JSON.stringify({ look: "garrafa térmica preta, tampa prata" }), { status: 200 });
+      return new Response(JSON.stringify({ detail: "nope" }), { status: 500 });
+    }));
+    render(<CloneWizard />);
+    await screen.findByTestId("start-quest");
+    expect(screen.getByRole("button", { name: /Não tenho vídeo: criar a partir da foto do produto/ })).toBeInTheDocument();
+    await userEvent.upload(screen.getByLabelText("Escolher fotos do produto"), new File(["x"], "garrafa.jpg", { type: "image/jpeg" }));
+    expect(await screen.findByText(/Foto escolhida/, undefined, { timeout: 3000 })).toBeInTheDocument();
+  });
+});
+
 describe("Passos do começo", () => {
   it("começa pela escolha do vídeo, uma vez só, e depois mostra idioma, palavra-chave e frase final", async () => {
     window.localStorage.clear();

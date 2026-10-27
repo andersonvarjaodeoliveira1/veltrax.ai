@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { takeKind, takeTag, withTake, type TakeKind } from "@/lib/take-kinds";
 import { FlowRunPanel } from "@/components/app/flow-run-panel";
 import { QuestChat } from "./clone-quest-chat";
-import { ArrowUp, Check, ChevronDown, ClipboardCopy, Download, ExternalLink, Loader2, Lock, Pencil, Plus, RefreshCw, Sparkles, Trash2, Unlock, Upload, X } from "lucide-react";
+import { ArrowUp, Check, ChevronDown, ClipboardCopy, Download, ExternalLink, ImagePlus, Loader2, Lock, Pencil, Plus, RefreshCw, Sparkles, Trash2, Unlock, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
@@ -69,6 +69,7 @@ type Project = {
 type Built = { state: "running" | "done" | "error"; jobId?: string; note?: string };
 type Task = { id: string; label: string; state: "running" | "done" | "error"; start: number; ms?: number; note?: string };
 
+const PHOTO_BRIEF = "Vídeo curto de avatar apresentando o produto da foto: mostra o produto, explica para que serve e chama para comprar.";
 const KEY = "gv-clonagem-v2";
 const MODE_KEY = "gv-clonagem-mode";
 const VIEW_KEY = "gv-clonagem-view-v2";
@@ -435,6 +436,7 @@ export function CloneWizard() {
   const [imgs, setImgs] = useState<Record<string, string>>({});
   const [now, setNow] = useState(() => Date.now());
   const fileRef = useRef<HTMLInputElement>(null);
+  const photoStartRef = useRef<HTMLInputElement>(null);
   // Luz que corre em volta do botão de escolher o vídeo (mesma técnica do chat do influencer).
   // O ângulo fica no <html>: todas as luzes (botão e barras de progresso) herdam e giram juntas.
   useEffect(() => {
@@ -1192,6 +1194,7 @@ export function CloneWizard() {
   const [questDone, setQuestDone] = useState(false);
   const [readDone, setReadDone] = useState(false);
   const [questName, setQuestName] = useState("");
+  const [questPhoto, setQuestPhoto] = useState(false);
   const chatRef = useRef<HTMLDivElement>(null);
   useEffect(() => { if (questHold) window.setTimeout(() => chatRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" }), 150); }, [questHold]);
   const [editing, setEditing] = useState<string | null>(null);
@@ -1330,6 +1333,16 @@ export function CloneWizard() {
     const chooseVideo = (file: File) => {
       if (questDone) { void startSimple(file); return; }
       setQuestName(file.name); setQuestHold(true); setReadDone(false); void readReference(file).finally(() => setReadDone(true));
+    };
+    // Sem vídeo de referência: começa pela foto do produto. A IA descreve o produto e o vídeo é criado do zero (avatar apresentando o produto).
+    const choosePhotos = (files: File[], title = "") => {
+      const images = files.filter((file) => /^image\/(png|jpe?g|webp)$/i.test(file.type));
+      if (!images.length) { setError("Envie fotos do produto em PNG, JPG ou WebP."); return; }
+      setError(null);
+      if (title && !p.product.trim()) patch({ product: title.slice(0, 120) });
+      patch({ copySource: "describe", ownCopy: PHOTO_BRIEF, reference: PHOTO_BRIEF, scenes: [], mix: NO_MIX, variations: [], images: [], videos: [], approved: {} });
+      setQuestPhoto(true); setQuestName(images.length === 1 ? images[0].name : `${images.length} fotos`); setQuestHold(true); setReadDone(false);
+      void addProductPhotos(images).finally(() => setReadDone(true));
     };
     const run = async (file: File | null) => {
       setAskProduct(false);
@@ -1505,8 +1518,18 @@ export function CloneWizard() {
                       </span>
                     </button>
                   </div>
-                  {!questHold && !hasReference && !refFile && <LinkVideo onFile={chooseVideo} onPhotos={(files, title) => { if (title && !p.product.trim()) patch({ product: title.slice(0, 120) }); void addProductPhotos(files); }} />}
-                  {questHold && <p role="status" className="rounded-[14px] border border-[#5BD69A]/40 bg-[#5BD69A]/10 p-3 text-sm">✓ Vídeo escolhido{questName ? `: ${questName}` : ""}. {readDone ? "Já li. Responda as perguntas e eu sigo." : "Lendo a fala enquanto você responde…"}</p>}
+                  {!questHold && !hasReference && !refFile && <LinkVideo onFile={chooseVideo} onPhotos={(files, title) => choosePhotos(files, title)} photoLabel="Criar o vídeo com essas fotos" />}
+                  {!questHold && !hasReference && !refFile && (
+                    <>
+                      <input ref={photoStartRef} type="file" multiple accept="image/png,image/jpeg,image/webp" className="sr-only" aria-label="Escolher fotos do produto"
+                        onChange={(event) => { const files = Array.from(event.target.files ?? []); event.target.value = ""; if (files.length) choosePhotos(files.slice(0, 3)); }} />
+                      <button type="button" onClick={() => photoStartRef.current?.click()} className="flex w-full items-center gap-3 rounded-[18px] border border-dashed border-[#7B3FE4]/60 px-4 py-3 text-left hover:bg-white/5">
+                        <ImagePlus aria-hidden className="size-5 shrink-0 text-[#A98BFF]" />
+                        <span className="min-w-0"><span className="block text-sm font-medium">Não tenho vídeo: criar a partir da foto do produto</span><span className="block text-xs text-muted-foreground">Envie até 3 fotos e a IA cria o vídeo do avatar apresentando o produto.</span></span>
+                      </button>
+                    </>
+                  )}
+                  {questHold && <p role="status" className="rounded-[14px] border border-[#5BD69A]/40 bg-[#5BD69A]/10 p-3 text-sm">✓ {questPhoto ? "Foto escolhida" : "Vídeo escolhido"}{questName ? `: ${questName}` : ""}. {readDone ? "Já li. Responda as perguntas e eu sigo." : "Lendo a fala enquanto você responde…"}</p>}
                   {(questHold || hasReference || !!refFile) ? (
                   <div ref={chatRef} className="scroll-mt-4">
                   <QuestChat
