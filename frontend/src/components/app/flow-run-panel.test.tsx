@@ -1,4 +1,5 @@
 import { act, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FlowRunPanel, type FlowProgress } from "./flow-run-panel";
 
@@ -39,5 +40,23 @@ describe("FlowRunPanel · limite do Flow", () => {
     send(progress(null));
     await screen.findByTestId("flow-progress");
     expect(screen.queryByTestId("flow-limit")).toBeNull();
+  });
+});
+
+describe("FlowRunPanel · variações ao terminar", () => {
+  const finished = (): FlowProgress => ({ ...progress(null), running: false, done: 2, jobs: progress(null).jobs.map((job) => ({ ...job, done: true })) });
+  it("pergunta se quer variações só quando termina e entrega a quantidade escolhida", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ videos: [] }))));
+    const onVariations = vi.fn();
+    render(<FlowRunPanel onRetake={() => {}} onVariations={onVariations} />);
+    send(progress(null));
+    await screen.findByTestId("flow-progress");
+    expect(screen.queryByTestId("ask-variations")).toBeNull();
+    send(finished());
+    expect(await screen.findByTestId("ask-variations")).toHaveTextContent("Quer criar variações deste vídeo?");
+    await userEvent.click(screen.getByRole("button", { name: "3 variações" }));
+    await userEvent.click(screen.getByRole("button", { name: "Sim, criar variações" }));
+    expect(onVariations).toHaveBeenCalledWith(3);
+    expect(screen.queryByTestId("ask-variations")).toBeNull();
   });
 });

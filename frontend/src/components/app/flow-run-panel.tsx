@@ -12,8 +12,10 @@ export type FlowProgress = {
 };
 
 /** Painel do que a extensão está gerando no Flow: progresso, tempo, vídeos para assistir/baixar, fotos e "+ take". */
-export function FlowRunPanel({ onRetake }: { onRetake: (vbase: number, sbase: number, kind: TakeKind) => void }) {
+export function FlowRunPanel({ onRetake, onVariations }: { onRetake: (vbase: number, sbase: number, kind: TakeKind) => void; onVariations?: (count: number) => void }) {
   const [menu, setMenu] = useState<string | null>(null);
+  const [varCount, setVarCount] = useState(2);
+  const [varAsked, setVarAsked] = useState<"" | "yes" | "no">("");
   const [flowProg, setFlowProg] = useState<FlowProgress | null>(null);
   const [flowImages, setFlowImages] = useState<Record<string, { file: string; data: string }>>({});
   const [watching, setWatching] = useState<string | null>(null);
@@ -101,6 +103,20 @@ export function FlowRunPanel({ onRetake }: { onRetake: (vbase: number, sbase: nu
           );
         })()}
         <div className="h-2.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A98BFF] transition-all duration-700" style={{ width: `${pct}%` }} /></div>
+        {onVariations && flowProg.done === flowProg.total && !flowProg.running && varAsked === "" && (
+          <div data-testid="ask-variations" className="space-y-3 rounded-[18px] border border-[#5BD69A]/40 bg-[#5BD69A]/10 p-4">
+            <p className="text-sm font-semibold">Terminou! Quer criar variações deste vídeo?</p>
+            <p className="text-xs text-muted-foreground">Mesma mensagem e mesmo produto, com outros avatares e cenários.</p>
+            <div className="flex flex-wrap items-center gap-2">
+              {[1, 2, 3, 5].map((n) => (
+                <button key={n} type="button" aria-pressed={varCount === n} onClick={() => setVarCount(n)}
+                  className={`rounded-full border px-3 py-1 text-xs ${varCount === n ? "border-[#7B3FE4] bg-[#7B3FE4]/25" : "border-border text-muted-foreground"}`}>{n} {n === 1 ? "variação" : "variações"}</button>
+              ))}
+              <button type="button" onClick={() => { setVarAsked("yes"); onVariations(varCount); }} className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-4 py-1.5 text-xs font-medium text-white">Sim, criar variações</button>
+              <button type="button" onClick={() => setVarAsked("no")} className="rounded-full border border-border px-4 py-1.5 text-xs text-muted-foreground">Agora não</button>
+            </div>
+          </div>
+        )}
         <div className="space-y-4">
           {videos.map((vi) => {
             const mine = flowProg.jobs.filter((j) => j.vi === vi).sort((a, b) => a.si - b.si);

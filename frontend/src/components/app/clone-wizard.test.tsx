@@ -401,7 +401,7 @@ it("simple mode: upload one video and everything is prepared automatically, read
   await user.upload(screen.getByLabelText("Escolher o vídeo ou imagem para clonar ou criar"), new File(["x"], "ref.mp4", { type: "video/mp4" }));
   await user.click(await screen.findByRole("button", { name: "Usar o padrão no resto e escolher o vídeo" }));
 
-  expect(await screen.findByText(/Tudo pronto: 2 vídeos × 3 cenas/)).toBeInTheDocument();
+  expect(await screen.findByText(/Tudo pronto: 2 vídeos · 6 cenas/)).toBeInTheDocument();
   expect(await screen.findByTestId("flow-redirect")).toHaveTextContent(/Abrindo o Flow e enviando tudo/);
   expect(screen.getAllByRole("button", { name: "Copiar prompt da imagem" })).toHaveLength(6);
   expect(screen.getAllByRole("button", { name: "Copiar prompt da animação" })).toHaveLength(6);
@@ -746,6 +746,20 @@ test("shows the created videos panel with time, remaining, progress, photo and d
   expect(pack.videos[0].scenes).toHaveLength(1);
   expect(pack.videos[0].scenes[0]).toMatchObject({ file: "Video01_Cena02_Take2_continue.mp4", src: 1, label: "Cena 02" });
   expect(pack.videos[0].scenes[0].videoPrompt).toContain("seamless continuity");
+}, 30000);
+
+test("a pessoa desmarca uma cena e o pacote leva só o que ficou marcado", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ detail: "nope" }), { status: 500 })));
+  window.localStorage.setItem("gv-clonagem-view-v2", "simple");
+  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ takes: 1, sceneCount: 2, count: 1, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora.", scenes: scenes.slice(0, 2), variations: variations.slice(0, 1), images: prompts.slice(0, 1), videos: prompts.slice(0, 1), ctaLocked: true }));
+  const user = userEvent.setup();
+  render(<CloneWizard />);
+  await screen.findByText(/Tudo pronto/, {}, { timeout: 10000 });
+  await user.click(await screen.findByRole("button", { name: "Cena 2 do vídeo 01" }, { timeout: 10000 }));
+  expect(screen.getByText(/Tudo pronto: 1 vídeo · 1 cena/)).toBeInTheDocument();
+  await user.click(await screen.findByRole("button", { name: "Copiar pacote" }, { timeout: 10000 }));
+  const pack = JSON.parse(await navigator.clipboard.readText());
+  expect(pack.videos[0].scenes.map((x: { file: string }) => x.file)).toEqual(["Video01_Cena01.mp4"]);
 }, 30000);
 
 test("with 2 takes the package carries every scene twice, the second with the Take2 file name", async () => {

@@ -419,6 +419,7 @@ export function CloneWizard() {
   const [askProduct, setAskProduct] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [productPhotos, setProductPhotos] = useState<{ url: string; name: string }[]>([]);
+  const [skip, setSkip] = useState<Record<string, boolean>>({}); // vídeos ("0") e cenas ("0-1") que a pessoa tirou antes de enviar ao Flow
   const [lookState, setLookState] = useState<"idle" | "reading" | "done" | "failed">("idle");
   useEffect(() => {
     try { if (window.localStorage.getItem(VIEW_KEY) === "advanced") setSimple(false); } catch { /* storage unavailable */ }
@@ -1088,6 +1089,12 @@ export function CloneWizard() {
   };
 
   // Pacote único para a ferramenta ClipGringa dentro do Flow (BETA): tudo o que foi coletado, em um clique.
+  const variationsKey = p.variations.map((v) => v.title).join("|");
+  useEffect(() => { setSkip((cur) => (Object.keys(cur).length ? {} : cur)); }, [variationsKey]);
+  const wantVideo = (vi: number) => !skip[String(vi)];
+  const wantScene = (vi: number, si: number) => wantVideo(vi) && !skip[`${vi}-${si}`];
+  const chosenScenes = p.variations.reduce((sum, _v, vi) => sum + Array.from({ length: p.sceneCount }, (_x, si) => (wantScene(vi, si) ? 1 : 0)).reduce<number>((a, b) => a + b, 0), 0);
+  const chosenVideos = p.variations.filter((_v, vi) => Array.from({ length: p.sceneCount }, (_x, si) => wantScene(vi, si)).some(Boolean)).length;
   const flowPackage = () => JSON.stringify({
     app: "clipgringa-flow",
     version: 1,
@@ -1103,13 +1110,13 @@ export function CloneWizard() {
       title: variation.title,
       label: t === 0 ? `Vídeo ${pad(vi + 1)}` : `Vídeo ${pad(vi + 1)} · take ${t + 1}${(p.takeKind ?? "same") === "same" ? "" : ` · ${takeKind(p.takeKind).label.toLowerCase()}`}`,
       base: vi,
-      scenes: Array.from({ length: p.sceneCount }, (_, si) => ({
+      scenes: Array.from({ length: p.sceneCount }, (_, si) => si).filter((si) => wantScene(vi, si)).map((si) => ({
         imagePrompt: t === 0 ? (p.images[vi]?.prompts[si] ?? "") : withTake(p.images[vi]?.prompts[si] ?? "", p.takeKind),
         videoPrompt: t === 0 ? (p.videos[vi]?.prompts[si] ?? "") : withTake(p.videos[vi]?.prompts[si] ?? "", p.takeKind),
         file: fileName(vi, si, "x.mp4").replace(/(\.\w+)$/, t === 0 ? "$1" : `${takeTag(t + 1, p.takeKind)}$1`),
         src: si,
       })),
-    }))).flat(),
+    })).filter((video) => video.scenes.length > 0)).flat(),
   }, null, 2);
 
   // Mais um take de uma cena só: manda um pacote de uma cena para a extensão (os outros ficam na biblioteca).
@@ -1350,7 +1357,7 @@ export function CloneWizard() {
           return;
         }
         if (!projRef.current.product.trim()) patch({ product: (look.split(/[.,;\n]/)[0] || look).slice(0, 80) });
-        const brief = `Vídeo curto de avatar apresentando ESTE produto (não invente outro produto): ${name ? `${name}. ` : ""}${look}. O avatar mostra o produto na mão, explica para que serve e chama para comprar.`.slice(0, 1500);
+        const brief = `Vídeo curto de avatar apresentando ESTE produto (não invente outro produto): ${name ? `${name}. ` : ""}${look}. O avatar mostra o produto na mão, explica para que serve e chama para comprar. Escolha o cenário, o avatar e o jeito de falar conforme o tipo do produto e o público dele.`.slice(0, 1500);
         patch({ ownCopy: brief, reference: brief });
       }).finally(() => setReadDone(true));
     };
@@ -1577,7 +1584,7 @@ export function CloneWizard() {
           </section>
         )}
 
-        {ready && <FlowRunPanel onRetake={retake} />}
+        {ready && <FlowRunPanel onRetake={retake} onVariations={(n) => { patch({ count: n, variations: [], images: [], videos: [], gen: {}, final: {}, approved: {}, ctaLocked: false }); void new Promise((resolve) => setTimeout(resolve, 150)).then(() => runAll(true)); }} />}
 
         {ready && (redirectIn !== null || redirectBlocked) && (
           <section role="status" className="space-y-2 rounded-[18px] border border-[#7B3FE4]/60 bg-[#7B3FE4]/15 p-4" data-testid="flow-redirect">
@@ -1594,14 +1601,29 @@ export function CloneWizard() {
         {ready && (
           <>
             <section className="space-y-4 rounded-[18px] border border-[#5BD69A]/40 bg-[#5BD69A]/10 p-5">
-              <p className="text-lg font-semibold">Tudo pronto: {p.variations.length} {p.variations.length === 1 ? "vídeo" : "vídeos"} × {p.sceneCount} {p.sceneCount === 1 ? "cena" : "cenas"}{(p.takes ?? 1) > 1 ? ` × ${p.takes} takes` : ""}</p>
-              <ul className="space-y-1 text-sm text-muted-foreground">
-                {p.variations.map((variation, vi) => (
-                  <li key={vi}>Vídeo {pad(vi + 1)} · {variation.title}</li>
-                ))}
-              </ul>
+              <p className="text-lg font-semibold">Tudo pronto: {chosenVideos} {chosenVideos === 1 ? "vídeo" : "vídeos"} · {chosenScenes} {chosenScenes === 1 ? "cena" : "cenas"}{(p.takes ?? 1) > 1 ? ` × ${p.takes} takes` : ""}</p>
+              <div data-testid="pick-scenes" className="space-y-2 rounded-[14px] border border-border bg-background/40 p-3">
+                <p className="text-xs text-muted-foreground">Não quer tudo isso? Desmarque o vídeo ou a cena que não quer gerar. Só o que ficar marcado vai para o Flow.</p>
+                <ul className="space-y-2 text-sm">
+                  {p.variations.map((variation, vi) => (
+                    <li key={vi} className="flex flex-wrap items-center gap-2">
+                      <label className="flex min-w-0 items-center gap-2">
+                        <input type="checkbox" checked={wantVideo(vi)} onChange={(event) => setSkip((cur) => ({ ...cur, [String(vi)]: !event.target.checked }))} aria-label={`Gerar o vídeo ${pad(vi + 1)}`} />
+                        <span className="min-w-0">Vídeo {pad(vi + 1)} · {variation.title}</span>
+                      </label>
+                      {wantVideo(vi) && Array.from({ length: p.sceneCount }, (_, si) => (
+                        <button key={si} type="button" aria-pressed={wantScene(vi, si)} aria-label={`Cena ${si + 1} do vídeo ${pad(vi + 1)}`}
+                          onClick={() => setSkip((cur) => ({ ...cur, [`${vi}-${si}`]: !cur[`${vi}-${si}`] }))}
+                          className={cn("rounded-full border px-2.5 py-0.5 text-xs", wantScene(vi, si) ? "border-[#7B3FE4] bg-[#7B3FE4]/25 text-foreground" : "border-border text-muted-foreground line-through")}>
+                          Cena {si + 1}
+                        </button>
+                      ))}
+                    </li>
+                  ))}
+                </ul>
+              </div>
               <PolicyNotice hits={policyHits} confirmed={policyOk === policyKey} onConfirm={(value) => setPolicyOk(value ? policyKey : "")} />
-              <Button type="button" size="lg" disabled={policyBlocked} className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white disabled:opacity-50" onClick={sendToFlow}>
+              <Button type="button" size="lg" disabled={policyBlocked || chosenScenes === 0} className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white disabled:opacity-50" onClick={sendToFlow}>
                 <ExternalLink className="size-4" /> Enviar para o Flow
               </Button>
               {copied === "flow-send" && <p className="text-xs text-[#5BD69A]">Enviado.</p>}
