@@ -1,6 +1,7 @@
 "use client";
 
 import { fileToDataUrl } from "@/lib/influencer-models";
+import { LoadingTips } from "@/components/app/loading-tips";
 import { PolicyNotice } from "@/components/app/policy-notice";
 import { checkPolicy, policySignature } from "@/lib/shopee-policy";
 import { LinkVideo } from "@/components/app/link-video";
@@ -915,7 +916,7 @@ export function CloneWizard() {
       mark(label, proj, AUTO_WEIGHT.text);
     };
     try {
-      if (proj.scenes.length !== proj.sceneCount) await text("scenes", "Entendendo o vídeo de referência", 1);
+      if (proj.scenes.length !== proj.sceneCount) await text("scenes", proj.reference === PHOTO_BRIEF ? "Entendendo a imagem de referência" : "Entendendo o vídeo de referência", 1);
       if (proj.copyMode === "mix" && !isMixReady(proj.mix)) await text("mix", "Escrevendo ganchos, corpos e CTAs diferentes", 1);
       if (!proj.variations.length) await text("variations", "Planejando as variações", 2);
       const needImages = proj.images.length !== proj.variations.length || !proj.images.length;
@@ -1410,10 +1411,10 @@ export function CloneWizard() {
               <span className="tabular-nums text-xs text-muted-foreground">{Math.round(pct)}%</span>
             </div>
             <div role="progressbar" aria-label="Progresso" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)} className="h-2 overflow-hidden rounded-full bg-border">
-              <div className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#7B3FE4] transition-[width] duration-700" style={{ width: `${pct}%` }} />
+              <div className="cg-shimmer h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#7B3FE4] transition-[width] duration-700" style={{ width: `${pct}%` }} />
             </div>
             <p className="text-xs text-muted-foreground">
-              {auto ? "Estamos preparando tudo por você. Pode esperar aqui, não precisa clicar em nada." : `${steps[Math.min(steps.length - 1, Math.floor(secs / 12))]} Pode esperar aqui.`}
+              {auto ? <><LoadingTips label={auto.label} /><span className="mt-1 block">Estamos preparando tudo por você. Pode esperar aqui, não precisa clicar em nada.</span></> : `${steps[Math.min(steps.length - 1, Math.floor(secs / 12))]} Pode esperar aqui.`}
               {assembling ? " Montar o vídeo leva de 1 a 3 minutos." : ""}
             </p>
           </div>

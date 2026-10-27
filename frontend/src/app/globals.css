@@ -326,6 +326,10 @@ button[class*="to-[#7B3FE4]"]:active::before { animation-delay: 0.12s; border-co
 .cg-dots i:nth-child(2) { animation-delay: .15s; } .cg-dots i:nth-child(3) { animation-delay: .3s; }
 @media (prefers-reduced-motion: reduce) { .cg-scanbar > span, .cg-dots i { animation: none; } .cg-scanbar > span { width: 100%; opacity: .6; } }
 
+@keyframes cg-shimmer-move { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+.cg-shimmer { background-image: linear-gradient(90deg, #8b5cf6 0%, #c9bbfa 45%, #8b5cf6 60%, #7b3fe4 100%); background-size: 200% 100%; animation: cg-shimmer-move 1.6s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .cg-shimmer { animation: none; } }
+
 /* Recriar exemplo: o prompt "entra" no chat */
 @keyframes cg-attach-ring { 0% { box-shadow: 0 0 0 0 #7B3FE4cc; } 100% { box-shadow: 0 0 0 22px #7B3FE400; } }
 @keyframes cg-reveal { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
