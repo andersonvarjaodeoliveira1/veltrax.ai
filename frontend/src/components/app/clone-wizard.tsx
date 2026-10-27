@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { takeKind, takeTag, withTake, type TakeKind } from "@/lib/take-kinds";
 import { FlowRunPanel } from "@/components/app/flow-run-panel";
 import { QuestChat } from "./clone-quest-chat";
-import { ArrowUp, Check, ChevronDown, ClipboardCopy, Download, ExternalLink, ImagePlus, Loader2, Lock, Pencil, Plus, RefreshCw, Sparkles, Trash2, Unlock, Upload, X } from "lucide-react";
+import { ArrowUp, Check, ChevronDown, ClipboardCopy, Download, ExternalLink, Loader2, Lock, Pencil, Plus, RefreshCw, Sparkles, Trash2, Unlock, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
@@ -436,7 +436,6 @@ export function CloneWizard() {
   const [imgs, setImgs] = useState<Record<string, string>>({});
   const [now, setNow] = useState(() => Date.now());
   const fileRef = useRef<HTMLInputElement>(null);
-  const photoStartRef = useRef<HTMLInputElement>(null);
   // Luz que corre em volta do botão de escolher o vídeo (mesma técnica do chat do influencer).
   // O ângulo fica no <html>: todas as luzes (botão e barras de progresso) herdam e giram juntas.
   useEffect(() => {
@@ -1384,7 +1383,7 @@ export function CloneWizard() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-xl font-semibold">Clonar um vídeo</h2>
-            <p className="text-sm text-muted-foreground">Suba o vídeo. O resto é automático.</p>
+            <p className="text-sm text-muted-foreground">Suba o vídeo ou a foto do produto. O resto é automático.</p>
           </div>
           <div className="flex gap-4 text-xs text-muted-foreground">
             <button type="button" onClick={reset} disabled={working} className="underline disabled:opacity-50">Novo projeto</button>
@@ -1443,8 +1442,8 @@ export function CloneWizard() {
 
         {!ready && !working && !askProduct && (
           <section className="space-y-4 rounded-[18px] border border-border bg-card p-5">
-            <input ref={fileRef} type="file" accept="video/*" className="sr-only" aria-label="Escolher o vídeo para clonar"
-              onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) chooseVideo(file); }} />
+            <input ref={fileRef} type="file" multiple accept="video/*,image/png,image/jpeg,image/webp" className="sr-only" aria-label="Escolher o vídeo ou imagem para clonar ou criar"
+              onChange={(event) => { const files = Array.from(event.target.files ?? []); event.target.value = ""; const video = files.find((file) => file.type.startsWith("video/")); if (video) chooseVideo(video); else if (files.length) choosePhotos(files.slice(0, 3)); }} />
             {(hasReference || refFile) && !questHold ? (
               <>
                 <p className="text-sm text-muted-foreground">{hasReference ? "O vídeo já foi lido. Falta preparar as cenas, as variações e os prompts." : `Recebi o seu vídeo${refFile ? ` (${refFile.name})` : ""}, mas ainda não consegui ler a fala. Se quiser tentar de novo, escolha outro vídeo.`}</p>
@@ -1491,7 +1490,7 @@ export function CloneWizard() {
                 {(() => {
                   const hasVideoNow = questHold || hasReference || !!refFile;
                   const stage = !hasVideoNow ? 1 : !questDone ? 2 : 3;
-                  const labels = ["Escolher o vídeo", "Responder as perguntas", "Preparar tudo", "Gerar no Flow"];
+                  const labels = ["Escolher vídeo ou imagem", "Responder as perguntas", "Preparar tudo", "Gerar no Flow"];
                   return (
                     <div role="progressbar" aria-label="Passos" aria-valuemin={0} aria-valuemax={4} aria-valuenow={stage - 1} className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                       {labels.map((label, i) => {
@@ -1513,22 +1512,12 @@ export function CloneWizard() {
                       className="relative flex w-full items-center gap-4 rounded-[22px] border border-transparent bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-6 py-6 text-left text-white shadow-[0_14px_36px_-14px_#7B3FE4] transition-transform hover:-translate-y-0.5">
                       <span aria-hidden className="grid size-12 shrink-0 place-items-center rounded-full bg-white/20"><Upload className="size-6" /></span>
                       <span className="min-w-0 flex-1">
-                        <span className="flex items-center gap-2 text-lg font-semibold">Escolher o vídeo que quero clonar <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-semibold">BETA</span></span>
-                        <span className="block text-sm opacity-90">suba o vídeo e o resto é automático</span>
+                        <span className="flex items-center gap-2 text-lg font-semibold">Escolher o vídeo ou imagem que quero clonar ou criar <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-semibold">BETA</span></span>
+                        <span className="block text-sm opacity-90">suba o vídeo ou a foto do produto e o resto é automático</span>
                       </span>
                     </button>
                   </div>
                   {!questHold && !hasReference && !refFile && <LinkVideo onFile={chooseVideo} onPhotos={(files, title) => choosePhotos(files, title)} photoLabel="Criar o vídeo com essas fotos" />}
-                  {!questHold && !hasReference && !refFile && (
-                    <>
-                      <input ref={photoStartRef} type="file" multiple accept="image/png,image/jpeg,image/webp" className="sr-only" aria-label="Escolher fotos do produto"
-                        onChange={(event) => { const files = Array.from(event.target.files ?? []); event.target.value = ""; if (files.length) choosePhotos(files.slice(0, 3)); }} />
-                      <button type="button" onClick={() => photoStartRef.current?.click()} className="flex w-full items-center gap-3 rounded-[18px] border border-dashed border-[#7B3FE4]/60 px-4 py-3 text-left hover:bg-white/5">
-                        <ImagePlus aria-hidden className="size-5 shrink-0 text-[#A98BFF]" />
-                        <span className="min-w-0"><span className="block text-sm font-medium">Não tenho vídeo: criar a partir da foto do produto</span><span className="block text-xs text-muted-foreground">Envie até 3 fotos e a IA cria o vídeo do avatar apresentando o produto.</span></span>
-                      </button>
-                    </>
-                  )}
                   {questHold && <p role="status" className="rounded-[14px] border border-[#5BD69A]/40 bg-[#5BD69A]/10 p-3 text-sm">✓ {questPhoto ? "Foto escolhida" : "Vídeo escolhido"}{questName ? `: ${questName}` : ""}. {readDone ? "Já li. Responda as perguntas e eu sigo." : "Lendo a fala enquanto você responde…"}</p>}
                   {(questHold || hasReference || !!refFile) ? (
                   <div ref={chatRef} className="scroll-mt-4">
@@ -1550,7 +1539,7 @@ export function CloneWizard() {
                    onFinish={() => { setQuestDone(true); setP((cur) => (cur.keyword.trim() ? cur : { ...cur, keyword: "QUERO" })); }} hasVideo={questHold || hasReference || !!refFile} />
                   </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground">Escolha o vídeo acima. Depois eu faço as perguntas e o resto é automático.</p>
+                    <p className="text-sm text-muted-foreground">Escolha o vídeo ou a imagem acima. Depois eu faço as perguntas e o resto é automático.</p>
                   )}
                 </div>
               </div>

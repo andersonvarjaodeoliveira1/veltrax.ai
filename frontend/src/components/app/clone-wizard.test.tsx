@@ -398,7 +398,7 @@ it("simple mode: upload one video and everything is prepared automatically, read
   render(<CloneWizard />);
 
   expect(await screen.findByRole("heading", { name: "Clonar um vídeo" })).toBeInTheDocument();
-  await user.upload(screen.getByLabelText("Escolher o vídeo para clonar"), new File(["x"], "ref.mp4", { type: "video/mp4" }));
+  await user.upload(screen.getByLabelText("Escolher o vídeo ou imagem para clonar ou criar"), new File(["x"], "ref.mp4", { type: "video/mp4" }));
   await user.click(await screen.findByRole("button", { name: "Usar o padrão no resto e escolher o vídeo" }));
 
   expect(await screen.findByText(/Tudo pronto: 2 vídeos × 3 cenas/)).toBeInTheDocument();
@@ -441,7 +441,7 @@ it("simple mode: product name, one sentence and photos reach the prompts", async
   expect(await screen.findByText(/Produto reconhecido/)).toBeInTheDocument();
   expect((photoForm as unknown as FormData).getAll("images")).toHaveLength(1);
 
-  await user.upload(screen.getByLabelText("Escolher o vídeo para clonar"), new File(["x"], "ref.mp4", { type: "video/mp4" }));
+  await user.upload(screen.getByLabelText("Escolher o vídeo ou imagem para clonar ou criar"), new File(["x"], "ref.mp4", { type: "video/mp4" }));
   await user.click(await screen.findByRole("button", { name: "Usar o padrão no resto e escolher o vídeo" }));
   expect(await screen.findByText(/Tudo pronto/)).toBeInTheDocument();
   const images = calls.find((c) => c.stage === "images");
@@ -517,8 +517,7 @@ describe("Começar pela foto do produto", () => {
     }));
     render(<CloneWizard />);
     await screen.findByTestId("start-quest");
-    expect(screen.getByRole("button", { name: /Não tenho vídeo: criar a partir da foto do produto/ })).toBeInTheDocument();
-    await userEvent.upload(screen.getByLabelText("Escolher fotos do produto"), new File(["x"], "garrafa.jpg", { type: "image/jpeg" }));
+    await userEvent.upload(screen.getByLabelText("Escolher o vídeo ou imagem para clonar ou criar"), new File(["x"], "garrafa.jpg", { type: "image/jpeg" }));
     expect(await screen.findByText(/Foto escolhida/, undefined, { timeout: 3000 })).toBeInTheDocument();
   });
 });
@@ -528,8 +527,8 @@ describe("Passos do começo", () => {
     window.localStorage.clear();
     render(<CloneWizard />);
     const quest = await screen.findByTestId("start-quest");
-    expect(quest).toHaveTextContent("Escolha o vídeo acima");
-    expect(screen.getByRole("button", { name: /Escolher o vídeo que quero clonar/ })).toBeInTheDocument();
+    expect(quest).toHaveTextContent("Escolha o vídeo ou a imagem acima");
+    expect(screen.getByRole("button", { name: /Escolher o vídeo ou imagem que quero clonar ou criar/ })).toBeInTheDocument();
     expect(screen.getByRole("progressbar", { name: "Passos" })).toHaveAttribute("aria-valuenow", "0");
   });
 });
@@ -553,9 +552,9 @@ it("does not ask for the video again once it was sent, and offers to retry", asy
   window.localStorage.setItem("gv-clonagem-view-v2", "simple");
   const user = userEvent.setup();
   render(<CloneWizard />);
-  await user.upload(await screen.findByLabelText("Escolher o vídeo para clonar"), new File(["x"], "ref.mp4", { type: "video/mp4" }));
+  await user.upload(await screen.findByLabelText("Escolher o vídeo ou imagem para clonar ou criar"), new File(["x"], "ref.mp4", { type: "video/mp4" }));
   expect(await screen.findByRole("button", { name: "Tentar de novo" })).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: /Escolher o vídeo que quero clonar/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /Escolher o vídeo ou imagem que quero clonar ou criar/ })).not.toBeInTheDocument();
 });
 
 it("runs the light around the choose-video button (even with reduced motion)", async () => {
@@ -574,7 +573,7 @@ it("lets the member paste the script when the video could not be read, then prep
   window.localStorage.setItem("gv-clonagem-view-v2", "simple");
   const user = userEvent.setup();
   render(<CloneWizard />);
-  await user.upload(await screen.findByLabelText("Escolher o vídeo para clonar"), new File(["x"], "ref.mp4", { type: "video/mp4" }));
+  await user.upload(await screen.findByLabelText("Escolher o vídeo ou imagem para clonar ou criar"), new File(["x"], "ref.mp4", { type: "video/mp4" }));
   const box = await screen.findByLabelText("O que o vídeo diz");
   await user.type(box, "Esse espartilho serve em qualquer corpo e eu te mostro como amarrar.");
   expect(await screen.findByRole("button", { name: "Preparar meus vídeos" })).toBeEnabled();
@@ -602,12 +601,12 @@ test("a video already uploaded and transcribed is not sent again", async () => {
   const user = userEvent.setup();
   const file = () => new File(["conteudo-do-video"], "ref.mp4", { type: "video/mp4", lastModified: 1 });
   const first = render(<CloneWizard />);
-  await user.upload(await screen.findByLabelText("Escolher o vídeo para clonar"), file());
+  await user.upload(await screen.findByLabelText("Escolher o vídeo ou imagem para clonar ou criar"), file());
   await user.click(await screen.findByRole("button", { name: "Usar o padrão no resto e escolher o vídeo" }));
   await waitFor(() => expect(drafts).toHaveBeenCalledTimes(1));
   first.unmount();
   render(<CloneWizard />);
-  await user.upload(await screen.findByLabelText("Escolher o vídeo para clonar"), file());
+  await user.upload(await screen.findByLabelText("Escolher o vídeo ou imagem para clonar ou criar"), file());
   await user.click(await screen.findByRole("button", { name: "Usar o padrão no resto e escolher o vídeo" }));
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 1500)); });
   expect(drafts).toHaveBeenCalledTimes(1);
@@ -659,7 +658,7 @@ test("the quest chat collects the choices step by step with Enter and then offer
   window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ sceneCount: 3 }));
   const user = userEvent.setup();
   render(<CloneWizard />);
-  await user.upload(await screen.findByLabelText("Escolher o vídeo para clonar"), videoFile());
+  await user.upload(await screen.findByLabelText("Escolher o vídeo ou imagem para clonar ou criar"), videoFile());
   await user.type(await screen.findByLabelText("Quantos vídeos você quer?"), "3{Enter}");
   await user.click(await screen.findByRole("button", { name: "4 cenas" }));
   await user.click(await screen.findByRole("button", { name: "1 take" }));
@@ -681,7 +680,7 @@ test("a single sentence answers several quest questions at once", async () => {
   window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ sceneCount: 3 }));
   const user = userEvent.setup();
   render(<CloneWizard />);
-  await user.upload(await screen.findByLabelText("Escolher o vídeo para clonar"), videoFile());
+  await user.upload(await screen.findByLabelText("Escolher o vídeo ou imagem para clonar ou criar"), videoFile());
   await user.type(await screen.findByLabelText("Quantos vídeos você quer?"), "2 vídeos de 5 cenas 2 takes em inglês{Enter}");
   // 2 takes: pergunta o tipo do take antes da copy.
   await user.click(await screen.findByRole("button", { name: "Variação" }));
