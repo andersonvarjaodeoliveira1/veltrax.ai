@@ -93,6 +93,9 @@ class Guard:
         if len(dq) >= PROBE_STRIKES:
             self.banned[ip] = now + BAN_SECONDS
             dq.clear()
+            from .security_alerts import buffer
+
+            buffer.add("ban", ip, f"{PROBE_STRIKES} erros 404 em 1 minuto", dedupe_seconds=300)
 
     def sweep(self, now: float | None = None) -> None:
         now = time.monotonic() if now is None else now
@@ -115,6 +118,10 @@ async def security_middleware(request, call_next):
         guard.sweep(now)
     reason = guard.check(request, now)
     if reason:
+        if reason != "banned":
+            from .security_alerts import buffer
+
+            buffer.add(reason, guard.client_ip(request), f"{request.method} {request.url.path[:80]} · {request.headers.get('user-agent', '')[:60]}", dedupe_seconds=300)
         status = 429 if reason in ("rate", "banned") else 403
         return JSONResponse({"detail": "Forbidden" if status == 403 else "Too many requests"}, status_code=status, headers={"Retry-After": "600"} if status == 429 else {})
     response = await call_next(request)

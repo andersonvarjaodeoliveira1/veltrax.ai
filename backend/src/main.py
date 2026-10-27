@@ -73,9 +73,13 @@ def create_app(
 
             from .test_accounts import sweep_forever
 
+            from .security_alerts import alert_forever
+
             sweeper = asyncio.create_task(sweep_forever(AsyncSessionLocal))
+            alerter = asyncio.create_task(alert_forever())
             yield
             sweeper.cancel()
+            alerter.cancel()
         finally:
             logger.info("🛑 Shutting down ClipGringa API...")
             await close_db()
@@ -203,6 +207,9 @@ def create_app(
 
     app.include_router(integrations_router)
     app.include_router(usage_router)
+    from .security_alerts import router as security_router
+
+    app.include_router(security_router)
     app.include_router(flow_router)
     app.include_router(account_router)
     app.include_router(folders_router)

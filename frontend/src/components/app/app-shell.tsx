@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { TestBanner } from "@/components/app/test-banner";
+import { SecurityWatch } from "@/components/app/security-watch";
 import { signOut, useSession } from "@/lib/auth-client";
 import { useBillingSummary } from "@/hooks/use-billing-summary";
 import { useTokenBalance } from "@/hooks/use-token-balance";
@@ -192,6 +193,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </header> : null}
         {user ? <TestBanner enabled={!admin} /> : null}
+        {user ? <SecurityWatch enabled={!admin} /> : null}
         {children}
       </div>
 

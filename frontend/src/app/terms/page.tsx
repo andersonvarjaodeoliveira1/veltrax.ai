@@ -151,7 +151,7 @@ export default function TermsOfServicePage() {
             <ul className="list-disc space-y-2 pl-6">
               <li>No infringing, unlawful, or harmful content.</li>
               <li>No attempts to probe, disrupt, or overload the Service or circumvent usage limits.</li>
-              <li>No use of bots, scrapers, crawlers or AI agents to scan, copy, clone or reverse engineer the hosted Service, its screens, prompts, workflows or data, and no use of its content to train AI models.</li>
+              <li>No use of bots, scrapers, crawlers or AI agents to scan, copy, clone or reverse engineer the hosted Service, its screens, prompts, workflows or data, and no use of its content to train AI models. For security we record signals such as attempts to open developer tools, view source or copy large parts of the interface (never the text you type or paste), and we may notify the operators.</li>
               <li>No reselling or white-labeling the hosted Service without our written permission.</li>
               <li>No use of the Service to violate third-party platform terms that apply to you.</li>
             </ul>
