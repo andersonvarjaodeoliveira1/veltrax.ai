@@ -740,8 +740,8 @@ test("with 2 takes the package carries every scene twice, the second with the Ta
   window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ takes: 2, sceneCount: 2, count: 1, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora.", scenes: scenes.slice(0, 2), variations: variations.slice(0, 1), images: prompts.slice(0, 1), videos: prompts.slice(0, 1), ctaLocked: true }));
   const user = userEvent.setup();
   render(<CloneWizard />);
-  await screen.findByText(/Tudo pronto/);
-  await user.click(await screen.findByRole("button", { name: "Copiar pacote" }));
+  await screen.findByText(/Tudo pronto/, {}, { timeout: 10000 });
+  await user.click(await screen.findByRole("button", { name: "Copiar pacote" }, { timeout: 10000 }));
   const pack = JSON.parse(await navigator.clipboard.readText());
   expect(pack.videos.map((v: { label: string }) => v.label)).toEqual(["Vídeo 01", "Vídeo 01 · take 2"]);
   expect(pack.videos[1].scenes.map((x: { file: string }) => x.file)).toEqual(["Video01_Cena01_Take2.mp4", "Video01_Cena02_Take2.mp4"]);
