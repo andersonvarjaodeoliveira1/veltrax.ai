@@ -1,16 +1,39 @@
 "use client";
 
-import { useState } from "react";
-import { Link2, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Download, Link2, Loader2 } from "lucide-react";
 import { normalizeShopeeUrl, readShopeeViaExtension } from "@/lib/shopee-bridge";
 
+const STEPS_SHOPEE = ["Abrindo o anúncio da Shopee…", "Procurando os vídeos do vendedor…", "Separando as fotos do produto…", "Quase pronto…"];
+const STEPS_LINK = ["Abrindo o link…", "Localizando o vídeo…", "Baixando o vídeo…", "Quase pronto…"];
+
+/** Animação enquanto o link é lido: barra de varredura + etapas que vão mudando. */
+function LinkLoading({ shopee }: { shopee: boolean }) {
+  const steps = shopee ? STEPS_SHOPEE : STEPS_LINK;
+  const [step, setStep] = useState(0);
+  useEffect(() => {
+    const timer = window.setInterval(() => setStep((current) => Math.min(current + 1, steps.length - 1)), 2200);
+    return () => window.clearInterval(timer);
+  }, [steps.length]);
+  return (
+    <div role="status" aria-live="polite" data-testid="link-loading" className="cg-scan space-y-2 rounded-[18px] border border-[#7B3FE4]/40 bg-[#7B3FE4]/10 p-4">
+      <p className="flex items-center gap-2 text-sm font-medium text-foreground"><span aria-hidden className="cg-dots"><i /><i /><i /></span><span key={step} className="qc-in">{steps[step]}</span></p>
+      <div aria-hidden className="cg-scanbar"><span /></div>
+      <p className="text-xs text-muted-foreground">Pode levar alguns segundos. Não feche esta tela.</p>
+    </div>
+  );
+}
+
 /** Cola o link de um vídeo (TikTok, Instagram, YouTube...): o servidor baixa e o vídeo segue como se tivesse sido enviado. */
-export function LinkVideo({ onFile, disabled }: { onFile: (file: File) => void; disabled?: boolean }) {
+export function LinkVideo({ onFile, onPhotos, disabled }: { onFile: (file: File) => void; onPhotos?: (files: File[], title: string) => void; disabled?: boolean }) {
   const [link, setLink] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [videos, setVideos] = useState<{ url: string; poster: string }[]>([]);
   const [title, setTitle] = useState("");
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [photoNote, setPhotoNote] = useState("");
+  const isShopee = !!normalizeShopeeUrl(link);
 
   async function toFile(response: Response) {
     const blob = await response.blob();
@@ -28,16 +51,32 @@ export function LinkVideo({ onFile, disabled }: { onFile: (file: File) => void; 
     } catch { setError("Não consegui baixar esse vídeo agora. Tente de novo."); } finally { setBusy(false); }
   }
 
+  async function applyPhotos() {
+    if (!onPhotos) return;
+    setBusy(true);
+    try {
+      const files = await Promise.all(photos.slice(0, 3).map(async (src, index) => {
+        const response = await fetch(src, { referrerPolicy: "no-referrer" });
+        const blob = await response.blob();
+        return new File([blob], `produto-${index + 1}.jpg`, { type: blob.type || "image/jpeg" });
+      }));
+      onPhotos(files, title);
+      setPhotoNote("Fotos adicionadas ao produto. Agora escolha um vídeo para clonar (suba o arquivo ou cole outro link).");
+    } catch { setError("Não consegui carregar essas fotos. Baixe e anexe no bloco do produto."); } finally { setBusy(false); }
+  }
+
   async function load() {
-    setBusy(true); setError(""); setVideos([]);
+    setBusy(true); setError(""); setVideos([]); setPhotos([]); setPhotoNote("");
     const shopee = normalizeShopeeUrl(link);
     if (shopee) {
       // A Shopee bloqueia o servidor, mas não o navegador da pessoa: a extensão abre o anúncio e lê os vídeos.
       const read = await readShopeeViaExtension(shopee);
       if (read.ok) {
         setBusy(false);
-        if (!read.videos.length) { setError("Esse anúncio não tem vídeo do vendedor. Use “Importar da Shopee” no bloco do produto para pegar as fotos."); return; }
-        setTitle(read.title); setVideos(read.videos);
+        setTitle(read.title);
+        if (read.videos.length) setVideos(read.videos);
+        if (read.images.length) setPhotos(read.images.slice(0, 9));
+        if (!read.videos.length && !read.images.length) setError("Abri o anúncio, mas não achei vídeo nem fotos do vendedor. Confira se o link é de um produto e tente de novo.");
         return;
       }
       if (read.error === "login") { setBusy(false); setError("A Shopee pediu login no seu navegador. Entre na Shopee e tente de novo."); return; }
@@ -71,6 +110,30 @@ export function LinkVideo({ onFile, disabled }: { onFile: (file: File) => void; 
         </button>
       </form>
       </div>
+      {busy && videos.length === 0 && <LinkLoading shopee={isShopee} />}
+      {photos.length > 0 && (
+        <div data-testid="shopee-photos" className="space-y-2 rounded-[18px] border border-border bg-background/40 p-3">
+          <p className="text-xs text-muted-foreground">
+            {videos.length ? "Fotos do anúncio" : <>Este anúncio não tem vídeo do vendedor, mas tem <strong className="text-foreground">{photos.length} {photos.length === 1 ? "foto" : "fotos"}</strong></>}
+            {title ? <> de <strong className="text-foreground">{title}</strong></> : null}. São da galeria do vendedor.
+          </p>
+          <ul className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+            {photos.map((src, index) => (
+              <li key={src} className="relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={src} alt={`Foto ${index + 1} do anúncio`} referrerPolicy="no-referrer" className="aspect-square w-full rounded-[12px] object-cover" />
+                <a href={src} download={`produto-${index + 1}.jpg`} target="_blank" rel="noreferrer" aria-label={`Baixar foto ${index + 1}`} className="absolute bottom-1 right-1 grid size-7 place-items-center rounded-full bg-black/60 text-white"><Download className="size-3.5" /></a>
+              </li>
+            ))}
+          </ul>
+          {onPhotos && !photoNote && (
+            <button type="button" disabled={busy || disabled} onClick={() => void applyPhotos()} className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-4 py-2 text-xs font-medium text-white disabled:opacity-50">
+              Usar essas fotos no meu produto
+            </button>
+          )}
+          {photoNote && <p role="status" className="text-xs font-medium text-[#5BD69A]">{photoNote}</p>}
+        </div>
+      )}
       {videos.length > 0 && (
         <div data-testid="shopee-videos" className="space-y-2 rounded-[18px] border border-border bg-background/40 p-3">
           <p className="text-xs text-muted-foreground">{title ? <>Vídeos do anúncio <strong className="text-foreground">{title}</strong>. </> : "Vídeos do anúncio. "}Escolha qual clonar (só vídeos do vendedor, não de avaliações).</p>

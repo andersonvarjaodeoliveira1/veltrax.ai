@@ -1494,7 +1494,7 @@ export function CloneWizard() {
                       </span>
                     </button>
                   </div>
-                  {!questHold && !hasReference && !refFile && <LinkVideo onFile={chooseVideo} />}
+                  {!questHold && !hasReference && !refFile && <LinkVideo onFile={chooseVideo} onPhotos={(files, title) => { if (title && !p.product.trim()) patch({ product: title.slice(0, 120) }); void addProductPhotos(files); }} />}
                   {questHold && <p role="status" className="rounded-[14px] border border-[#5BD69A]/40 bg-[#5BD69A]/10 p-3 text-sm">✓ Vídeo escolhido{questName ? `: ${questName}` : ""}. {readDone ? "Já li. Responda as perguntas e eu sigo." : "Lendo a fala enquanto você responde…"}</p>}
                   {(questHold || hasReference || !!refFile) ? (
                   <div ref={chatRef} className="scroll-mt-4">

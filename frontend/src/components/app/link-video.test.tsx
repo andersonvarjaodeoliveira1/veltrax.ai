@@ -50,11 +50,33 @@ describe("LinkVideo · Shopee pela extensão", () => {
     expect(JSON.parse(calls[0])).toEqual({ cdn_url: "https://down-bs.vod.susercontent.com/api/v4/1/mms/b.mp4" });
   });
 
-  it("explica quando o anúncio não tem vídeo do vendedor", async () => {
-    bridge.read.mockResolvedValue({ ok: true, title: "Bola", images: ["x"], videos: [] });
+  it("sem vídeo do vendedor mostra as fotos, sem erro, e deixa usar no produto", async () => {
+    bridge.read.mockResolvedValue({ ok: true, title: "Bola", images: ["https://down-br.img.susercontent.com/file/a", "https://down-br.img.susercontent.com/file/b"], videos: [] });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(new Blob(["img"], { type: "image/jpeg" }), { status: 200 })));
+    const onPhotos = vi.fn();
+    render(<LinkVideo onFile={() => {}} onPhotos={onPhotos} />);
+    await userEvent.type(screen.getByLabelText("Link do vídeo para clonar"), "https://shopee.com.br/Bola-i.1.2");
+    await userEvent.click(screen.getByRole("button", { name: "Usar o link" }));
+    expect(await screen.findByTestId("shopee-photos")).toHaveTextContent("não tem vídeo do vendedor, mas tem 2 fotos");
+    expect(screen.queryByRole("alert")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Usar essas fotos no meu produto" }));
+    await vi.waitFor(() => expect(onPhotos).toHaveBeenCalled());
+    expect(onPhotos.mock.calls[0][0]).toHaveLength(2);
+  });
+
+  it("mostra a animação de carregamento enquanto lê o link", async () => {
+    bridge.read.mockReturnValue(new Promise(() => {}));
     render(<LinkVideo onFile={() => {}} />);
     await userEvent.type(screen.getByLabelText("Link do vídeo para clonar"), "https://shopee.com.br/Bola-i.1.2");
     await userEvent.click(screen.getByRole("button", { name: "Usar o link" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("não tem vídeo do vendedor");
+    expect(await screen.findByTestId("link-loading")).toHaveTextContent("Abrindo o anúncio da Shopee");
+  });
+
+  it("avisa quando não acha nem vídeo nem fotos", async () => {
+    bridge.read.mockResolvedValue({ ok: true, title: "", images: [], videos: [] });
+    render(<LinkVideo onFile={() => {}} />);
+    await userEvent.type(screen.getByLabelText("Link do vídeo para clonar"), "https://shopee.com.br/Bola-i.1.2");
+    await userEvent.click(screen.getByRole("button", { name: "Usar o link" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("não achei vídeo nem fotos");
   });
 });
