@@ -1897,3 +1897,188 @@ async def help_report(request: Request, db: AsyncSession = Depends(get_db)):
         except Exception:
             logger.warning("help report webhook failed")
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Importar fotos de produto da Shopee (link ou arquivos) — alimenta o produto dos vídeos.
+# ---------------------------------------------------------------------------
+SHOPEE_HOSTS = ("shopee.com.br", "shopee.com", "shp.ee", "shopee.co.id", "shopee.com.mx", "shopee.ph", "shopee.vn", "shopee.sg", "shopee.tw", "shopee.co.th", "shopee.com.my")
+SHOPEE_MAX_IMAGES = 9
+SHOPEE_MAX_ZIP_BYTES = 40 * 1024 * 1024
+SHOPEE_MAX_ENTRY_BYTES = 8 * 1024 * 1024
+SHOPEE_BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
+
+
+def _is_shopee_url(url: str) -> bool:
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower()
+    return parsed.scheme == "https" and any(host == h or host.endswith("." + h) for h in SHOPEE_HOSTS)
+
+
+def _shopee_page_images(html: str) -> tuple[str, list[str]]:
+    """Título do produto e imagens da GALERIA DO VENDEDOR (og:image, JSON-LD e a lista "images" do anúncio).
+    Fotos de avaliações de clientes, avatares, banners e produtos recomendados ficam de fora de propósito."""
+    import html as _html
+    import re as _re
+
+    title = ""
+    m = _re.search(r'<meta[^>]+property=["\']og:title["\'][^>]+content=["\']([^"\']+)', html) or _re.search(r"<title[^>]*>([^<]+)</title>", html)
+    if m:
+        title = _html.unescape(m.group(1)).strip()
+        title = _re.sub(r"\s*[|\-–]\s*Shopee.*$", "", title, flags=_re.I)[:120]
+    urls: list[str] = []
+    cdn = "https://down-br.img.susercontent.com/file/"
+    review_words = _re.compile(r"rating|review|comment|cmt|avalia|feedback|buyer|customer|shop_?icon|avatar|logo|banner|recommend|similar|voucher|flash|video_thumb", _re.I)
+
+    def add(url: str) -> None:
+        url = _html.unescape(url).replace("\\u002F", "/").replace("\\/", "/").strip()
+        if url.startswith("//"):
+            url = "https:" + url
+        url = _re.sub(r"_tn(?=$|[?#])", "", url)  # miniatura -> tamanho original
+        if url.startswith("https://") and url not in urls:
+            urls.append(url)
+
+    # 1) Imagens declaradas pela própria página como imagem do produto.
+    for pattern in (
+        r'<meta[^>]+property=["\']og:image(?::secure_url)?["\'][^>]+content=["\']([^"\']+)',
+        r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image',
+    ):
+        for found in _re.findall(pattern, html):
+            add(found)
+    for found in _re.findall(r'"image"\s*:\s*\[([^\]]+)\]', html):
+        for item in _re.findall(r'"(https?:[^"]+)"', found):
+            add(item)
+    # 2) Lista "images" do anúncio (galeria do vendedor), só os identificadores de arquivo.
+    for match in _re.finditer(r'"images"\s*:\s*\[([^\]]{20,1500})\]', html):
+        before = html[max(0, match.start() - 160) : match.start()]
+        if review_words.search(before):
+            continue
+        for ident in _re.findall(r'"([A-Za-z0-9_\-]{20,})"', match.group(1)):
+            add(cdn + ident)
+    # 3) Último recurso: arquivos do CDN soltos no HTML, ignorando os que aparecem perto de avaliações, avatares, banners e recomendados.
+    if len(urls) < 2:
+        for match in _re.finditer(r"https?:(?:\\?/){2}[\w.\-]*(?:susercontent\.com|shopee\.com\.br|shopee\.com)(?:\\?/)file(?:\\?/)[A-Za-z0-9_\-]{20,}(?:_tn)?", html):
+            before = html[max(0, match.start() - 300) : match.start()]
+            if review_words.search(before):
+                continue
+            add(match.group(0))
+            if len(urls) >= 6:
+                break
+    return title, urls[:SHOPEE_MAX_IMAGES]
+
+
+def _prepare_image(raw: bytes) -> tuple[bytes, str] | None:
+    """Confere que é uma imagem de verdade. Mantém o arquivo ORIGINAL do produto quando ele é leve (até 1,5 MB e 2048 px);
+    só reduz (JPEG, 1280 px) o que for pesado demais. None se não for imagem."""
+    import cv2
+    import numpy as np
+
+    arr = np.frombuffer(raw, dtype=np.uint8)
+    img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    if img is None or img.shape[0] < 80 or img.shape[1] < 80:
+        return None
+    longest = max(img.shape[:2])
+    mime = "image/png" if raw[:8] == b"\x89PNG\r\n\x1a\n" else "image/webp" if raw[:4] == b"RIFF" and raw[8:12] == b"WEBP" else "image/jpeg" if raw[:3] == b"\xff\xd8\xff" else ""
+    if mime and len(raw) <= 1_500_000 and longest <= 2048:
+        return raw, mime
+    if longest > 1280:
+        scale = 1280 / longest
+        img = cv2.resize(img, (round(img.shape[1] * scale), round(img.shape[0] * scale)), interpolation=cv2.INTER_AREA)
+    ok, buf = cv2.imencode(".jpg", img, [int(cv2.IMWRITE_JPEG_QUALITY), 88])
+    return (bytes(buf), "image/jpeg") if ok else None
+
+
+def _images_from_zip(data: bytes) -> list[tuple[str, bytes]]:
+    import io
+    import zipfile
+
+    out: list[tuple[str, bytes]] = []
+    total = 0
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        for info in archive.infolist()[:200]:
+            name = info.filename.rsplit("/", 1)[-1]
+            if info.is_dir() or name.startswith(".") or not name.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
+                continue
+            if info.file_size > SHOPEE_MAX_ENTRY_BYTES or total + info.file_size > SHOPEE_MAX_ZIP_BYTES:
+                continue
+            with archive.open(info) as handle:
+                raw = handle.read(SHOPEE_MAX_ENTRY_BYTES + 1)
+            if len(raw) > SHOPEE_MAX_ENTRY_BYTES:
+                continue
+            total += len(raw)
+            out.append((name, raw))
+            if len(out) >= SHOPEE_MAX_IMAGES * 2:
+                break
+    return out
+
+
+@router.post("/shopee-images")
+async def shopee_images(request: Request, db: AsyncSession = Depends(get_db)):
+    """Recebe o link de um produto da Shopee e/ou arquivos (fotos ou .zip) e devolve as imagens do produto, já reduzidas."""
+    import base64
+
+    import httpx
+
+    user_id = await _user_id(request, db)
+    _check_script_rate(user_id)
+    form = await request.form()
+    link = str(form.get("url") or "").strip()[:500]
+    raw_files: list[tuple[str, bytes]] = []
+    for item in form.getlist("files")[:20]:
+        if not hasattr(item, "read"):
+            continue
+        data = await item.read(SHOPEE_MAX_ZIP_BYTES + 1)
+        if len(data) > SHOPEE_MAX_ZIP_BYTES:
+            raise HTTPException(status_code=413, detail="Arquivo grande demais (máximo 40 MB).")
+        name = (getattr(item, "filename", "") or "arquivo")[-80:]
+        if name.lower().endswith(".zip") or data[:4] == b"PK\x03\x04":
+            try:
+                raw_files.extend(await asyncio.to_thread(_images_from_zip, data))
+            except Exception:
+                raise HTTPException(status_code=400, detail="Não consegui abrir esse .zip.")
+        else:
+            raw_files.append((name, data))
+
+    title = ""
+    source = "files"
+    if not raw_files:
+        if not link:
+            raise HTTPException(status_code=400, detail="Cole o link do produto da Shopee ou anexe as imagens.")
+        if not link.startswith("http"):
+            link = "https://" + link
+        if not _is_shopee_url(link):
+            raise HTTPException(status_code=400, detail="Esse link não é da Shopee.")
+        source = "link"
+        headers = {"User-Agent": SHOPEE_BROWSER_UA, "Accept-Language": "pt-BR,pt;q=0.9", "Accept": "text/html,application/xhtml+xml,*/*;q=0.8"}
+        try:
+            async with httpx.AsyncClient(timeout=20, headers=headers) as http:
+                page, _kind = await _safe_get(http, link, 3 * 1024 * 1024)
+                title, urls = _shopee_page_images(page.decode("utf-8", "ignore"))
+                for image_url in urls:
+                    if len(raw_files) >= SHOPEE_MAX_IMAGES:
+                        break
+                    try:
+                        body, kind = await _safe_get(http, image_url, SHOPEE_MAX_ENTRY_BYTES)
+                    except Exception:
+                        continue
+                    if kind.startswith("image/") and len(body) > 8_000:
+                        raw_files.append((f"shopee-{len(raw_files) + 1}.jpg", body))
+        except Exception:
+            logger.info("shopee link fetch failed", exc_info=True)
+        if not raw_files:
+            raise HTTPException(status_code=422, detail="A Shopee não deixou ler esse link automaticamente. Anexe as imagens (ou um .zip) do produto.")
+
+    images: list[dict[str, str]] = []
+    for name, data in raw_files:
+        prepared = await asyncio.to_thread(_prepare_image, data)
+        if not prepared:
+            continue
+        body, mime = prepared
+        images.append({"name": name, "image": f"data:{mime};base64," + base64.b64encode(body).decode()})
+        if len(images) >= SHOPEE_MAX_IMAGES:
+            break
+    if not images:
+        raise HTTPException(status_code=422, detail="Não achei imagens de produto nesse arquivo.")
+    return {"source": source, "title": title, "images": images, "seller_gallery": source == "link"}

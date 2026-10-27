@@ -1,5 +1,6 @@
 "use client";
 
+import { ShopeeImport } from "@/components/app/shopee-import";
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, ArrowUp, Check, ClipboardCopy, ImagePlus, Loader2, Plus, Search, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -324,6 +325,7 @@ export function InfluencerChat() {
   const [found, setFound] = useState<{ name: string; summary: string; look: string; image: string; image_url: string; generated?: boolean; suggestion?: string } | null>(null);
   const seenPhotos = useRef<string[]>([]);
   const productRef = useRef<HTMLInputElement>(null);
+  const [shopeeOpen, setShopeeOpen] = useState(false);
   const lookRef = useRef("");
   const attachRef = useRef<HTMLInputElement>(null);
   const [attached, setAttached] = useState<File[]>([]);
@@ -1060,8 +1062,10 @@ export function InfluencerChat() {
             <Button type="button" variant="outline" className="rounded-full" onClick={() => productRef.current?.click()} disabled={busy !== ""}><ImagePlus className="size-4" /> {t("attachPhoto")}</Button>
             <Button type="button" variant="outline" className="rounded-full" onClick={() => { setNameOpen(true); setLinkOpen(false); }} disabled={busy !== ""}><Search className="size-4" /> {t("typeName")}</Button>
             <Button type="button" variant="outline" className="rounded-full" onClick={() => { setLinkOpen(true); setNameOpen(false); }} disabled={busy !== ""}>{t("pasteLink")}</Button>
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => setShopeeOpen((open) => !open)} disabled={busy !== ""}>Importar da Shopee</Button>
             <Button type="button" variant="ghost" className="rounded-full" onClick={() => void createProduct()} disabled={busy !== ""}>{t("noProduct")}</Button>
           </div>
+          {shopeeOpen && <ShopeeImport disabled={busy !== ""} onUse={(files, title) => { if (title) setProductName(title); setShopeeOpen(false); void readProduct(files); }} />}
           {nameOpen && !found && (
             <form className="flex gap-2" onSubmit={(event) => { event.preventDefault(); void searchProduct(); }}>
               <input value={productName} onChange={(event) => setProductName(event.target.value)} maxLength={80} aria-label={t("typeName")} placeholder={t("namePh")} className="min-w-0 flex-1 rounded-full border border-border bg-background px-4 py-2 text-sm" />

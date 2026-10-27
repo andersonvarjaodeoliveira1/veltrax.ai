@@ -1,5 +1,6 @@
 "use client";
 
+import { ShopeeImport } from "@/components/app/shopee-import";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { takeKind, takeTag, withTake, type TakeKind } from "@/lib/take-kinds";
 import { FlowRunPanel } from "@/components/app/flow-run-panel";
@@ -1285,6 +1286,7 @@ export function CloneWizard() {
                 <Field label="Em uma frase: o que ele faz?">
                   <textarea value={p.productInfo} onChange={(event) => patch({ productInfo: event.target.value })} rows={2} maxLength={400} placeholder="Ex.: hidrata a pele por 24 horas, sem deixar oleosa" className={inputClass} />
                 </Field>
+                <ShopeeImport disabled={lookState === "reading"} onUse={(files, title) => { if (title && !p.product.trim()) patch({ product: title.slice(0, 120) }); void addProductPhotos(files); }} />
                 <Group label="Fotos do produto (até 3)">
                   <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-dashed border-border px-4 py-2 text-sm hover:text-foreground">
                     <Upload className="size-4" /> {productPhotos.length ? "Trocar as fotos" : "Escolher fotos"}
