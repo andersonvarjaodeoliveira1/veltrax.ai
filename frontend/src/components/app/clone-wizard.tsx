@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { takeKind, takeTag, withTake, type TakeKind } from "@/lib/take-kinds";
 import { FlowRunPanel } from "@/components/app/flow-run-panel";
 import { QuestChat } from "./clone-quest-chat";
-import { ArrowUp, Check, ClipboardCopy, Download, ExternalLink, Loader2, Lock, Pencil, Plus, RefreshCw, Sparkles, Trash2, Unlock, Upload, X } from "lucide-react";
+import { ArrowUp, Check, ChevronDown, ClipboardCopy, Download, ExternalLink, Loader2, Lock, Pencil, Plus, RefreshCw, Sparkles, Trash2, Unlock, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
@@ -1334,50 +1334,6 @@ export function CloneWizard() {
       void copy("flow-send", flowPackage());
       void pushPackage(flowPackage()).then((ok) => { if (!ok) window.open(FLOW_HOME_URL, "_blank", "noopener"); });
     };
-    const adjustSections = (
-      <div className="space-y-4">
-              {([
-                ["2", "Idioma da fala", "A voz e os textos do vídeo saem neste idioma.",
-                  <Chips key="l" label="Idioma da fala" value={p.language} onPick={chooseLanguage} options={LANGUAGES.map((l) => ({ value: l.value, text: l.text }))} />],
-                ["3", "Quantos vídeos e quantas cenas", "Cada cena tem cerca de 8 segundos. Mais vídeos e cenas demoram mais no Flow.",
-                  <div key="q" className="space-y-4">
-                    <Group label="Quantos vídeos">
-                      <Chips label="Quantos vídeos" value={p.count} onPick={(count) => patch({ count })} options={COUNT_OPTIONS.map((n) => ({ value: n, text: String(n) }))} />
-                    </Group>
-                    <Group label="Quantas cenas por vídeo">
-                      <Chips label="Quantas cenas" value={p.sceneCount} onPick={chooseScenes} options={[1, 2, 3, 4, 5, 6].map((n) => ({ value: n, text: n === 1 ? "1 cena" : `${n} cenas` }))} />
-                    </Group>
-                    <Group label="Modelo do Flow" hint="Lower Priority não gasta créditos. Os outros modelos gastam créditos do seu Flow.">
-                      {modelChooser()}
-                    </Group>
-                    <p className="rounded-[12px] bg-[#7B3FE4]/10 px-4 py-3 text-sm text-muted-foreground" data-testid="qty-summary">
-                      <span className="font-medium text-foreground">{p.count} {p.count === 1 ? "vídeo" : "vídeos"} × {p.sceneCount} {p.sceneCount === 1 ? "cena" : "cenas"} = {p.count * p.sceneCount} cenas</span> · cada vídeo fica com cerca de {p.sceneCount * 8} segundos.
-                    </p>
-                  </div>],
-                ["4", "Palavra-chave da CTA", "O que a pessoa comenta para receber o link.",
-                  <KeywordPicker key="k" keyword={p.keyword} keepCase={p.keepCase} placeholder="Ou escreva outra palavra" onChange={(keyword) => patch({ keyword })} onKeepCase={(keepCase) => patch({ keepCase, keyword: keepCase ? p.keyword : p.keyword.toUpperCase() })} />],
-                ["5", "Frase final", "O que a pessoa ouve no fim. Use {KEYWORD} onde vai a palavra-chave.",
-                  <div key="c" className="space-y-3">
-                    <Chips label="Frases prontas" value={p.cta} onPick={(cta) => patch({ cta })} options={(CTA_BY_LANG[p.language] ?? CTA_PRESETS).map((c) => ({ value: c, text: c.replace("{KEYWORD}", "…") }))} />
-                    <input value={p.cta} onChange={(event) => patch({ cta: event.target.value })} maxLength={200} aria-label="Escreva a sua frase final" placeholder="Ou escreva a sua frase, ex.: Comente {KEYWORD} e receba o guia" className={inputClass} />
-                    <p className="rounded-[12px] bg-[#7B3FE4]/10 px-4 py-3 text-sm text-muted-foreground">
-                      No final o vídeo diz: <span className="font-medium text-foreground">“{p.cta.replace("{KEYWORD}", p.keyword.trim() || "PALAVRA")}”</span>
-                    </p>
-                  </div>],
-              ] as [string, string, string, React.ReactNode][]).map(([number, title, hint, body]) => (
-                <section key={number} aria-label={`${number} · ${title}`} className="space-y-3 rounded-[22px] border border-white/10 bg-card p-5">
-                  <div className="flex items-center gap-3">
-                    <span aria-hidden className="grid size-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-sm font-semibold text-white">{number}</span>
-                    <div>
-                      <p className="font-semibold">{title}</p>
-                      <p className="text-xs text-muted-foreground">{hint}</p>
-                    </div>
-                  </div>
-                  {body}
-                </section>
-              ))}
-      </div>
-    );
     const assembling_ = Object.values(built).some((b) => b.state === "running");
     return (
       <div className="space-y-5">
@@ -1562,10 +1518,6 @@ export function CloneWizard() {
                   ) : (
                     <p className="text-sm text-muted-foreground">Escolha o vídeo acima. Depois eu faço as perguntas e o resto é automático.</p>
                   )}
-                  <details className="group rounded-[18px] border border-white/10 bg-card p-4 text-sm" data-testid="quest-adjust">
-                    <summary className="cursor-pointer list-none font-medium">Ajustes (opcional): idioma, quantidade, palavra-chave e frase final <span aria-hidden className="text-muted-foreground">⌄</span></summary>
-                    <div className="mt-4 border-t border-white/10 pt-4">{adjustSections}</div>
-                  </details>
                 </div>
               </div>
             )}
@@ -1582,7 +1534,7 @@ export function CloneWizard() {
                       <span className="block font-medium">Falar sobre o meu produto (opcional)</span>
                       <span className="block text-xs text-muted-foreground">Nome, o que ele faz e fotos</span>
                     </span>
-                    <span aria-hidden className="text-muted-foreground transition-transform group-open:rotate-180">⌄</span>
+                    <ChevronDown aria-hidden className="size-4 text-muted-foreground transition-transform group-open:rotate-180" />
                   </summary>
                   <div className="mt-4 border-t border-white/10 pt-4">{productFields}</div>
                 </details>

@@ -304,6 +304,18 @@ button[class*="to-[#7B3FE4]"]:active::before { animation-delay: 0.12s; border-co
 }
 .cg-orbit::after { filter: blur(14px); inset: -6px; padding: 8px; opacity: 1; }
 
+/* Caixa de colar o link do vídeo: borda que gira em verde, rosa e roxo para chamar a atenção */
+@property --cg-link-angle { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
+@keyframes cg-link-spin { to { --cg-link-angle: -360deg; } }
+@keyframes cg-link-breathe { 0%, 100% { box-shadow: 0 0 0 0 #5bd69a00; } 50% { box-shadow: 0 0 26px -6px #5bd69a99; } }
+.cg-linkglow {
+  border-radius: 28px;
+  padding: 2px;
+  background: conic-gradient(from var(--cg-link-angle), #5bd69a 0%, #a98bff 22%, #f0466b 40%, transparent 55%, transparent 100%);
+  animation: cg-link-spin 3.6s linear infinite, cg-link-breathe 2.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) { .cg-linkglow { animation: none; background: linear-gradient(135deg, #5bd69a, #a98bff); } }
+
 /* Recriar exemplo: o prompt "entra" no chat */
 @keyframes cg-attach-ring { 0% { box-shadow: 0 0 0 0 #7B3FE4cc; } 100% { box-shadow: 0 0 0 22px #7B3FE400; } }
 @keyframes cg-reveal { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }

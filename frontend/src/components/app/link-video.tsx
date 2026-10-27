@@ -29,7 +29,8 @@ export function LinkVideo({ onFile, disabled }: { onFile: (file: File) => void; 
 
   return (
     <div className="space-y-1.5">
-      <form className="flex flex-wrap gap-2" onSubmit={(event) => { event.preventDefault(); if (link.trim() && !busy) void load(); }}>
+      <div className="cg-linkglow">
+      <form className="flex flex-wrap gap-2 rounded-[26px] bg-card p-3" onSubmit={(event) => { event.preventDefault(); if (link.trim() && !busy) void load(); }}>
         <div className="relative min-w-0 flex-1">
           <Link2 aria-hidden className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <input value={link} onChange={(event) => setLink(event.target.value)} disabled={busy || disabled} aria-label="Link do vídeo para clonar" placeholder="Ou cole o link do vídeo (TikTok, Instagram, YouTube, Shopee)"
@@ -39,6 +40,7 @@ export function LinkVideo({ onFile, disabled }: { onFile: (file: File) => void; 
           {busy ? <Loader2 className="size-4 animate-spin" /> : null}{busy ? "Baixando o vídeo…" : "Usar o link"}
         </button>
       </form>
+      </div>
       {error && <p role="alert" className="px-2 text-xs text-[#F0466B]">{error}</p>}
     </div>
   );
