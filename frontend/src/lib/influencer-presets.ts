@@ -37,3 +37,15 @@ export const PRESET_MODELS: PresetModel[] = [
     model: { name: "Gabi", persona: { name: "Gabi", age: "26", look: "Brazilian woman, 26, brown hair in a high ponytail, athletic build, tan skin, brown eyes, black sports top, light sweat on forehead", setting: "gym with mirrors and equipment behind her, post-workout, bright artificial light" }, voice: "Voz feminina enérgica e motivadora, português do Brasil, respiração leve de quem treinou" },
     facePrompt: face("a Brazilian woman, 26, brown hair in a high ponytail, athletic build, tan skin, brown eyes, black sports top, light sweat on forehead", "post-workout mirror selfie in a gym, equipment and mirrors behind her, bright artificial light", PHONE) },
 ];
+
+/** Texto pronto que vai para a caixa de prompt ao escolher a modelo. O membro só completa o produto (ou envia assim, e a IA pergunta). */
+export const PRESET_BRIEFS: Record<string, string> = {
+  "p-camila": "Influencer brasileira de 24 anos, morena, cabelo escuro ondulado longo, sorriso descontraído. Cenário: quarto claro com espelho de corpo inteiro, vídeo em selfie no espelho mostrando o produto. Tom jovem e animado, jeito de quem conta uma descoberta para as amigas.",
+  "p-bruna": "Influencer brasileira de 29 anos, cabelo preto liso na altura dos ombros, pele morena clara, make leve. Cenário: provador de loja com luz quente, provando e mostrando o produto para a câmera. Tom confiante e honesto, de quem dá a opinião de verdade.",
+  "p-thais": "Influencer brasileira de 33 anos, cabelo cacheado preso em coque, pele negra, sorriso largo e simpático. Cenário: cozinha de casa com luz natural da janela, abrindo e apresentando o produto (unboxing). Tom caloroso e expressivo.",
+  "p-larissa": "Influencer brasileira de 21 anos, cabelo castanho claro ondulado com mechas, pele clara com sardas, sem maquiagem. Cenário: banheiro, rotina de skincare, mostrando o produto em uso. Tom suave e natural.",
+  "p-rafael": "Influencer brasileiro de 28 anos, cabelo curto degradê, barba por fazer, camiseta cinza. Cenário: sofá da sala com luz de janela, fazendo o review do produto na mão. Tom descontraído e direto.",
+  "p-marcos": "Influencer brasileiro de 38 anos, careca, barba curta grisalha, polo azul-marinho. Cenário: dentro do carro estacionado, selfie com a dica rápida sobre o produto. Tom grave, seguro e objetivo.",
+  "p-dona-neide": "Influenciadora brasileira de 56 anos, cabelo curto castanho com fios grisalhos, óculos de leitura no cordão, blusa florida. Cenário: sala de casa com porta-retratos, falando direto para a câmera em um depoimento sincero sobre o produto. Tom acolhedor e de confiança.",
+  "p-gabi-fit": "Influencer brasileira de 26 anos, rabo de cavalo alto, corpo atlético, top esportivo preto, um pouco de suor. Cenário: academia com espelhos, pós-treino, mostrando o produto. Tom energético e motivador.",
+};

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import { InfluencerChat } from "./influencer-chat";
@@ -128,4 +128,23 @@ it("fills the prompt when clicking the example photo, without the Recriar button
   const box = screen.getByLabelText(/Descreva a influencer/) as HTMLTextAreaElement;
   await waitFor(() => expect(box.value).toMatch(/55 anos/));
   expect(box.value.length).toBeGreaterThan(900);
+});
+
+it("choosing a ready-made model fills the prompt box and enables send", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({}), { status: 200 })));
+  window.localStorage.clear();
+  const user = userEvent.setup();
+  render(<InfluencerChat />);
+  const box = await screen.findByTestId("chat-composer");
+  const send = () => within(box).getByRole("button", { name: "Criar a influencer" });
+  expect(send()).toBeDisabled();
+  await user.click(await screen.findByRole("button", { name: "Usar Camila" }));
+  const area = within(box).getByRole("textbox") as HTMLTextAreaElement;
+  await waitFor(() => expect(area.value).toContain("Influencer brasileira de 24 anos"));
+  expect(send()).toBeEnabled();
+  // texto próprio da pessoa não é apagado ao trocar de modelo
+  await user.clear(area);
+  await user.type(area, "Meu texto sobre uma garrafa térmica");
+  await user.click(screen.getByRole("button", { name: "Usar Bruna" }));
+  expect(area.value).toBe("Meu texto sobre uma garrafa térmica");
 });

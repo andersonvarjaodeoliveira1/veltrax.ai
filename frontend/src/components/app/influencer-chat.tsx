@@ -17,7 +17,7 @@ import Link from "next/link";
 import { loadMySkills, loadPinned, saveMySkills, type PinnedSkill } from "@/lib/influencer-skills";
 import { PolicyNotice } from "@/components/app/policy-notice";
 import { checkPolicy, policySignature } from "@/lib/shopee-policy";
-import { PRESET_MODELS } from "@/lib/influencer-presets";
+import { PRESET_BRIEFS, PRESET_MODELS } from "@/lib/influencer-presets";
 import { dataUrlToFile, fileToDataUrl, loadModels, saveModels, type MyModel } from "@/lib/influencer-models";
 
 type Option = { label: string; detail?: string };
@@ -244,7 +244,7 @@ const S = {
   modelVoice: ["Voz (ex.: feminina, calma, 30 anos, sotaque paulista)", "Voice (e.g. female, calm, 30s, neutral accent)", "Voz (ej.: femenina, calma, 30 años, acento neutro)"],
   presetModels: ["Modelos prontos (realistas)", "Ready-made models (realistic)", "Modelos listos (realistas)"],
   usePreset: ["Usar", "Use", "Usar"],
-  presetNote: ["Clique na foto ou em Usar para criar o vídeo com essa pessoa. Para manter o mesmo rosto em todos os vídeos, anexe uma foto em Novo modelo.", "Click the photo or Use to create the video with this person. To keep the same face in every video, attach a photo in New model.", "Haz clic en la foto o en Usar para crear el video con esta persona. Para mantener el mismo rostro en todos los videos, adjunta una foto en Nuevo modelo."],
+  presetNote: ["Clique na foto ou em Usar: o texto da modelo entra na caixa lá em cima, é só completar com o produto e apertar o botão roxo. Para manter o mesmo rosto em todos os vídeos, anexe uma foto em Novo modelo.", "Click the photo or Use to create the video with this person. To keep the same face in every video, attach a photo in New model.", "Haz clic en la foto o en Usar para crear el video con esta persona. Para mantener el mismo rostro en todos los videos, adjunta una foto en Nuevo modelo."],
   saveModel: ["Salvar modelo", "Save model", "Guardar modelo"],
   modelNote: ["O rosto vira a foto de referência e a voz entra em todas as cenas. O Flow não clona a voz de um áudio: a voz é descrita no prompt.", "The face becomes the reference photo and the voice goes into every scene. Flow does not clone a voice from audio: the voice is described in the prompt.", "El rostro es la foto de referencia y la voz entra en todas las escenas. Flow no clona la voz desde un audio: la voz se describe en el prompt."],
   usingModel: ["Trabalhando em cima do modelo", "Working on model", "Trabajando sobre el modelo"],
@@ -334,6 +334,7 @@ export function InfluencerChat() {
   const [shopeeOpen, setShopeeOpen] = useState(false);
   const lookRef = useRef("");
   const attachRef = useRef<HTMLInputElement>(null);
+  const promptRef = useRef<HTMLTextAreaElement>(null);
   const [attached, setAttached] = useState<File[]>([]);
   const linkRef = useRef("");
   const [active, setActive] = useState(0);
@@ -888,7 +889,7 @@ export function InfluencerChat() {
     <div ref={orbitRef} className="cg-orbit relative">
     <div key={attachedFx} className={cn("relative rounded-[26px] bg-[#1a191d] p-5 ring-1 ring-white/10 shadow-[0_20px_60px_-30px_#000]", attachedFx > 0 && "cg-attach")} data-testid="chat-composer">
       {attachedFx > 0 && !started && <span key={`b${attachedFx}`} className="cg-attach-badge pointer-events-none absolute -top-3 left-6 rounded-full bg-[#7B3FE4] px-3 py-1 text-[11px] font-medium text-white shadow-lg">📎 {t("promptAttached")}</span>}
-      <textarea value={started ? changeText : prompt} onChange={(event) => (started ? setChangeText(event.target.value) : setPrompt(event.target.value))} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); if (started) void applyChange(); else if (!busy && prompt.trim().length >= 8) start(); } }} rows={!started && prompt.length > 220 ? 8 : 3} maxLength={2000} disabled={started && !canChange} aria-label={lang === "en" ? "Describe the influencer" : lang === "es" ? "Describe a la influencer" : "Descreva a influencer"}
+      <textarea ref={promptRef} value={started ? changeText : prompt} onChange={(event) => (started ? setChangeText(event.target.value) : setPrompt(event.target.value))} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); if (started) void applyChange(); else if (!busy && prompt.trim().length >= 8) start(); } }} rows={!started && prompt.length > 220 ? 8 : 3} maxLength={2000} disabled={started && !canChange} aria-label={lang === "en" ? "Describe the influencer" : lang === "es" ? "Describe a la influencer" : "Descreva a influencer"}
         placeholder={phase === "home" ? (demo ? `${demo}▍` : t("ph")) : canChange ? (hint ? `${hint}▍` : t("changePh")) : t("follow")}
         className={cn("min-h-[96px] w-full resize-none bg-transparent px-1 py-1 text-lg outline-none placeholder:text-muted-foreground/70 disabled:opacity-60", attachedFx > 0 && !started && "cg-reveal")} />
       <div className="mt-2 flex items-center gap-2">
@@ -1034,6 +1035,11 @@ export function InfluencerChat() {
                 const choose = () => {
                   if (!owned) { const next = [{ id: preset.id, ...preset.model, faces: [] }, ...models]; if (!saveModels(next)) { setError(t("error")); return; } setModels(next); }
                   setSelModelId(preset.id);
+                  // Coloca o texto pronto da modelo na caixa (sem apagar o que a pessoa escreveu) e leva até ela, pronta para enviar.
+                  const brief = PRESET_BRIEFS[preset.id];
+                  const mine = prompt.trim() && !Object.values(PRESET_BRIEFS).includes(prompt) ? prompt : "";
+                  if (brief && !mine) setPrompt(brief);
+                  window.setTimeout(() => { promptRef.current?.focus({ preventScroll: true }); orbitRef.current?.scrollIntoView?.({ behavior: "smooth", block: "center" }); }, 60);
                 };
                 const on = selModelId === preset.id;
                 return (
@@ -1047,7 +1053,7 @@ export function InfluencerChat() {
                       )}
                       <div className="min-w-0 text-sm font-medium">{preset.name}<span className="block text-xs font-normal text-muted-foreground">{preset.scene}</span></div>
                     </button>
-                    <p className="line-clamp-3 text-muted-foreground">{preset.model.persona.look}</p>
+                    <p className="line-clamp-3 text-muted-foreground">{PRESET_BRIEFS[preset.id] ?? preset.model.persona.look}</p>
                     <Button type="button" size="sm" variant={on ? "default" : "outline"} className="rounded-full" onClick={choose}>{on ? `✓ ${t("usePreset")}` : t("usePreset")}</Button>
                   </div>
                 );
