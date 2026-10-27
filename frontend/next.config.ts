@@ -28,6 +28,8 @@ const nextConfig: NextConfig = {
           { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()" },
           { key: "X-Permitted-Cross-Domain-Policies", value: "none" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'" },
+          { key: "Cross-Origin-Resource-Policy", value: "same-site" },
         ],
       },
     ];

@@ -14,6 +14,7 @@ import logging
 import time
 
 from fastapi import FastAPI, Depends, HTTPException, Request
+from .security_guard import security_middleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
@@ -110,6 +111,8 @@ def create_app(
         ],
         expose_headers=["x-trace-id"],
     )
+
+    app.middleware("http")(security_middleware)
 
     @app.middleware("http")
     async def trace_and_request_logging_middleware(request: Request, call_next):
