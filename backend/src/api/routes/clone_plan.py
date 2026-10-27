@@ -2082,3 +2082,105 @@ async def shopee_images(request: Request, db: AsyncSession = Depends(get_db)):
     if not images:
         raise HTTPException(status_code=422, detail="Não achei imagens de produto nesse arquivo.")
     return {"source": source, "title": title, "images": images, "seller_gallery": source == "link"}
+
+
+# ---------------------------------------------------------------------------
+# Vídeo de referência por link (TikTok, Instagram, YouTube...) — baixa o vídeo para clonar sem a pessoa precisar subir o arquivo.
+# ---------------------------------------------------------------------------
+LINK_VIDEO_HOSTS = (
+    "tiktok.com", "instagram.com", "youtube.com", "youtu.be", "facebook.com", "fb.watch", "x.com", "twitter.com", "kwai.com", "kw.ai",
+    "pinterest.com", "pin.it", "vimeo.com",
+)
+LINK_VIDEO_MAX_BYTES = 150 * 1024 * 1024
+LINK_VIDEO_MAX_SECONDS = 600
+
+
+def _is_link_video_url(url: str) -> bool:
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower()
+    return parsed.scheme == "https" and any(host == h or host.endswith("." + h) for h in LINK_VIDEO_HOSTS)
+
+
+def _download_link_video(url: str, folder: str) -> str | None:
+    """Baixa o vídeo do link para a pasta e devolve o caminho do arquivo (ou None)."""
+    import glob
+    import os
+
+    import yt_dlp
+
+    def too_long(info, *, incomplete):
+        duration = info.get("duration")
+        if duration and duration > LINK_VIDEO_MAX_SECONDS:
+            return "vídeo longo demais"
+        return None
+
+    options = {
+        "outtmpl": os.path.join(folder, "video.%(ext)s"),
+        "format": "best[ext=mp4][height<=1080]/best[height<=1080]/best",
+        "noplaylist": True,
+        "quiet": True,
+        "no_warnings": True,
+        "socket_timeout": 20,
+        "retries": 2,
+        "max_filesize": LINK_VIDEO_MAX_BYTES,
+        "match_filter": too_long,
+        "merge_output_format": "mp4",
+    }
+    with yt_dlp.YoutubeDL(options) as ydl:
+        ydl.download([url])
+    files = [f for f in glob.glob(os.path.join(folder, "video.*")) if os.path.isfile(f) and not f.endswith((".part", ".ytdl"))]
+    return max(files, key=os.path.getsize) if files else None
+
+
+@router.post("/video-from-link")
+async def video_from_link(request: Request, db: AsyncSession = Depends(get_db)):
+    """Baixa o vídeo de um link (TikTok, Instagram, YouTube...) e devolve o arquivo para ser usado como vídeo de referência."""
+    import shutil
+    import tempfile
+    from pathlib import Path
+
+    from fastapi.responses import FileResponse
+    from starlette.background import BackgroundTask
+
+    user_id = await _user_id(request, db)
+    _check_script_rate(user_id)
+    try:
+        data = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    url = str((data or {}).get("url") or "").strip()[:500]
+    if url and not url.startswith("http"):
+        url = "https://" + url
+    if not url or not _is_link_video_url(url):
+        raise HTTPException(status_code=400, detail="Use um link de vídeo do TikTok, Instagram, YouTube, Facebook, X ou Kwai.")
+
+    folder = tempfile.mkdtemp(prefix="linkvideo_")
+    path: str | None = None
+    try:
+        from urllib.parse import urlparse
+
+        host = (urlparse(url).hostname or "").lower()
+        if host.endswith("youtube.com") or host == "youtu.be":
+            from ...youtube_utils import async_download_youtube_video
+
+            found = await async_download_youtube_video(url)
+            if found and Path(found).is_file():
+                target = Path(folder) / ("video" + Path(found).suffix)
+                shutil.move(str(found), target)
+                path = str(target)
+        else:
+            path = await asyncio.wait_for(asyncio.to_thread(_download_link_video, url, folder), timeout=150)
+    except Exception:
+        logger.info("video-from-link failed", exc_info=True)
+        path = None
+    if not path or Path(path).stat().st_size < 10_000:
+        shutil.rmtree(folder, ignore_errors=True)
+        raise HTTPException(status_code=422, detail="Não consegui baixar esse link (o site pode ter bloqueado, o vídeo ser privado ou longo demais). Baixe o vídeo e suba o arquivo.")
+    if Path(path).stat().st_size > LINK_VIDEO_MAX_BYTES:
+        shutil.rmtree(folder, ignore_errors=True)
+        raise HTTPException(status_code=413, detail="Vídeo grande demais (máximo 150 MB).")
+    suffix = Path(path).suffix.lower()
+    media = {".mp4": "video/mp4", ".webm": "video/webm", ".mkv": "video/x-matroska", ".mov": "video/quicktime"}.get(suffix, "application/octet-stream")
+    return FileResponse(path, media_type=media, filename="video-do-link" + suffix, background=BackgroundTask(shutil.rmtree, folder, True))

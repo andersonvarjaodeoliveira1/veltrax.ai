@@ -1,5 +1,6 @@
 "use client";
 
+import { LinkVideo } from "@/components/app/link-video";
 import { ShopeeImport } from "@/components/app/shopee-import";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { takeKind, takeTag, withTake, type TakeKind } from "@/lib/take-kinds";
@@ -1318,6 +1319,11 @@ export function CloneWizard() {
       await new Promise((resolve) => setTimeout(resolve, 150));
       if (projRef.current.reference.trim().length >= 20) await runAll(true);
     };
+    // Vídeo de referência escolhido (arquivo ou baixado por link): segue o mesmo caminho nos dois casos.
+    const chooseVideo = (file: File) => {
+      if (questDone) { void startSimple(file); return; }
+      setQuestName(file.name); setQuestHold(true); setReadDone(false); void readReference(file).finally(() => setReadDone(true));
+    };
     const run = async (file: File | null) => {
       setAskProduct(false);
       setPendingFile(null);
@@ -1458,7 +1464,7 @@ export function CloneWizard() {
         {!ready && !working && !askProduct && (
           <section className="space-y-4 rounded-[18px] border border-border bg-card p-5">
             <input ref={fileRef} type="file" accept="video/*" className="sr-only" aria-label="Escolher o vídeo para clonar"
-              onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (!file) return; if (questDone) { void startSimple(file); return; } setQuestName(file.name); setQuestHold(true); setReadDone(false); void readReference(file).finally(() => setReadDone(true)); }} />
+              onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) chooseVideo(file); }} />
             {(hasReference || refFile) && !questHold ? (
               <>
                 <p className="text-sm text-muted-foreground">{hasReference ? "O vídeo já foi lido. Falta preparar as cenas, as variações e os prompts." : `Recebi o seu vídeo${refFile ? ` (${refFile.name})` : ""}, mas ainda não consegui ler a fala. Se quiser tentar de novo, escolha outro vídeo.`}</p>
@@ -1532,6 +1538,7 @@ export function CloneWizard() {
                       </span>
                     </button>
                   </div>
+                  {!questHold && !hasReference && !refFile && <LinkVideo onFile={chooseVideo} />}
                   {questHold && <p role="status" className="rounded-[14px] border border-[#5BD69A]/40 bg-[#5BD69A]/10 p-3 text-sm">✓ Vídeo escolhido{questName ? `: ${questName}` : ""}. {readDone ? "Já li. Responda as perguntas e eu sigo." : "Lendo a fala enquanto você responde…"}</p>}
                   {(questHold || hasReference || !!refFile) ? (
                   <div ref={chatRef} className="scroll-mt-4">
@@ -1801,6 +1808,7 @@ export function CloneWizard() {
                 {busy === "upload" ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
                 {busy === "upload" ? "Transcrevendo o vídeo…" : "Escolher vídeo"}
               </Button>
+              <LinkVideo onFile={(file) => void readReference(file)} disabled={working} />
               {(refFile || p.reference.trim()) && <ReferenceSummary file={refFile} transcript={p.reference} />}
               <Field label="Transcrição do vídeo (ou descreva o que acontece)" hint="Preenchida sozinha ao escolher o vídeo. Você pode editar ou colar o texto direto.">
                 <textarea value={p.reference} onChange={(event) => patch({ reference: event.target.value })} rows={5} maxLength={4000} className={inputClass} />
