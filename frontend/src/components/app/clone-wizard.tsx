@@ -1,6 +1,5 @@
 "use client";
 
-import { fileToDataUrl } from "@/lib/influencer-models";
 import { LoadingTips } from "@/components/app/loading-tips";
 import { PolicyNotice } from "@/components/app/policy-notice";
 import { checkPolicy, policySignature } from "@/lib/shopee-policy";
@@ -420,7 +419,6 @@ export function CloneWizard() {
   const [askProduct, setAskProduct] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [productPhotos, setProductPhotos] = useState<{ url: string; name: string }[]>([]);
-  const [productRef, setProductRef] = useState(""); // 1ª foto do produto (JPEG reduzido) que vai junto no pacote para o Flow usar como referência
   const [lookState, setLookState] = useState<"idle" | "reading" | "done" | "failed">("idle");
   useEffect(() => {
     try { if (window.localStorage.getItem(VIEW_KEY) === "advanced") setSimple(false); } catch { /* storage unavailable */ }
@@ -647,13 +645,12 @@ export function CloneWizard() {
   }
 
   /** Fotos do produto (até 3): a IA descreve o produto para ele aparecer igual nas cenas. Não bloqueia o resto se falhar. */
-  async function addProductPhotos(files: File[]) {
+  async function addProductPhotos(files: File[]): Promise<string> {
     const images = files.filter((file) => /^image\/(png|jpe?g|webp)$/i.test(file.type)).slice(0, 3);
-    if (!images.length) { setError("Envie fotos do produto em PNG, JPG ou WebP."); return; }
+    if (!images.length) { setError("Envie fotos do produto em PNG, JPG ou WebP."); return ""; }
     setError(null);
     setProductPhotos((current) => { current.forEach((photo) => URL.revokeObjectURL(photo.url)); return images.map((file) => ({ url: URL.createObjectURL(file), name: file.name })); });
     setLookState("reading");
-    void fileToDataUrl(images[0], 1024).then(setProductRef).catch(() => setProductRef(""));
     try {
       const form = new FormData();
       images.forEach((file) => form.append("images", file));
@@ -662,8 +659,10 @@ export function CloneWizard() {
       if (!response.ok || typeof data?.look !== "string") throw new Error("failed");
       patch({ productLook: data.look, videos: [], ctaLocked: false });
       setLookState(data.look.trim() ? "done" : "failed");
+      return data.look.trim();
     } catch {
       setLookState("failed");
+      return "";
     }
   }
 
@@ -1096,7 +1095,6 @@ export function CloneWizard() {
     cta: p.cta,
     language: p.language,
     product: p.product || p.productInfo || p.productLook ? { name: p.product, info: p.productInfo, look: p.productLook } : undefined,
-    productImage: productRef || undefined,
     sceneCount: p.sceneCount,
     model: (FLOW_CHOICES.find((m) => m.id === flowModelId) ?? FLOW_MODELS[0]).name,
     flowModel: (FLOW_CHOICES.find((m) => m.id === flowModelId) ?? FLOW_MODELS[0]).needle,
@@ -1317,7 +1315,7 @@ export function CloneWizard() {
                   {lookState === "failed" && <p className="text-xs text-[#F5B454]">Não consegui ler as fotos agora. Os vídeos saem normalmente, só sem a descrição do produto.</p>}
                 </Group>
                 {(p.product || p.productInfo || p.productLook) && (
-                  <button type="button" className="text-xs underline text-muted-foreground" onClick={() => { productPhotos.forEach((photo) => URL.revokeObjectURL(photo.url)); setProductPhotos([]); setProductRef(""); setLookState("idle"); patch({ product: "", productInfo: "", productLook: "", videos: [], ctaLocked: false }); }}>
+                  <button type="button" className="text-xs underline text-muted-foreground" onClick={() => { productPhotos.forEach((photo) => URL.revokeObjectURL(photo.url)); setProductPhotos([]); setLookState("idle"); patch({ product: "", productInfo: "", productLook: "", videos: [], ctaLocked: false }); }}>
                     Não falar do produto
                   </button>
                 )}
@@ -1342,7 +1340,19 @@ export function CloneWizard() {
       if (title && !p.product.trim()) patch({ product: title.slice(0, 120) });
       patch({ copySource: "describe", ownCopy: PHOTO_BRIEF, reference: PHOTO_BRIEF, scenes: [], mix: NO_MIX, variations: [], images: [], videos: [], approved: {} });
       setQuestPhoto(true); setQuestName(images.length === 1 ? images[0].name : `${images.length} fotos`); setQuestHold(true); setReadDone(false);
-      void addProductPhotos(images).finally(() => setReadDone(true));
+      // A IA olha a foto e descreve o produto; o roteiro é escrito em cima dessa descrição (sem inventar outro produto).
+      void addProductPhotos(images).then((look) => {
+        const name = (projRef.current.product || title).trim();
+        if (!look && !name) {
+          setError("Não consegui entender a foto. Escreva o nome do produto em “Falar sobre o meu produto” ou envie outra foto.");
+          setQuestHold(false); setQuestPhoto(false); setReadDone(false);
+          patch({ copySource: "video", ownCopy: "", reference: "" });
+          return;
+        }
+        if (!projRef.current.product.trim()) patch({ product: (look.split(/[.,;\n]/)[0] || look).slice(0, 80) });
+        const brief = `Vídeo curto de avatar apresentando ESTE produto (não invente outro produto): ${name ? `${name}. ` : ""}${look}. O avatar mostra o produto na mão, explica para que serve e chama para comprar.`.slice(0, 1500);
+        patch({ ownCopy: brief, reference: brief });
+      }).finally(() => setReadDone(true));
     };
     const run = async (file: File | null) => {
       setAskProduct(false);
@@ -1571,7 +1581,7 @@ export function CloneWizard() {
 
         {ready && (redirectIn !== null || redirectBlocked) && (
           <section role="status" className="space-y-2 rounded-[18px] border border-[#7B3FE4]/60 bg-[#7B3FE4]/15 p-4" data-testid="flow-redirect">
-            <p className="text-sm font-semibold">{redirectBlocked ? "A extensão não respondeu. Recarregue esta página (F5) e confira se a extensão 1.14.0 está ligada; ou abra o Flow pelo botão abaixo." : `Abrindo o Flow e enviando tudo em ${redirectIn}s…`}</p>
+            <p className="text-sm font-semibold">{redirectBlocked ? "A extensão não respondeu. Recarregue esta página (F5) e confira se a extensão 1.14.1 está ligada; ou abra o Flow pelo botão abaixo." : `Abrindo o Flow e enviando tudo em ${redirectIn}s…`}</p>
             <div className="h-1.5 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A98BFF] transition-all duration-1000" style={{ width: `${redirectBlocked ? 100 : ((1 - (redirectIn ?? 1)) / 1) * 100}%` }} /></div>
             <p className="text-xs text-muted-foreground">Tudo pronto. A extensão recebe o pacote, abre um projeto novo e gera as imagens e os vídeos sozinha. Você não precisa copiar nem colar nada.</p>
             <div className="flex gap-2">

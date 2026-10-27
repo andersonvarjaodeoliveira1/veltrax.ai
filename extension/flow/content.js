@@ -87,7 +87,7 @@
     if (!jobs.length) throw new Error("O pacote não tem cenas com prompts.");
     const wanted = String(data.flowModel || "").trim();
     flowModel = wanted && !/lower priority/i.test(wanted) ? wanted : "[Lower Priority]";
-    productImage = typeof data.productImage === "string" && /^data:image\/(jpeg|png|webp);base64,/.test(data.productImage) ? data.productImage : "";
+    productImage = data.attachProduct === true && typeof data.productImage === "string" && /^data:image\/(jpeg|png|webp);base64,/.test(data.productImage) ? data.productImage : "";
     refDone = false;
     fallbackModels = Array.isArray(data.fallbackModels) ? data.fallbackModels.map((x) => String(x)).filter(Boolean) : [];
     try { el("chipmodel").textContent = isLowerPriority() ? "LOWER PRIORITY · 0 CRÉDITOS" : `${flowModel.toUpperCase()} · GASTA CRÉDITOS`; } catch (_e) { /* painel ainda não existe */ }

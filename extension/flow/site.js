@@ -14,6 +14,11 @@
       const up = event.data.upload;
       const upload = up && typeof up.url === "string" && typeof up.token === "string" && /^https:\/\//.test(up.url)
         ? { url: up.url, token: up.token, package: String(up.package || "").slice(0, 120) } : null;
+      // Pacote novo (diferente do anterior): apaga as imagens e o andamento do projeto antigo, para a tela não mostrar cena de outro vídeo.
+      try {
+        const prev = (await chrome.storage.local.get("clipgringa-flow-last-v1"))["clipgringa-flow-last-v1"];
+        if (!prev || prev.raw !== String(event.data.raw || "")) await chrome.storage.local.remove(["clipgringa-flow-images-v1", "clipgringa-flow-progress-v1"]);
+      } catch (_e) { /* ignora */ }
       await chrome.storage.local.set({ "clipgringa-flow-last-v1": { raw: String(event.data.raw || ""), at: Date.now(), upload } });
       await chrome.storage.local.set({ [PENDING]: { raw: String(event.data.raw || ""), at: Date.now(), upload } });
       ok = true;
