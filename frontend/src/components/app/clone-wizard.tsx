@@ -1202,7 +1202,17 @@ export function CloneWizard() {
   const [questName, setQuestName] = useState("");
   const [questPhoto, setQuestPhoto] = useState(false);
   const chatRef = useRef<HTMLDivElement>(null);
-  useEffect(() => { if (questHold) window.setTimeout(() => chatRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" }), 150); }, [questHold]);
+  // Sobe o vídeo, mostra o prompt e o resumo do criativo; só então desce sozinho até as perguntas (cenas, quantidade de vídeos...).
+  useEffect(() => {
+    if (!questHold || !readDone || questDone) return;
+    const timer = window.setTimeout(() => {
+      const box = chatRef.current;
+      if (!box?.getBoundingClientRect) return;
+      const rect = box.getBoundingClientRect();
+      if (rect.top > window.innerHeight * 0.55 || rect.bottom < 0) box.scrollIntoView?.({ behavior: "smooth", block: "start" });
+    }, 2200);
+    return () => window.clearTimeout(timer);
+  }, [questHold, readDone, questDone]);
   const [editing, setEditing] = useState<string | null>(null);
   const [manualMode, setManualMode] = useState<"closed" | "open" | "hidden">("closed");
   const [pendingChange, setPendingChange] = useState<string | null>(null);
@@ -1538,6 +1548,12 @@ export function CloneWizard() {
                   </div>
                   {!questHold && !hasReference && !refFile && <LinkVideo onFile={chooseVideo} onPhotos={(files, title) => choosePhotos(files, title)} photoLabel="Criar o vídeo com essas fotos" />}
                   {questHold && <p role="status" className="rounded-[14px] border border-[#5BD69A]/40 bg-[#5BD69A]/10 p-3 text-sm">✓ {questPhoto ? "Foto escolhida" : "Vídeo escolhido"}{questName ? `: ${questName}` : ""}. {readDone ? "Já li. Responda as perguntas e eu sigo." : "Lendo a fala enquanto você responde…"}</p>}
+                  {questHold && readDone && !questDone && (
+                    <div data-testid="next-step" className="flex flex-wrap items-center gap-3 rounded-[14px] border border-[#7B3FE4]/50 bg-[#7B3FE4]/10 p-3 text-sm">
+                      <span className="min-w-0 flex-1"><b>Próximo passo:</b> o prompt e o resumo do criativo já estão prontos. Agora escolha a quantidade de vídeos, as cenas e o resto nas perguntas logo abaixo.</span>
+                      <button type="button" onClick={() => chatRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" })} className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-4 py-2 text-xs font-medium text-white">Ir para as perguntas ↓</button>
+                    </div>
+                  )}
                   {(questHold || hasReference || !!refFile) ? (
                   <div ref={chatRef} className="scroll-mt-4">
                   <QuestChat
