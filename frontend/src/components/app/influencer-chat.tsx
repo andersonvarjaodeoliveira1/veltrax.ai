@@ -15,6 +15,8 @@ import { EXAMPLES, SKILLS, type Lang3, type SkillId } from "@/lib/influencer-exa
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { loadMySkills, loadPinned, saveMySkills, type PinnedSkill } from "@/lib/influencer-skills";
+import { PolicyNotice } from "@/components/app/policy-notice";
+import { checkPolicy, policySignature } from "@/lib/shopee-policy";
 import { PRESET_MODELS } from "@/lib/influencer-presets";
 import { dataUrlToFile, fileToDataUrl, loadModels, saveModels, type MyModel } from "@/lib/influencer-models";
 
@@ -666,12 +668,17 @@ export function InfluencerChat() {
     });
   };
   const boardsKey = boards.map((item) => item.videoPrompts.join("|")).join("##");
+  // Antes de gerar: confere o produto, a copy e os prompts contra a política da Shopee Vídeo e pede confirmação se houver risco.
+  const policyHits = checkPolicy(productName, prompt, boards.map((item) => item.scenes.map((scene) => scene.line).join(" ") + " " + item.videoPrompts.join(" ")).join(" "));
+  const policyKey = `${boardsKey}#${policySignature(policyHits)}`;
+  const [policyOk, setPolicyOk] = useState("");
+  const policyBlocked = policyHits.length > 0 && policyOk !== policyKey;
   useEffect(() => {
-    if (phase !== "board" || busy !== "" || !boards.length || sentFor.current === boardsKey) return;
+    if (phase !== "board" || busy !== "" || !boards.length || policyBlocked || sentFor.current === boardsKey) return;
     sentFor.current = boardsKey;
     deliver();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, busy, boardsKey]);
+  }, [phase, busy, boardsKey, policyBlocked]);
   // Mais um take de uma cena só: manda um pacote de uma cena; os outros vídeos continuam na biblioteca.
   const retakes = useRef<Record<string, number>>({});
   const retake = (vbase: number, sbase: number, kind: TakeKind = "same") => {
@@ -1382,6 +1389,8 @@ export function InfluencerChat() {
               </li>
             ))}
           </ol>
+          <PolicyNotice hits={policyHits} confirmed={policyOk === policyKey} onConfirm={(value) => setPolicyOk(value ? policyKey : "")} />
+          {policyBlocked && <p className="text-xs text-muted-foreground">O envio para o Flow só começa depois que você confirmar o aviso acima.</p>}
           <p data-testid="flow-send-status" className="text-sm text-muted-foreground">{flowSend === "sending" ? t("sending") : flowSend === "ok" ? t("sentOk") : flowSend === "manual" ? t("sentManual") : ""}</p>
           <FlowRunPanel onRetake={retake} />
           <div className="flex flex-wrap gap-2">

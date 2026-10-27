@@ -1,5 +1,7 @@
 "use client";
 
+import { PolicyNotice } from "@/components/app/policy-notice";
+import { checkPolicy, policySignature } from "@/lib/shopee-policy";
 import { LinkVideo } from "@/components/app/link-video";
 import { ShopeeImport } from "@/components/app/shopee-import";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -1182,6 +1184,7 @@ export function CloneWizard() {
   const [paused, setPaused] = useState(false);
   const [changeDemo, setChangeDemo] = useState("");
   const [questHold, setQuestHold] = useState(false);
+  const [policyOk, setPolicyOk] = useState("");
   const [questDone, setQuestDone] = useState(false);
   const [readDone, setReadDone] = useState(false);
   const [questName, setQuestName] = useState("");
@@ -1329,7 +1332,11 @@ export function CloneWizard() {
       setPendingFile(null);
       if (file) await startSimple(file); else await runAll(true);
     };
+    const policyHits = checkPolicy(p.product, p.productInfo, p.reference, p.ownCopy, p.variations.map((v) => `${v.title} ${v.summary}`).join(" "), [...p.mix.hooks, ...p.mix.bodies, ...p.mix.ctas].join(" "), p.cta, p.images.concat(p.videos).map((item) => item.prompts.join(" ")).join(" "));
+    const policyKey = policySignature(policyHits);
+    const policyBlocked = policyHits.length > 0 && policyOk !== policyKey;
     const sendToFlow = () => {
+      if (policyBlocked) return;
       markSent();
       void copy("flow-send", flowPackage());
       void pushPackage(flowPackage()).then((ok) => { if (!ok) window.open(FLOW_HOME_URL, "_blank", "noopener"); });
@@ -1566,7 +1573,8 @@ export function CloneWizard() {
                   <li key={vi}>Vídeo {pad(vi + 1)} · {variation.title}</li>
                 ))}
               </ul>
-              <Button type="button" size="lg" className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white" onClick={sendToFlow}>
+              <PolicyNotice hits={policyHits} confirmed={policyOk === policyKey} onConfirm={(value) => setPolicyOk(value ? policyKey : "")} />
+              <Button type="button" size="lg" disabled={policyBlocked} className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white disabled:opacity-50" onClick={sendToFlow}>
                 <ExternalLink className="size-4" /> Enviar para o Flow
               </Button>
               {copied === "flow-send" && <p className="text-xs text-[#5BD69A]">Enviado.</p>}
