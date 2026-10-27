@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isHostileRequest } from "../../middleware";
+import { isHostileRequest } from "../middleware";
 
 describe("middleware · robôs e varreduras", () => {
   it("bloqueia scanners, copiadores e robôs de IA", () => {
