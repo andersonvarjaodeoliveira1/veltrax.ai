@@ -33,6 +33,8 @@ export function LinkVideo({ onFile, onPhotos, photoLabel, disabled }: { onFile: 
   const [title, setTitle] = useState("");
   const [photos, setPhotos] = useState<string[]>([]);
   const [photoNote, setPhotoNote] = useState("");
+  const [sel, setSel] = useState<string[]>([]);
+  const [applied, setApplied] = useState("");
   const isShopee = !!normalizeShopeeUrl(link);
 
   async function toFile(response: Response) {
@@ -51,23 +53,29 @@ export function LinkVideo({ onFile, onPhotos, photoLabel, disabled }: { onFile: 
     } catch { setError("Não consegui baixar esse vídeo agora. Tente de novo."); } finally { setBusy(false); }
   }
 
-  async function applyPhotos() {
-    if (!onPhotos) return;
-    setBusy(true);
+  async function applyPhotos(list: string[] = sel) {
+    if (!onPhotos || !list.length) return;
+    setBusy(true); setError("");
     try {
-      const files = await Promise.all(photos.slice(0, 3).map(async (src, index) => {
+      const files = await Promise.all(list.slice(0, 3).map(async (src, index) => {
         const response = await fetch(src, { referrerPolicy: "no-referrer" });
         const blob = await response.blob();
         return new File([blob], `produto-${index + 1}.jpg`, { type: blob.type || "image/jpeg" });
       }));
       onPhotos(files, title);
+      setApplied(list.join("|"));
       setPhotoNote("Fotos adicionadas ao produto. Agora escolha um vídeo para clonar (suba o arquivo ou cole outro link).");
     } catch { setError("Não consegui carregar essas fotos. Baixe e anexe no bloco do produto."); } finally { setBusy(false); }
   }
 
-  async function load() {
-    setBusy(true); setError(""); setVideos([]); setPhotos([]); setPhotoNote("");
-    const shopee = normalizeShopeeUrl(link);
+  function toggle(src: string) {
+    setPhotoNote("");
+    setSel((current) => current.includes(src) ? current.filter((item) => item !== src) : current.length >= 3 ? [...current.slice(1), src] : [...current, src]);
+  }
+
+  async function load(raw = link) {
+    setBusy(true); setError(""); setVideos([]); setPhotos([]); setPhotoNote(""); setSel([]); setApplied("");
+    const shopee = normalizeShopeeUrl(raw);
     if (shopee) {
       // A Shopee bloqueia o servidor, mas não o navegador da pessoa: a extensão abre o anúncio e lê os vídeos.
       const read = await readShopeeViaExtension(await expandShopeeLink(shopee));
@@ -75,7 +83,12 @@ export function LinkVideo({ onFile, onPhotos, photoLabel, disabled }: { onFile: 
         setBusy(false);
         setTitle(read.title);
         if (read.videos.length) setVideos(read.videos);
-        if (read.images.length) setPhotos(read.images.slice(0, 9));
+        if (read.images.length) {
+          const all = read.images.slice(0, 9);
+          setPhotos(all); setSel(all.slice(0, 3));
+          // Sem vídeo do vendedor: já usa as 3 primeiras fotos (a pessoa pode trocar abaixo).
+          if (!read.videos.length && onPhotos) void applyPhotos(all.slice(0, 3));
+        }
         if (!read.videos.length && !read.images.length) setError("Abri o anúncio, mas não achei vídeo nem fotos do vendedor. Confira se o link é de um produto e tente de novo.");
         return;
       }
@@ -88,7 +101,7 @@ export function LinkVideo({ onFile, onPhotos, photoLabel, disabled }: { onFile: 
       return;
     }
     try {
-      const response = await fetch("/api/multiplier/clone/video-from-link", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: link.trim() }) });
+      const response = await fetch("/api/multiplier/clone/video-from-link", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: raw.trim() }) });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
         setError(typeof data?.detail === "string" ? data.detail : "Não consegui baixar esse link. Baixe o vídeo e suba o arquivo.");
@@ -107,7 +120,7 @@ export function LinkVideo({ onFile, onPhotos, photoLabel, disabled }: { onFile: 
       <form className="flex flex-wrap gap-2 rounded-[26px] bg-card p-3" onSubmit={(event) => { event.preventDefault(); if (link.trim() && !busy) void load(); }}>
         <div className="relative min-w-0 flex-1">
           <Link2 aria-hidden className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <input value={link} onChange={(event) => setLink(event.target.value)} disabled={busy || disabled} aria-label="Link do vídeo para clonar" placeholder="Ou cole o link do vídeo (TikTok, Instagram, YouTube, Shopee)"
+          <input value={link} onChange={(event) => setLink(event.target.value)} onPaste={(event) => { const text = event.clipboardData.getData("text").trim(); if (/^https?:\/\/\S+$/i.test(text) && !busy && !disabled) { event.preventDefault(); setLink(text); void load(text); } }} disabled={busy || disabled} aria-label="Link do vídeo para clonar" placeholder="Ou cole o link do vídeo (TikTok, Instagram, YouTube, Shopee)"
             className="w-full rounded-full border border-border bg-background py-2.5 pl-10 pr-4 text-sm" />
         </div>
         <button type="submit" disabled={busy || disabled || !link.trim()} className="inline-flex items-center gap-2 rounded-full border border-[#7B3FE4]/60 px-5 py-2.5 text-sm font-medium text-[#A98BFF] disabled:opacity-50">
@@ -122,16 +135,23 @@ export function LinkVideo({ onFile, onPhotos, photoLabel, disabled }: { onFile: 
             {videos.length ? "Fotos do anúncio" : <>Este anúncio não tem vídeo do vendedor, mas tem <strong className="text-foreground">{photos.length} {photos.length === 1 ? "foto" : "fotos"}</strong></>}
             {title ? <> de <strong className="text-foreground">{title}</strong></> : null}. São da galeria do vendedor.
           </p>
+          {onPhotos && <p className="text-xs text-muted-foreground">Toque nas fotos para escolher quais usar (até 3). As {sel.length} marcadas já vão para o seu produto.</p>}
           <ul className="grid grid-cols-3 gap-2 sm:grid-cols-5">
-            {photos.map((src, index) => (
-              <li key={src} className="relative">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={src} alt={`Foto ${index + 1} do anúncio`} referrerPolicy="no-referrer" className="aspect-square w-full rounded-[12px] object-cover" />
-                <a href={src} download={`produto-${index + 1}.jpg`} target="_blank" rel="noreferrer" aria-label={`Baixar foto ${index + 1}`} className="absolute bottom-1 right-1 grid size-7 place-items-center rounded-full bg-black/60 text-white"><Download className="size-3.5" /></a>
-              </li>
-            ))}
+            {photos.map((src, index) => {
+              const on = sel.includes(src);
+              return (
+                <li key={src} className="relative">
+                  <button type="button" onClick={() => toggle(src)} disabled={!onPhotos || busy} aria-pressed={on} aria-label={`Foto ${index + 1} do anúncio`} className={`block w-full overflow-hidden rounded-[12px] ring-2 ${on ? "ring-[#7B3FE4]" : "ring-transparent"}`}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={src} alt={`Foto ${index + 1} do anúncio`} referrerPolicy="no-referrer" className={`aspect-square w-full object-cover ${on ? "" : "opacity-60"}`} />
+                  </button>
+                  {on && <span aria-hidden className="absolute left-1 top-1 grid size-5 place-items-center rounded-full bg-[#7B3FE4] text-[10px] font-semibold text-white">{sel.indexOf(src) + 1}</span>}
+                  <a href={src} download={`produto-${index + 1}.jpg`} target="_blank" rel="noreferrer" aria-label={`Baixar foto ${index + 1}`} className="absolute bottom-1 right-1 grid size-7 place-items-center rounded-full bg-black/60 text-white"><Download className="size-3.5" /></a>
+                </li>
+              );
+            })}
           </ul>
-          {onPhotos && !photoNote && (
+          {onPhotos && sel.length > 0 && sel.join("|") !== applied && (
             <button type="button" disabled={busy || disabled} onClick={() => void applyPhotos()} className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-4 py-2 text-xs font-medium text-white disabled:opacity-50">
               {photoLabel ?? "Usar essas fotos no meu produto"}
             </button>

@@ -70,9 +70,20 @@ describe("LinkVideo · Shopee pela extensão", () => {
     await userEvent.click(screen.getByRole("button", { name: "Usar o link" }));
     expect(await screen.findByTestId("shopee-photos")).toHaveTextContent("não tem vídeo do vendedor, mas tem 2 fotos");
     expect(screen.queryByRole("alert")).toBeNull();
-    await userEvent.click(screen.getByRole("button", { name: "Usar essas fotos no meu produto" }));
+    // sem clicar em nada: as fotos já vão para o produto
     await vi.waitFor(() => expect(onPhotos).toHaveBeenCalled());
     expect(onPhotos.mock.calls[0][0]).toHaveLength(2);
+  });
+
+  it("colar o link já começa a ler, sem apertar o botão", async () => {
+    bridge.read.mockResolvedValue({ ok: true, title: "Bola", images: ["https://down-br.img.susercontent.com/file/a"], videos: [] });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(new Blob(["img"], { type: "image/jpeg" }), { status: 200 })));
+    const onPhotos = vi.fn();
+    render(<LinkVideo onFile={() => {}} onPhotos={onPhotos} />);
+    await userEvent.click(screen.getByLabelText("Link do vídeo para clonar"));
+    await userEvent.paste("https://shopee.com.br/Bola-i.1.2");
+    await vi.waitFor(() => expect(onPhotos).toHaveBeenCalled());
+    expect(bridge.read).toHaveBeenCalled();
   });
 
   it("mostra a animação de carregamento enquanto lê o link", async () => {
