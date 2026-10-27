@@ -2100,7 +2100,23 @@ def _is_link_video_url(url: str) -> bool:
 
     parsed = urlparse(url)
     host = (parsed.hostname or "").lower()
-    return parsed.scheme == "https" and any(host == h or host.endswith("." + h) for h in LINK_VIDEO_HOSTS)
+    return parsed.scheme == "https" and any(host == h or host.endswith("." + h) for h in LINK_VIDEO_HOSTS + SHOPEE_HOSTS)
+
+
+def _shopee_page_videos(html: str) -> list[str]:
+    """Endereços de vídeo (.mp4) do ANÚNCIO do vendedor. Vídeos de avaliações, recomendados e banners ficam de fora."""
+    import html as _html
+    import re as _re
+
+    skip = _re.compile(r"rating|review|comment|cmt|avalia|feedback|buyer|customer|recommend|similar|banner|voucher|flash", _re.I)
+    found: list[str] = []
+    for match in _re.finditer(r"https?:(?:\\?/){2}[\w.\-]*(?:susercontent|shopee)[\w.\-]*(?:\\?/)[\w.\-/\\%]*?\.mp4", html):
+        if skip.search(html[max(0, match.start() - 300) : match.start()]):
+            continue
+        url = _html.unescape(match.group(0)).replace("\\u002F", "/").replace("\\/", "/")
+        if url not in found:
+            found.append(url)
+    return found[:3]
 
 
 def _download_link_video(url: str, folder: str) -> str | None:
@@ -2154,7 +2170,7 @@ async def video_from_link(request: Request, db: AsyncSession = Depends(get_db)):
     if url and not url.startswith("http"):
         url = "https://" + url
     if not url or not _is_link_video_url(url):
-        raise HTTPException(status_code=400, detail="Use um link de vídeo do TikTok, Instagram, YouTube, Facebook, X ou Kwai.")
+        raise HTTPException(status_code=400, detail="Use um link de vídeo do TikTok, Instagram, YouTube, Shopee, Facebook, X ou Kwai.")
 
     folder = tempfile.mkdtemp(prefix="linkvideo_")
     path: str | None = None
@@ -2162,7 +2178,23 @@ async def video_from_link(request: Request, db: AsyncSession = Depends(get_db)):
         from urllib.parse import urlparse
 
         host = (urlparse(url).hostname or "").lower()
-        if host.endswith("youtube.com") or host == "youtu.be":
+        if any(host == h or host.endswith("." + h) for h in SHOPEE_HOSTS):
+            import httpx
+
+            headers = {"User-Agent": SHOPEE_BROWSER_UA, "Accept-Language": "pt-BR,pt;q=0.9", "Accept": "text/html,application/xhtml+xml,*/*;q=0.8"}
+            async with httpx.AsyncClient(timeout=30, headers=headers) as http:
+                page, _kind = await _safe_get(http, url, 3 * 1024 * 1024)
+                for video_url in _shopee_page_videos(page.decode("utf-8", "ignore")):
+                    try:
+                        body, kind = await _safe_get(http, video_url, 80 * 1024 * 1024)
+                    except Exception:
+                        continue
+                    if len(body) > 30_000 and (kind.startswith("video/") or kind == "application/octet-stream"):
+                        target = Path(folder) / "video.mp4"
+                        target.write_bytes(body)
+                        path = str(target)
+                        break
+        elif host.endswith("youtube.com") or host == "youtu.be":
             from ...youtube_utils import async_download_youtube_video
 
             found = await async_download_youtube_video(url)

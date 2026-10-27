@@ -32,7 +32,7 @@ export function LinkVideo({ onFile, disabled }: { onFile: (file: File) => void; 
       <form className="flex flex-wrap gap-2" onSubmit={(event) => { event.preventDefault(); if (link.trim() && !busy) void load(); }}>
         <div className="relative min-w-0 flex-1">
           <Link2 aria-hidden className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <input value={link} onChange={(event) => setLink(event.target.value)} disabled={busy || disabled} aria-label="Link do vídeo para clonar" placeholder="Ou cole o link do vídeo (TikTok, Instagram, YouTube)"
+          <input value={link} onChange={(event) => setLink(event.target.value)} disabled={busy || disabled} aria-label="Link do vídeo para clonar" placeholder="Ou cole o link do vídeo (TikTok, Instagram, YouTube, Shopee)"
             className="w-full rounded-full border border-border bg-background py-2.5 pl-10 pr-4 text-sm" />
         </div>
         <button type="submit" disabled={busy || disabled || !link.trim()} className="inline-flex items-center gap-2 rounded-full border border-[#7B3FE4]/60 px-5 py-2.5 text-sm font-medium text-[#A98BFF] disabled:opacity-50">
