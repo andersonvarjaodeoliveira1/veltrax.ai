@@ -989,8 +989,7 @@ export function InfluencerChat() {
             <span aria-hidden className="grid size-10 shrink-0 place-items-center rounded-[12px] bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white shadow-[0_10px_28px_-10px_#7B3FE4]"><Sparkles className="size-5" /></span>
             <h1 className="text-2xl font-extrabold uppercase tracking-tight sm:text-3xl">{session?.user?.name && <span aria-hidden>{session.user.name.split(" ")[0]}, </span>}{t("home")}</h1>
           </div>
-          {composer}
-          {nicheRow}
+          <p data-testid="home-steps" className="text-center text-xs text-muted-foreground"><b className="text-foreground">1</b> Escolha quem vai aparecer · <b className="text-foreground">2</b> Escolha o tipo de vídeo · <b className="text-foreground">3</b> Escreva ou ajuste o texto e envie</p>
           {pinnedSkills.length > 0 && (
             <div className="flex flex-wrap items-center gap-2" data-testid="pinned-home">
               <span className="text-xs text-muted-foreground">{t("pinnedTitle")}:</span>
@@ -999,7 +998,7 @@ export function InfluencerChat() {
           )}
           <div className="space-y-3" data-testid="my-models">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs text-muted-foreground">{t("myModel")}:</span>
+              <span className="text-xs text-muted-foreground"><b className="text-foreground">1</b> {t("myModel")}:</span>
               <Chip on={selModelId === ""} onClick={() => setSelModelId("")}>{t("noModel")}</Chip>
               {models.map((m) => (
                 <span key={m.id} className="inline-flex items-center gap-1">
@@ -1060,6 +1059,14 @@ export function InfluencerChat() {
               })}
             </div>
             <p className="text-xs text-muted-foreground">{t("presetNote")}</p>
+          </div>
+          <div className="space-y-2" data-testid="home-niche">
+            <span className="text-xs text-muted-foreground"><b className="text-foreground">2</b> Tipo de vídeo:</span>
+            {nicheRow}
+          </div>
+          <div className="space-y-2" data-testid="home-composer">
+            <span className="text-xs text-muted-foreground"><b className="text-foreground">3</b> Escreva ou ajuste o texto e envie:</span>
+            {composer}
           </div>
           <div className="space-y-4 pt-4" data-testid="influencer-examples">
             <div role="group" aria-label={t("all")} className="flex flex-wrap justify-center gap-1.5">
