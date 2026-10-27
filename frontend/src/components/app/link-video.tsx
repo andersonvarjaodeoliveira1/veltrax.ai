@@ -18,7 +18,7 @@ export function LinkVideo({ onFile, disabled }: { onFile: (file: File) => void; 
     return new File([blob], `video-do-link.${ext}`, { type: blob.type || "video/mp4" });
   }
 
-  async function useShopeeVideo(cdnUrl: string) {
+  async function pickShopeeVideo(cdnUrl: string) {
     setBusy(true); setError("");
     try {
       const response = await fetch("/api/multiplier/clone/video-from-link", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cdn_url: cdnUrl }) });
@@ -77,9 +77,8 @@ export function LinkVideo({ onFile, disabled }: { onFile: (file: File) => void; 
           <ul className="grid gap-3 sm:grid-cols-3">
             {videos.map((video, index) => (
               <li key={video.url} className="space-y-1.5">
-                {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
                 <video controls muted playsInline preload="metadata" poster={video.poster || undefined} src={video.url} className="aspect-[9/16] w-full rounded-[12px] bg-black object-cover" aria-label={`Vídeo ${index + 1} do anúncio`} />
-                <button type="button" disabled={busy || disabled} onClick={() => void useShopeeVideo(video.url)} className="w-full rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-3 py-2 text-xs font-medium text-white disabled:opacity-50">
+                <button type="button" disabled={busy || disabled} onClick={() => void pickShopeeVideo(video.url)} className="w-full rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-3 py-2 text-xs font-medium text-white disabled:opacity-50">
                   {busy ? "Baixando…" : `Usar o vídeo ${index + 1}`}
                 </button>
               </li>
