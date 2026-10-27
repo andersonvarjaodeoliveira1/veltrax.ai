@@ -244,8 +244,7 @@ const S = {
   modelVoice: ["Voz (ex.: feminina, calma, 30 anos, sotaque paulista)", "Voice (e.g. female, calm, 30s, neutral accent)", "Voz (ej.: femenina, calma, 30 años, acento neutro)"],
   presetModels: ["Modelos prontos (realistas)", "Ready-made models (realistic)", "Modelos listos (realistas)"],
   usePreset: ["Usar", "Use", "Usar"],
-  copyFacePrompt: ["Copiar prompt do rosto", "Copy face prompt", "Copiar prompt del rostro"],
-  presetNote: ["Gere o rosto com o prompt (Flow ou outra ferramenta) e anexe em \"Foto do rosto\" para manter a mesma pessoa em todos os vídeos. Sem foto, a descrição já guia o vídeo.", "Generate the face with the prompt (Flow or another tool) and attach it as \"Face photo\" to keep the same person in every video. Without a photo, the description still guides the video.", "Genera el rostro con el prompt (Flow u otra herramienta) y adjúntalo como \"Foto del rostro\" para mantener a la misma persona en todos los videos. Sin foto, la descripción igual guía el video."],
+  presetNote: ["Clique na foto ou em Usar para criar o vídeo com essa pessoa. Para manter o mesmo rosto em todos os vídeos, anexe uma foto em Novo modelo.", "Click the photo or Use to create the video with this person. To keep the same face in every video, attach a photo in New model.", "Haz clic en la foto o en Usar para crear el video con esta persona. Para mantener el mismo rostro en todos los videos, adjunta una foto en Nuevo modelo."],
   saveModel: ["Salvar modelo", "Save model", "Guardar modelo"],
   modelNote: ["O rosto vira a foto de referência e a voz entra em todas as cenas. O Flow não clona a voz de um áudio: a voz é descrita no prompt.", "The face becomes the reference photo and the voice goes into every scene. Flow does not clone a voice from audio: the voice is described in the prompt.", "El rostro es la foto de referencia y la voz entra en todas las escenas. Flow no clona la voz desde un audio: la voz se describe en el prompt."],
   usingModel: ["Trabalhando em cima do modelo", "Working on model", "Trabajando sobre el modelo"],
@@ -365,7 +364,6 @@ export function InfluencerChat() {
   const [modelChosen, setModelChosen] = useState(false);
   const [models, setModels] = useState<MyModel[]>([]);
   const [selModelId, setSelModelId] = useState("");
-  const [copiedPreset, setCopiedPreset] = useState("");
   const [modelForm, setModelForm] = useState(false);
   const [mName, setMName] = useState("");
   const [mLook, setMLook] = useState("");
@@ -1033,9 +1031,14 @@ export function InfluencerChat() {
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
               {PRESET_MODELS.map((preset) => {
                 const owned = models.find((m) => m.id === preset.id);
+                const choose = () => {
+                  if (!owned) { const next = [{ id: preset.id, ...preset.model, faces: [] }, ...models]; if (!saveModels(next)) { setError(t("error")); return; } setModels(next); }
+                  setSelModelId(preset.id);
+                };
+                const on = selModelId === preset.id;
                 return (
-                  <div key={preset.id} className="min-w-0 space-y-2 overflow-hidden rounded-[14px] border border-border bg-card p-3 text-xs">
-                    <div className="flex items-center gap-3">
+                  <div key={preset.id} className={cn("min-w-0 space-y-2 overflow-hidden rounded-[14px] border bg-card p-3 text-xs", on ? "border-[#7B3FE4]" : "border-border")}>
+                    <button type="button" onClick={choose} aria-label={`${t("usePreset")} ${preset.name}`} className="flex w-full items-center gap-3 text-left">
                       {preset.photo ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={preset.photo} alt={preset.name} loading="lazy" className="size-16 shrink-0 rounded-full object-cover ring-2 ring-[#7B3FE4]/50" />
@@ -1043,17 +1046,9 @@ export function InfluencerChat() {
                         <div aria-hidden className="grid size-16 shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#7B3FE4]/40 to-[#F0466B]/25 text-xl font-semibold text-white/80">{preset.name.charAt(0)}</div>
                       )}
                       <div className="min-w-0 text-sm font-medium">{preset.name}<span className="block text-xs font-normal text-muted-foreground">{preset.scene}</span></div>
-                    </div>
+                    </button>
                     <p className="line-clamp-3 text-muted-foreground">{preset.model.persona.look}</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      <Button type="button" size="sm" variant={selModelId === preset.id ? "default" : "outline"} className="rounded-full" onClick={async () => {
-                        if (!owned) {
-                          const next = [{ id: preset.id, ...preset.model, faces: [] }, ...models]; if (!saveModels(next)) { setError(t("error")); return; } setModels(next);
-                        }
-                        setSelModelId(preset.id);
-                      }}>{t("usePreset")}</Button>
-                      <Button type="button" size="sm" variant="ghost" className="min-w-0 whitespace-normal rounded-full px-2 text-left" onClick={() => { void navigator.clipboard?.writeText(preset.facePrompt).then(() => { setCopiedPreset(preset.id); setTimeout(() => setCopiedPreset(""), 1500); }).catch(() => undefined); }}>{copiedPreset === preset.id ? t("copied") : t("copyFacePrompt")}</Button>
-                    </div>
+                    <Button type="button" size="sm" variant={on ? "default" : "outline"} className="rounded-full" onClick={choose}>{on ? `✓ ${t("usePreset")}` : t("usePreset")}</Button>
                   </div>
                 );
               })}
