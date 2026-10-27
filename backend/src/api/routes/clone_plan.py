@@ -1902,11 +1902,58 @@ async def help_report(request: Request, db: AsyncSession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 # Importar fotos de produto da Shopee (link ou arquivos) — alimenta o produto dos vídeos.
 # ---------------------------------------------------------------------------
-SHOPEE_HOSTS = ("shopee.com.br", "shopee.com", "shp.ee", "shopee.co.id", "shopee.com.mx", "shopee.ph", "shopee.vn", "shopee.sg", "shopee.tw", "shopee.co.th", "shopee.com.my")
+SHOPEE_HOSTS = ("shopee.com.br", "shopee.com", "shp.ee", "shope.ee", "shopee.co.id", "shopee.com.mx", "shopee.ph", "shopee.vn", "shopee.sg", "shopee.tw", "shopee.co.th", "shopee.com.my")
 SHOPEE_MAX_IMAGES = 9
 SHOPEE_MAX_ZIP_BYTES = 40 * 1024 * 1024
 SHOPEE_MAX_ENTRY_BYTES = 8 * 1024 * 1024
 SHOPEE_BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
+
+
+SHOPEE_SHORT_HOSTS = ("s.shopee.com.br", "s.shopee.com", "shp.ee", "shope.ee")
+
+
+def _shopee_short_target(html: str, url: str = "") -> str | None:
+    """Link curto da Shopee (s.shopee.com.br, shp.ee, shope.ee): devolve o link canônico do produto (loja e item), se achar."""
+    import json as _json
+    import re as _re
+    from urllib.parse import parse_qs, unquote, urlparse
+
+    candidates: list[str] = []
+    query = parse_qs(urlparse(url).query)
+    for key in ("origin_link", "url"):
+        candidates += [unquote(value) for value in query.get(key, [])]
+    for match in _re.finditer(r'httpUrl["\']?\s*[:=]\s*"((?:[^"\\]|\\.)*)"', html or ""):
+        try:
+            candidates.append(_json.loads(f'"{match.group(1)}"'))
+        except Exception:
+            continue
+    for candidate in candidates:
+        parsed = urlparse(candidate)
+        if not _is_shopee_url(candidate):
+            continue
+        found = _re.search(r"/(?:product/)?(\d{5,})/(\d{5,})(?:[/?#]|$)", parsed.path) or _re.search(r"-i\.(\d{5,})\.(\d{5,})", parsed.path)
+        if found:
+            host = (parsed.hostname or "shopee.com.br").lower()
+            host = host if host not in SHOPEE_SHORT_HOSTS else "shopee.com.br"
+            return f"https://{host}/product/{found.group(1)}/{found.group(2)}"
+    return None
+
+
+async def _expand_shopee_link(url: str) -> str:
+    """Se for link curto, abre a página de redirecionamento e devolve o link do produto; senão devolve o mesmo link."""
+    import httpx
+    from urllib.parse import urlparse
+
+    host = (urlparse(url).hostname or "").lower()
+    if host not in SHOPEE_SHORT_HOSTS:
+        return url
+    headers = {"User-Agent": SHOPEE_BROWSER_UA, "Accept-Language": "pt-BR,pt;q=0.9", "Accept": "text/html,application/xhtml+xml,*/*;q=0.8"}
+    try:
+        async with httpx.AsyncClient(timeout=20, headers=headers) as http:
+            body, _kind = await _safe_get(http, url, 1024 * 1024)
+        return _shopee_short_target(body.decode("utf-8", "ignore"), url) or url
+    except Exception:
+        return _shopee_short_target("", url) or url
 
 
 def _is_shopee_url(url: str) -> bool:
@@ -2023,6 +2070,22 @@ def _images_from_zip(data: bytes) -> list[tuple[str, bytes]]:
     return out
 
 
+@router.post("/shopee-resolve")
+async def shopee_resolve(request: Request, db: AsyncSession = Depends(get_db)):
+    """Troca um link curto da Shopee (s.shopee.com.br, shp.ee, shope.ee) pelo link do produto, para a extensão abrir a página certa."""
+    user_id = await _user_id(request, db)
+    _check_script_rate(user_id)
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    url = str((data or {}).get("url") or "").strip()[:500]
+    if not url or not _is_shopee_url(url):
+        raise HTTPException(status_code=400, detail="Cole um link da Shopee.")
+    resolved = await _expand_shopee_link(url)
+    return {"url": resolved, "changed": resolved != url}
+
+
 @router.post("/shopee-images")
 async def shopee_images(request: Request, db: AsyncSession = Depends(get_db)):
     """Recebe o link de um produto da Shopee e/ou arquivos (fotos ou .zip) e devolve as imagens do produto, já reduzidas."""
@@ -2034,6 +2097,8 @@ async def shopee_images(request: Request, db: AsyncSession = Depends(get_db)):
     _check_script_rate(user_id)
     form = await request.form()
     link = str(form.get("url") or "").strip()[:500]
+    if link and _is_shopee_url(link):
+        link = await _expand_shopee_link(link)
     raw_files: list[tuple[str, bytes]] = []
     for item in form.getlist("files")[:20]:
         if not hasattr(item, "read"):
@@ -2225,6 +2290,7 @@ async def video_from_link(request: Request, db: AsyncSession = Depends(get_db)):
         if any(host == h or host.endswith("." + h) for h in SHOPEE_HOSTS):
             import httpx
 
+            url = await _expand_shopee_link(url)
             headers = {"User-Agent": SHOPEE_BROWSER_UA, "Accept-Language": "pt-BR,pt;q=0.9", "Accept": "text/html,application/xhtml+xml,*/*;q=0.8"}
             async with httpx.AsyncClient(timeout=30, headers=headers) as http:
                 page, _kind = await _safe_get(http, url, 3 * 1024 * 1024)

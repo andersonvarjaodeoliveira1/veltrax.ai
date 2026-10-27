@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Download, Link2, Loader2 } from "lucide-react";
-import { normalizeShopeeUrl, readShopeeViaExtension } from "@/lib/shopee-bridge";
+import { expandShopeeLink, normalizeShopeeUrl, readShopeeViaExtension } from "@/lib/shopee-bridge";
 
 const STEPS_SHOPEE = ["Abrindo o anúncio da Shopee…", "Procurando os vídeos do vendedor…", "Separando as fotos do produto…", "Quase pronto…"];
 const STEPS_LINK = ["Abrindo o link…", "Localizando o vídeo…", "Baixando o vídeo…", "Quase pronto…"];
@@ -70,7 +70,7 @@ export function LinkVideo({ onFile, onPhotos, photoLabel, disabled }: { onFile: 
     const shopee = normalizeShopeeUrl(link);
     if (shopee) {
       // A Shopee bloqueia o servidor, mas não o navegador da pessoa: a extensão abre o anúncio e lê os vídeos.
-      const read = await readShopeeViaExtension(shopee);
+      const read = await readShopeeViaExtension(await expandShopeeLink(shopee));
       if (read.ok) {
         setBusy(false);
         setTitle(read.title);

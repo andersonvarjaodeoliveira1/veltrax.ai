@@ -32,3 +32,22 @@ def test_cdn_downloads_are_limited_to_shopee_files():
     assert not cp._is_shopee_cdn("http://down-br.img.susercontent.com/file/x")
     assert not cp._is_shopee_cdn("https://169.254.169.254/latest/meta-data")
     assert not cp._is_shopee_cdn("https://evil.com/?u=susercontent.com")
+
+
+def test_short_link_resolves_to_the_product_page():
+    html = 'x={"httpUrl":"https:\\/\\/shopee.com.br\\/opaanlp\\/1407654055\\/58219994665?__mobile__=1\\u0026exp_group=rollout","deepLinkUrl":"shopeebr:\\/\\/x"}'
+    assert cp._shopee_short_target(html) == "https://shopee.com.br/product/1407654055/58219994665"
+
+
+def test_affiliate_redirect_link_uses_origin_link():
+    url = "https://shope.ee/an_redir?origin_link=https%3A%2F%2Fshopee.com.br%2Fproduct%2F1312814661%2F22198009726"
+    assert cp._shopee_short_target("", url) == "https://shopee.com.br/product/1312814661/22198009726"
+
+
+def test_short_target_ignores_other_sites():
+    assert cp._shopee_short_target('{"httpUrl":"https:\\/\\/evil.com\\/a\\/1407654055\\/58219994665"}') is None
+    assert cp._shopee_short_target("") is None
+
+
+def test_shope_ee_is_a_shopee_host():
+    assert cp._is_shopee_url("https://shope.ee/abc")

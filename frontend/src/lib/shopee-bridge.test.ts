@@ -33,3 +33,21 @@ describe("shopee-bridge", () => {
     spy.mockRestore();
   });
 });
+
+describe("expandShopeeLink", () => {
+  it("troca o link curto pelo link do produto", async () => {
+    const { expandShopeeLink } = await import("./shopee-bridge");
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ url: "https://shopee.com.br/product/1407654055/58219994665" }), { status: 200 })));
+    expect(await expandShopeeLink("https://s.shopee.com.br/6VOxfMfRjm")).toBe("https://shopee.com.br/product/1407654055/58219994665");
+    vi.unstubAllGlobals();
+  });
+  it("não chama o servidor para link normal e mantém o link se falhar", async () => {
+    const { expandShopeeLink } = await import("./shopee-bridge");
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 500 }));
+    vi.stubGlobal("fetch", fetchMock);
+    expect(await expandShopeeLink("https://shopee.com.br/Bola-i.1.2")).toBe("https://shopee.com.br/Bola-i.1.2");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(await expandShopeeLink("https://shope.ee/abc")).toBe("https://shope.ee/abc");
+    vi.unstubAllGlobals();
+  });
+});

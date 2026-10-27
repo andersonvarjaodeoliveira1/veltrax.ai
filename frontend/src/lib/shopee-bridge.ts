@@ -2,7 +2,8 @@
 
 export type ShopeeRead = { ok: true; title: string; videos: { url: string; poster: string }[]; images: string[] } | { ok: false; error: "no-extension" | "login" | "empty" | "invalid" | "failed" };
 
-const SHOPEE_HOST = /^(?:[\w-]+\.)*(?:shopee\.com\.br|shopee\.com|shp\.ee)$/i;
+const SHOPEE_HOST = /^(?:[\w-]+\.)*(?:shopee\.com\.br|shopee\.com|shp\.ee|shope\.ee)$/i;
+const SHORT_HOST = /^(?:s\.shopee\.com\.br|s\.shopee\.com|shp\.ee|shope\.ee)$/i;
 
 export function normalizeShopeeUrl(raw: string): string | null {
   const text = raw.trim();
@@ -32,4 +33,15 @@ export function readShopeeViaExtension(url: string, timeoutMs = 45_000): Promise
     const endTimer = window.setTimeout(() => finish({ ok: false, error: "failed" }), timeoutMs);
     window.postMessage({ source: "clipgringa-page", type: "shopee-read", id, url }, window.location.origin);
   });
+}
+
+/** Link curto da Shopee (s.shopee.com.br, shp.ee, shope.ee) só redireciona por script: o servidor descobre o link real do produto. */
+export async function expandShopeeLink(url: string): Promise<string> {
+  try {
+    if (!SHORT_HOST.test(new URL(url).hostname)) return url;
+    const response = await fetch("/api/multiplier/clone/shopee-resolve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }) });
+    if (!response.ok) return url;
+    const data = await response.json().catch(() => null);
+    return typeof data?.url === "string" && data.url.startsWith("https://") ? data.url : url;
+  } catch { return url; }
 }

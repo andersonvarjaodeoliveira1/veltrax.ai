@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { Download, Loader2, PackageSearch, Paperclip } from "lucide-react";
-import { normalizeShopeeUrl, readShopeeViaExtension } from "@/lib/shopee-bridge";
+import { expandShopeeLink, normalizeShopeeUrl, readShopeeViaExtension } from "@/lib/shopee-bridge";
 
 type Found = { name: string; image: string };
 
@@ -41,7 +41,7 @@ export function ShopeeImport({ onUse, disabled }: { onUse: (files: File[], title
     if (shopee) {
       // A Shopee bloqueia o servidor, mas não o navegador da pessoa: a extensão abre o anúncio e lê as fotos da galeria do vendedor.
       setBusy(true); setError("");
-      const read = await readShopeeViaExtension(shopee);
+      const read = await readShopeeViaExtension(await expandShopeeLink(shopee));
       if (read.ok && read.images.length) {
         const form = new FormData();
         read.images.slice(0, 9).forEach((url) => form.append("image_urls", url));
