@@ -55,6 +55,8 @@
 
   /* ---------- pacote ---------- */
   let flowModel = "[Lower Priority]"; // modelo do Flow pedido pelo pacote (padrão: Lower Priority, 0 créditos)
+  let productImage = ""; // foto real do produto (data URL) enviada pelo site: vai como referência na imagem de cada cena
+  let refDone = false;
   let fallbackModels = []; // modelos mais baratos a tentar quando a conta não tem o pedido (ex.: sem Lower Priority)
   const isLowerPriority = () => flowModel === "[Lower Priority]";
 
@@ -85,6 +87,8 @@
     if (!jobs.length) throw new Error("O pacote não tem cenas com prompts.");
     const wanted = String(data.flowModel || "").trim();
     flowModel = wanted && !/lower priority/i.test(wanted) ? wanted : "[Lower Priority]";
+    productImage = typeof data.productImage === "string" && /^data:image\/(jpeg|png|webp);base64,/.test(data.productImage) ? data.productImage : "";
+    refDone = false;
     fallbackModels = Array.isArray(data.fallbackModels) ? data.fallbackModels.map((x) => String(x)).filter(Boolean) : [];
     try { el("chipmodel").textContent = isLowerPriority() ? "LOWER PRIORITY · 0 CRÉDITOS" : `${flowModel.toUpperCase()} · GASTA CRÉDITOS`; } catch (_e) { /* painel ainda não existe */ }
     return { jobs, keyword: data.keyword || "" };
@@ -694,11 +698,37 @@
     throw lastError;
   }
 
+  // Anexa a foto real do produto como referência no Flow, para o avatar aparecer apresentando o produto de verdade.
+  // Nunca atrapalha: se o Flow não aceitar, segue só com o texto do prompt.
+  async function attachReference() {
+    if (!productImage || refDone) return;
+    refDone = true; // tenta uma vez por pacote; se o Flow guardar a referência, vale para as próximas cenas
+    try {
+      const blob = await (await fetch(productImage)).blob();
+      const file = new File([blob], "produto.jpg", { type: blob.type || "image/jpeg" });
+      const findInput = () => $$("input[type=file]", document).find((i) => !i.disabled && /image/i.test(i.accept || "image"));
+      let input = findInput();
+      if (!input) {
+        const add = $$("button", promptBox() ? promptBox().parentElement || document : document).filter(visible)
+          .find((b) => /adicionar|add|anexar|upload|enviar imagem|imagem|image/i.test(`${b.getAttribute("aria-label") || ""} ${b.title || ""}`) || ["add", "add_2", "add_photo_alternate", "upload"].some((icon) => hasIcon(b, icon)));
+        if (add) { add.click(); await sleep(900); input = findInput(); }
+      }
+      if (!input) return;
+      const transfer = new DataTransfer();
+      transfer.items.add(file);
+      input.files = transfer.files;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      await sleep(3500);
+    } catch (_e) { /* segue sem a referência */ }
+  }
+
   async function makeImage(job, label) {
     setPhase("imagem");
     return withRetry(`${label} (imagem)`, async () => {
       setNow(`${label}: preparando o Flow para gerar a imagem…`);
       await configure("image");
+      await attachReference();
       await setPrompt(job.imagePrompt);
       const before = tileKeys();
       await pressGenerate();
