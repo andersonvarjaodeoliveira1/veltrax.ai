@@ -155,7 +155,7 @@ chrome.runtime.onInstalled.addListener(async () => {
 // Abre o anúncio da Shopee numa aba em segundo plano (no navegador da própria pessoa, com a sessão dela),
 // lê os vídeos e as fotos do anúncio e fecha a aba. Só devolve endereços.
 async function readShopee(url) {
-  if (!/^https:\/\/(?:[\w-]+\.)*(?:shopee\.com\.br|shopee\.com|shp\.ee)\//i.test(url)) return { ok: false, error: "invalid" };
+  if (!/^https:\/\/(?:[\w-]+\.)*(?:shopee\.com\.br|shopee\.com|shp\.ee|shope\.ee)\//i.test(url)) return { ok: false, error: "invalid" };
   const tab = await chrome.tabs.create({ url, active: false });
   try {
     await new Promise((resolve) => {
@@ -170,6 +170,8 @@ async function readShopee(url) {
       const current = await chrome.tabs.get(tab.id).catch(() => null);
       if (!current) break;
       if (/\/buyer\/login|\/verify\/|captcha/i.test(current.url || "")) return { ok: false, error: "login" };
+      // aba em segundo plano não carrega fotos "preguiçosas": rola a página para a Shopee mostrar tudo do topo do anúncio
+      if (i === 1 || i === 4) { try { await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => { window.scrollTo(0, 500); window.dispatchEvent(new Event("scroll")); } }); } catch (_e) { /* sem permissão */ } }
       let out = null;
       try { out = (await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: clipgringaScrapeShopee }))[0].result; } catch (_e) { out = null; }
       if (out) best = out;

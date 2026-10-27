@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ClipGringa · Flow",
-  "version": "1.14.2",
+  "version": "1.14.3",
   "description": "Gera sozinho as imagens e os vídeos do seu pacote do ClipGringa no Google Flow.",
   "permissions": [
     "storage",
@@ -22,7 +22,8 @@
     "https://labs.google/fx/tools/flow/*",
     "https://*.shopee.com.br/*",
     "https://shopee.com.br/*",
-    "https://shp.ee/*"
+    "https://shp.ee/*",
+    "https://shope.ee/*"
   ],
   "background": {
     "service_worker": "background.js"

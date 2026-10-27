@@ -50,6 +50,17 @@ describe("LinkVideo · Shopee pela extensão", () => {
     expect(JSON.parse(calls[0])).toEqual({ cdn_url: "https://down-bs.vod.susercontent.com/api/v4/1/mms/b.mp4" });
   });
 
+  it("sem extensão explica o motivo real em vez de tentar baixar pelo servidor", async () => {
+    bridge.read.mockResolvedValue({ ok: false, error: "no-extension" });
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    render(<LinkVideo onFile={vi.fn()} />);
+    await userEvent.type(screen.getByLabelText("Link do vídeo para clonar"), "https://shopee.com.br/Bola-i.1.2");
+    await userEvent.click(screen.getByRole("button", { name: "Usar o link" }));
+    expect(await screen.findByText(/Não encontrei a extensão ClipGringa/)).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("sem vídeo do vendedor mostra as fotos, sem erro, e deixa usar no produto", async () => {
     bridge.read.mockResolvedValue({ ok: true, title: "Bola", images: ["https://down-br.img.susercontent.com/file/a", "https://down-br.img.susercontent.com/file/b"], videos: [] });
     vi.stubGlobal("fetch", vi.fn(async () => new Response(new Blob(["img"], { type: "image/jpeg" }), { status: 200 })));
