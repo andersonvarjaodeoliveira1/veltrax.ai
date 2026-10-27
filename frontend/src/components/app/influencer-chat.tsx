@@ -1035,20 +1035,20 @@ export function InfluencerChat() {
                 const owned = models.find((m) => m.id === preset.id);
                 return (
                   <div key={preset.id} className="min-w-0 space-y-2 overflow-hidden rounded-[14px] border border-border bg-card p-3 text-xs">
-                    {preset.photo ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={preset.photo} alt={preset.name} loading="lazy" className="aspect-[3/4] w-full rounded-[10px] object-cover" />
-                    ) : (
-                      <div aria-hidden className="grid aspect-[3/4] w-full place-items-center rounded-[10px] bg-gradient-to-br from-[#7B3FE4]/40 via-[#A98BFF]/20 to-[#F0466B]/25 text-3xl font-semibold text-white/80">{preset.name.charAt(0)}</div>
-                    )}
-                    <div className="text-sm font-medium">{preset.name} <span className="font-normal text-muted-foreground">· {preset.scene}</span></div>
+                    <div className="flex items-center gap-3">
+                      {preset.photo ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={preset.photo} alt={preset.name} loading="lazy" className="size-16 shrink-0 rounded-full object-cover ring-2 ring-[#7B3FE4]/50" />
+                      ) : (
+                        <div aria-hidden className="grid size-16 shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#7B3FE4]/40 to-[#F0466B]/25 text-xl font-semibold text-white/80">{preset.name.charAt(0)}</div>
+                      )}
+                      <div className="min-w-0 text-sm font-medium">{preset.name}<span className="block text-xs font-normal text-muted-foreground">{preset.scene}</span></div>
+                    </div>
                     <p className="line-clamp-3 text-muted-foreground">{preset.model.persona.look}</p>
                     <div className="flex flex-wrap gap-1.5">
                       <Button type="button" size="sm" variant={selModelId === preset.id ? "default" : "outline"} className="rounded-full" onClick={async () => {
                         if (!owned) {
-                          let faces: string[] = [];
-                          if (preset.photo) { try { faces = [await fileToDataUrl(new File([await (await fetch(preset.photo)).blob()], "rosto.jpg", { type: "image/jpeg" }))]; } catch { faces = []; } }
-                          const next = [{ id: preset.id, ...preset.model, faces }, ...models]; if (!saveModels(next)) { setError(t("error")); return; } setModels(next);
+                          const next = [{ id: preset.id, ...preset.model, faces: [] }, ...models]; if (!saveModels(next)) { setError(t("error")); return; } setModels(next);
                         }
                         setSelModelId(preset.id);
                       }}>{t("usePreset")}</Button>
