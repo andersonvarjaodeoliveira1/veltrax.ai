@@ -9,15 +9,24 @@ const BLOCKED_AGENTS = new RegExp(
     "sqlmap", "nikto", "nmap", "masscan", "nuclei", "wpscan", "gobuster", "dirbuster", "feroxbuster", "ffuf", "wfuzz", "acunetix", "nessus", "openvas",
     "burp", "zgrab", "zmap", "shodan", "censys", "netsparker", "arachni", "havij", "metasploit", "hydra", "httrack", "webcopier", "teleport", "scrapy",
     "libwww-perl", "nutch", "gptbot", "chatgpt-user", "oai-searchbot", "ccbot", "claudebot", "anthropic-ai", "claude-web", "bytespider", "perplexitybot",
-    "amazonbot", "diffbot", "petalbot", "semrush", "ahrefs", "mj12bot", "dotbot", "imagesiftbot", "omgili", "cohere-ai", "google-extended", "facebookbot",
+    "amazonbot", "claude-user", "claude-searchbot", "perplexity-user", "meta-externalagent", "meta-externalfetcher", "applebot-extended", "ai2bot", "youbot", "timpibot", "kangaroo", "duckassistbot", "mistralai-user", "cohere-training-data-crawler", "friendlycrawler", "img2dataset", "firecrawl", "crawl4ai", "diffbot", "petalbot", "semrush", "ahrefs", "mj12bot", "dotbot", "imagesiftbot", "omgili", "cohere-ai", "google-extended", "facebookbot",
   ].join("|"),
   "i",
 );
 // Caminhos que só robôs de varredura pedem; a aplicação não tem nada disso.
 const PROBE_PATHS = /^\/(?:\.env|\.git|\.svn|\.hg|\.aws|\.ssh|\.ds_store|wp-admin|wp-login|wp-content|wp-includes|xmlrpc\.php|phpmyadmin|pma|admin\.php|config\.php|cgi-bin|vendor\/phpunit|actuator|server-status|manager\/html|backup|dump|db\.sql|database\.sql|id_rsa|docker-compose|dockerfile|composer\.json)/i;
 
+// Scripts e navegadores sem cabeça que baixam as páginas para copiar: só valem para as páginas do site (não para /api, arquivos ou webhooks).
+const SCRIPT_AGENTS = /^(?:curl|wget|python-requests|python-urllib|python-httpx|aiohttp|httpx|go-http-client|node-fetch|undici|axios|okhttp|java\/|libcurl|php|ruby|guzzle|postmanruntime|insomnia)|headlesschrome|phantomjs|puppeteer|playwright|selenium|webdriver/i;
+
+function isPagePath(pathname: string) {
+  return !pathname.startsWith("/api") && !pathname.startsWith("/_next") && !pathname.startsWith("/extensao") && !pathname.startsWith("/.well-known") && !PUBLIC_FILE.test(pathname);
+}
+
 export function isHostileRequest(pathname: string, userAgent: string | null): boolean {
-  return PROBE_PATHS.test(pathname) || BLOCKED_AGENTS.test(userAgent ?? "");
+  if (PROBE_PATHS.test(pathname) || BLOCKED_AGENTS.test(userAgent ?? "")) return true;
+  if (isPagePath(pathname) && (!userAgent || SCRIPT_AGENTS.test(userAgent))) return true;
+  return false;
 }
 
 export function middleware(request: NextRequest) {

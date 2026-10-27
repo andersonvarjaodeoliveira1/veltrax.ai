@@ -67,6 +67,7 @@ export const metadata: Metadata = {
     nocache: true,
     googleBot: { index: false, follow: false, noimageindex: true },
   },
+  other: { robots: "noindex, nofollow, noai, noimageai" },
 };
 
 export default function RootLayout({
