@@ -15,6 +15,8 @@ afterEach(() => {
 it("starts on the wizard, switches tabs and comes back through the Clonar um vídeo pill", () => {
   render(<AutomationPage />);
   expect(screen.getByText("wizard")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Copys" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: /Modo manual/ }));
   fireEvent.click(screen.getByRole("button", { name: "Copys" }));
   expect(screen.getByRole("button", { name: "Copys" })).toHaveAttribute("aria-current", "true");
   expect(screen.queryByText("wizard")).not.toBeInTheDocument();

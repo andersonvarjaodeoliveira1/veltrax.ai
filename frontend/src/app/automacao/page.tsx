@@ -69,6 +69,8 @@ function captionOf(item: Creative) {
 export default function AutomationPage() {
   const [ready, setReady] = useState(false);
   const [tab, setTab] = useState<TabKey>("clonagem");
+  const [manualOpen, setManualOpen] = useState(false);
+  const manualTab = TABS.some((item) => item.key === tab);
   useEffect(() => {
     const aba = new URLSearchParams(window.location.search).get("aba");
     if (aba === "videos" || aba === "imagens") setTab(aba);
@@ -242,34 +244,43 @@ export default function AutomationPage() {
       )}
 
       <nav aria-label="Etapas" className="space-y-2">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <button type="button" onClick={() => setTab(MAIN_TAB.key)} aria-current={tab === MAIN_TAB.key}
-            className={cn("rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-              tab === MAIN_TAB.key ? "border-transparent bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white" : "border-[#A98BFF]/50 text-foreground hover:border-[#A98BFF]")}>
-            {MAIN_TAB.label} <span className="ml-1 rounded-full bg-white/20 px-1.5 py-0.5 text-[9px] font-semibold">BETA</span>
-          </button>
-          {RESULT_TABS.map((item) => (
-            <button key={item.key} type="button" onClick={() => setTab(item.key)} aria-current={tab === item.key}
-              className={cn("rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-                tab === item.key ? "border-transparent bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:text-foreground")}>
-              {item.label}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex flex-wrap items-center gap-1 rounded-full border border-white/10 bg-white/[0.03] p-1 backdrop-blur">
+            <button type="button" onClick={() => setTab(MAIN_TAB.key)} aria-current={tab === MAIN_TAB.key}
+              className={cn("rounded-full px-4 py-1.5 text-xs font-medium transition-colors",
+                tab === MAIN_TAB.key ? "bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white shadow-[0_6px_20px_-8px_#7B3FE4]" : "text-muted-foreground hover:text-foreground")}>
+              {MAIN_TAB.label} <span className="ml-1 rounded-full bg-white/20 px-1.5 py-0.5 text-[9px] font-semibold">BETA</span>
             </button>
-          ))}
-          <span className="mx-1 text-[11px] uppercase tracking-wide text-muted-foreground">Modo manual</span>
-          {TABS.map((item) => {
-            const count = item.key === "criar" || item.key === "ajustes" ? 0 : counts[item.key as "copys" | "flow" | "prontos"];
-            return (
+            {RESULT_TABS.map((item) => (
               <button key={item.key} type="button" onClick={() => setTab(item.key)} aria-current={tab === item.key}
-                className={cn("rounded-full border px-3 py-1 text-xs transition-colors",
-                  tab === item.key ? "border-transparent bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:text-foreground")}>
-                <span className="flex items-center gap-1.5 font-medium">
-                  {item.label}
-                  {count > 0 && <span className="rounded-full bg-background/20 px-1.5 text-[10px] tabular-nums">{count}</span>}
-                </span>
+                className={cn("rounded-full px-4 py-1.5 text-xs font-medium transition-colors",
+                  tab === item.key ? "bg-white/10 text-foreground" : "text-muted-foreground hover:text-foreground")}>
+                {item.label}
               </button>
-            );
-          })}
+            ))}
+          </div>
+          <button type="button" onClick={() => setManualOpen((open) => !open)} aria-expanded={manualOpen || manualTab}
+            className="rounded-full px-3 py-1.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground">
+            Modo manual {manualOpen || manualTab ? "▴" : "▾"}
+          </button>
         </div>
+        {(manualOpen || manualTab) && (
+          <div className="flex flex-wrap items-center gap-1 rounded-[14px] border border-white/10 bg-white/[0.02] p-1.5">
+            {TABS.map((item) => {
+              const count = item.key === "criar" || item.key === "ajustes" ? 0 : counts[item.key as "copys" | "flow" | "prontos"];
+              return (
+                <button key={item.key} type="button" onClick={() => setTab(item.key)} aria-current={tab === item.key} title={item.hint}
+                  className={cn("rounded-[10px] px-3 py-1.5 text-xs transition-colors",
+                    tab === item.key ? "bg-white/10 text-foreground" : "text-muted-foreground hover:text-foreground")}>
+                  <span className="flex items-center gap-1.5 font-medium">
+                    {item.label}
+                    {count > 0 && <span className="rounded-full bg-[#7B3FE4]/40 px-1.5 text-[10px] tabular-nums">{count}</span>}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </nav>
 
       {error && (

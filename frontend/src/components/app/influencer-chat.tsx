@@ -1030,25 +1030,56 @@ export function InfluencerChat() {
               <Chip onClick={() => setModelForm((open) => !open)}>+ {t("newModel")}</Chip>
             </div>
             {modelForm && (
-              <div className="space-y-3 rounded-[18px] border border-border bg-card p-4" data-testid="model-form">
-                <input value={mName} onChange={(event) => setMName(event.target.value)} maxLength={40} aria-label={t("modelName")} placeholder={t("modelName")} className="w-full rounded-full border border-border bg-background px-4 py-2 text-sm" />
-                <input value={mLook} onChange={(event) => setMLook(event.target.value)} maxLength={300} aria-label={t("modelLook")} placeholder={t("modelLook")} className="w-full rounded-full border border-border bg-background px-4 py-2 text-sm" />
-                <input value={mVoice} onChange={(event) => setMVoice(event.target.value)} maxLength={200} aria-label={t("modelVoice")} placeholder={t("modelVoice")} className="w-full rounded-full border border-border bg-background px-4 py-2 text-sm" />
-                <input ref={faceRef} type="file" multiple accept="image/png,image/jpeg,image/webp" className="sr-only" aria-label={t("modelFace")} onChange={(event) => { void addFaces(event.target.files); event.target.value = ""; }} />
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button type="button" variant="outline" className="rounded-full" onClick={() => faceRef.current?.click()}><ImagePlus className="size-4" /> {t("modelFace")}</Button>
+              <div className="relative overflow-hidden rounded-[22px] border border-[#7B3FE4]/30 bg-gradient-to-br from-[#7B3FE4]/[0.10] via-card to-card p-5 shadow-[0_30px_80px_-40px_#7B3FE4]" data-testid="model-form">
+                <span aria-hidden className="pointer-events-none absolute -right-16 -top-16 size-48 rounded-full bg-[#7B3FE4]/25 blur-3xl" />
+                <div className="relative space-y-5">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#A98BFF]">Novo modelo</p>
+                    <p className="mt-1 text-sm text-muted-foreground">Crie a sua influencer: anexe o rosto ou um vídeo da pessoa e descreva como ela é.</p>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="space-y-1.5 text-xs text-muted-foreground">
+                      <span className="uppercase tracking-wide">Nome</span>
+                      <input value={mName} onChange={(event) => setMName(event.target.value)} maxLength={40} aria-label={t("modelName")} placeholder="Ex.: Camila" className="w-full rounded-[14px] border border-white/10 bg-black/30 px-4 py-2.5 text-sm text-foreground outline-none transition focus:border-[#7B3FE4] focus:ring-2 focus:ring-[#7B3FE4]/30" />
+                    </label>
+                    <label className="space-y-1.5 text-xs text-muted-foreground">
+                      <span className="uppercase tracking-wide">Voz</span>
+                      <input value={mVoice} onChange={(event) => setMVoice(event.target.value)} maxLength={200} aria-label={t("modelVoice")} placeholder="Ex.: feminina, calma, 30 anos, sotaque paulista" className="w-full rounded-[14px] border border-white/10 bg-black/30 px-4 py-2.5 text-sm text-foreground outline-none transition focus:border-[#7B3FE4] focus:ring-2 focus:ring-[#7B3FE4]/30" />
+                    </label>
+                    <label className="space-y-1.5 text-xs text-muted-foreground sm:col-span-2">
+                      <span className="uppercase tracking-wide">Como ela é</span>
+                      <input value={mLook} onChange={(event) => setMLook(event.target.value)} maxLength={300} aria-label={t("modelLook")} placeholder="Idade, cabelo, pele, estilo" className="w-full rounded-[14px] border border-white/10 bg-black/30 px-4 py-2.5 text-sm text-foreground outline-none transition focus:border-[#7B3FE4] focus:ring-2 focus:ring-[#7B3FE4]/30" />
+                    </label>
+                  </div>
+                  <input ref={faceRef} type="file" multiple accept="image/png,image/jpeg,image/webp" className="sr-only" aria-label={t("modelFace")} onChange={(event) => { void addFaces(event.target.files); event.target.value = ""; }} />
                   <input ref={videoRef2} type="file" accept="video/*" className="sr-only" aria-label="Anexar vídeo da pessoa" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; void addFromVideo(file); }} />
-                  <Button type="button" variant="outline" className="rounded-full" disabled={readingVideo} onClick={() => videoRef2.current?.click()}>{readingVideo ? <Loader2 className="size-4 animate-spin" /> : <Film className="size-4" />} {readingVideo ? "Lendo o vídeo…" : "Anexar vídeo"}</Button>
-                  {mFaces.map((src, n) => (
-                    <span key={n} className="relative">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={src} alt="" className="h-12 rounded-md" />
-                      <button type="button" aria-label={`Remover rosto ${n + 1}`} onClick={() => setMFaces((current) => current.filter((_, i) => i !== n))} className="absolute -right-1 -top-1 grid size-4 place-items-center rounded-full bg-black/70 text-[10px] text-white">×</button>
-                    </span>
-                  ))}
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <button type="button" onClick={() => faceRef.current?.click()} className="group flex items-center gap-3 rounded-[16px] border border-dashed border-white/15 bg-black/20 p-3.5 text-left transition hover:border-[#7B3FE4]/70 hover:bg-[#7B3FE4]/10">
+                      <span className="grid size-10 shrink-0 place-items-center rounded-[12px] bg-[#7B3FE4]/20 text-[#A98BFF]"><ImagePlus className="size-5" /></span>
+                      <span className="min-w-0 text-sm font-medium">{t("modelFace")}<span className="block text-xs font-normal text-muted-foreground">PNG, JPG ou WebP</span></span>
+                    </button>
+                    <button type="button" disabled={readingVideo} onClick={() => videoRef2.current?.click()} className="group flex items-center gap-3 rounded-[16px] border border-dashed border-white/15 bg-black/20 p-3.5 text-left transition hover:border-[#7B3FE4]/70 hover:bg-[#7B3FE4]/10 disabled:opacity-60">
+                      <span className="grid size-10 shrink-0 place-items-center rounded-[12px] bg-[#7B3FE4]/20 text-[#A98BFF]">{readingVideo ? <Loader2 className="size-5 animate-spin" /> : <Film className="size-5" />}</span>
+                      <span className="min-w-0 text-sm font-medium">{readingVideo ? "Lendo o vídeo…" : "Anexar vídeo"}<span className="block text-xs font-normal text-muted-foreground">pego os rostos e descrevo a pessoa</span></span>
+                    </button>
+                  </div>
+                  {mFaces.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      {mFaces.map((src, n) => (
+                        <span key={n} className="relative">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={src} alt="" className="h-16 rounded-[12px] ring-1 ring-white/15" />
+                          <button type="button" aria-label={`Remover rosto ${n + 1}`} onClick={() => setMFaces((current) => current.filter((_, i) => i !== n))} className="absolute -right-1.5 -top-1.5 grid size-5 place-items-center rounded-full bg-black/80 text-[11px] text-white ring-1 ring-white/20">×</button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground">{t("modelNote")}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button type="button" className="rounded-full px-6" disabled={mName.trim().length < 2} onClick={saveModel}>{t("saveModel")}</Button>
+                    <Button type="button" variant="ghost" className="rounded-full" onClick={() => setModelForm(false)}>Cancelar</Button>
+                  </div>
                 </div>
-                <p className="text-xs text-muted-foreground">{t("modelNote")}</p>
-                <Button type="button" className="rounded-full" disabled={mName.trim().length < 2} onClick={saveModel}>{t("saveModel")}</Button>
               </div>
             )}
           </div>
