@@ -53,5 +53,7 @@ function clipgringaScrapeShopee() {
     var full = abs(src).replace(/_tn(?=$|[?#])/, "").split("?")[0];
     if (images.indexOf(full) === -1) images.push(full);
   });
-  return { title: title, videos: videos.slice(0, 6), images: images.slice(0, 9), url: location.href };
+  var body = (document.body && document.body.innerText || "").slice(0, 4000);
+  var missing = !videos.length && !images.length && /(este produto n[ãa]o existe|produto n[ãa]o est[áa] dispon[íi]vel|produto indispon[íi]vel|product (does not exist|is unavailable|not found)|p[áa]gina n[ãa]o encontrada)/i.test(body);
+  return { missing: missing, title: title, videos: videos.slice(0, 6), images: images.slice(0, 9), url: location.href };
 }

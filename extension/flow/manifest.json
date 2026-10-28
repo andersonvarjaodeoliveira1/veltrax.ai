@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "ClipGringa · Flow",
-  "version": "1.14.4",
-  "description": "Gera sozinho as imagens e os vídeos do seu pacote do ClipGringa no Google Flow.",
+  "version": "1.15.0",
+  "description": "Gera sozinho as imagens e os vídeos do seu pacote do ClipGringa no Google Flow, com painel de status e aviso de versão nova.",
   "permissions": [
     "storage",
     "unlimitedStorage",
@@ -60,6 +60,7 @@
     "default_icon": {
       "128": "icons/icon128.png"
     },
-    "default_title": "ClipGringa · Flow"
+    "default_title": "ClipGringa · Flow",
+    "default_popup": "popup.html"
   }
 }

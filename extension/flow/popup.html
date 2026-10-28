@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>ClipGringa · Flow</title>
+<style>
+  :root{color-scheme:dark}
+  *{box-sizing:border-box}
+  body{margin:0;width:320px;background:#09080C;color:#f3f1f8;font:13px/1.45 system-ui,sans-serif}
+  .wrap{padding:16px;background:radial-gradient(120% 80% at 100% 0,rgba(123,63,228,.28),transparent 60%)}
+  h1{margin:0 0 2px;font-size:15px;letter-spacing:.2px}
+  .ver{color:#A98BFF;font-size:11px}
+  .card{margin-top:12px;padding:12px;border:1px solid rgba(255,255,255,.1);border-radius:14px;background:#141316}
+  .row{display:flex;justify-content:space-between;gap:8px;padding:3px 0}
+  .row span:first-child{color:#a9a6b3}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:#F5B454}
+  .ok .dot{background:#5BD69A}.bad .dot{background:#F0466B}
+  .btn{display:block;margin-top:8px;padding:9px 12px;border-radius:999px;text-align:center;text-decoration:none;font-weight:600;color:#fff;background:linear-gradient(135deg,#8B5CF6,#7B3FE4)}
+  .btn.ghost{background:transparent;border:1px solid rgba(123,63,228,.6);color:#C9BBFA}
+  .new{margin-top:12px;padding:10px 12px;border-radius:14px;border:1px solid rgba(245,180,84,.5);background:rgba(245,180,84,.1);color:#F5B454}
+  .hide{display:none}
+</style></head>
+<body><div class="wrap">
+  <h1>ClipGringa · Flow</h1><div class="ver" id="ver"></div>
+  <div class="new hide" id="new"><b id="newv"></b> disponível. <a id="dl" style="color:#fff" target="_blank" rel="noopener">Baixar atualização</a><br><small>Remova a antiga em chrome://extensions e carregue a nova pasta.</small></div>
+  <div class="card" id="state">
+    <div class="row"><span>Google Flow</span><b id="flow"><span class="dot"></span>verificando…</b></div>
+    <div class="row"><span>Plano</span><b id="plan">—</b></div>
+    <div class="row"><span>Créditos</span><b id="credits">—</b></div>
+    <div class="row"><span>Última leitura</span><b id="seen">—</b></div>
+  </div>
+  <a class="btn" id="site" href="https://clipgringa.gringatools.com/automacao" target="_blank" rel="noopener">Abrir o ClipGringa</a>
+  <a class="btn ghost" id="open" href="https://labs.google/fx/tools/flow" target="_blank" rel="noopener">Abrir o Google Flow</a>
+</div><script src="popup.js"></script></body></html>

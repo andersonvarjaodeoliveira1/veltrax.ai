@@ -1,6 +1,6 @@
 /** Pede à extensão do ClipGringa para abrir o anúncio da Shopee no navegador da pessoa e devolver os vídeos e fotos do anúncio. */
 
-export type ShopeeRead = { ok: true; title: string; videos: { url: string; poster: string }[]; images: string[] } | { ok: false; error: "no-extension" | "login" | "empty" | "invalid" | "failed" };
+export type ShopeeRead = { ok: true; title: string; videos: { url: string; poster: string }[]; images: string[] } | { ok: false; error: "no-extension" | "login" | "notfound" | "empty" | "invalid" | "failed" };
 
 const SHOPEE_HOST = /^(?:[\w-]+\.)*(?:shopee\.com\.br|shopee\.com|shp\.ee|shope\.ee)$/i;
 const SHORT_HOST = /^(?:s\.shopee\.com\.br|s\.shopee\.com|shp\.ee|shope\.ee)$/i;

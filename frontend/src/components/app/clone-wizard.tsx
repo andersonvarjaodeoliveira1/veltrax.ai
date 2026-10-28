@@ -439,6 +439,9 @@ export function CloneWizard() {
   const [imgs, setImgs] = useState<Record<string, string>>({});
   const [now, setNow] = useState(() => Date.now());
   const fileRef = useRef<HTMLInputElement>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
+  // O erro pode aparecer longe do botão clicado: leva o aviso para a vista.
+  useEffect(() => { if (error) errorRef.current?.scrollIntoView?.({ behavior: "smooth", block: "center" }); }, [error]);
   // Luz que corre em volta do botão de escolher o vídeo (mesma técnica do chat do influencer).
   // O ângulo fica no <html>: todas as luzes (botão e barras de progresso) herdam e giram juntas.
   useEffect(() => {
@@ -598,6 +601,7 @@ export function CloneWizard() {
     if (!file.type.startsWith("video/")) { setError("Envie um arquivo de vídeo (mp4, mov ou webm)."); return; }
     setError(null);
     setRefFile(file);
+    patch({ reference: "", scenes: [], mix: NO_MIX, variations: [], images: [], videos: [], approved: {} });
     setBusy("upload");
     const fingerprint = await videoFingerprint(file);
     const known = cachedTranscript(fingerprint);
@@ -1433,7 +1437,7 @@ export function CloneWizard() {
           </p>
         )}
         {error && (
-          <Alert variant="destructive">
+          <Alert variant="destructive" ref={errorRef}>
             <AlertDescription>{error}{/tokens acabaram/i.test(error) && <> <a href={ADMIN_WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className="font-medium underline">Chamar o administrador no WhatsApp</a></>}</AlertDescription>
           </Alert>
         )}
@@ -1593,7 +1597,7 @@ export function CloneWizard() {
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <details className="group rounded-[18px] border border-white/10 bg-card p-4 text-sm open:sm:col-span-2 open:border-[#7B3FE4]/50">
-                  <summary className="flex cursor-pointer list-none items-center gap-3">
+                  <summary className="flex cursor-pointer list-none items-center gap-3 [&::-webkit-details-marker]:hidden">
                     <span aria-hidden className="grid size-10 shrink-0 place-items-center rounded-[12px] bg-[#7B3FE4]/20 text-lg">🛍️</span>
                     <span className="min-w-0 flex-1">
                       <span className="block font-medium">Falar sobre o meu produto (opcional)</span>
@@ -1612,7 +1616,7 @@ export function CloneWizard() {
 
         {ready && (redirectIn !== null || redirectBlocked) && (
           <section role="status" className="space-y-2 rounded-[18px] border border-[#7B3FE4]/60 bg-[#7B3FE4]/15 p-4" data-testid="flow-redirect">
-            <p className="text-sm font-semibold">{redirectBlocked ? "A extensão não respondeu. Recarregue esta página (F5) e confira se a extensão 1.14.1 está ligada; ou abra o Flow pelo botão abaixo." : `Abrindo o Flow e enviando tudo em ${redirectIn}s…`}</p>
+            <p className="text-sm font-semibold">{redirectBlocked ? "A extensão não respondeu. Recarregue esta página (F5) e confira se a extensão 1.15.0 está ligada; ou abra o Flow pelo botão abaixo." : `Abrindo o Flow e enviando tudo em ${redirectIn}s…`}</p>
             <div className="h-1.5 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A98BFF] transition-all duration-1000" style={{ width: `${redirectBlocked ? 100 : ((1 - (redirectIn ?? 1)) / 1) * 100}%` }} /></div>
             <p className="text-xs text-muted-foreground">Tudo pronto. A extensão recebe o pacote, abre um projeto novo e gera as imagens e os vídeos sozinha. Você não precisa copiar nem colar nada.</p>
             <div className="flex gap-2">
@@ -1792,7 +1796,7 @@ export function CloneWizard() {
       </ol>
 
       {error && (
-        <Alert variant="destructive">
+        <Alert variant="destructive" ref={errorRef}>
           <AlertDescription>{error}{/tokens acabaram/i.test(error) && <> <a href={ADMIN_WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className="font-medium underline">Chamar o administrador no WhatsApp</a></>}</AlertDescription>
         </Alert>
       )}

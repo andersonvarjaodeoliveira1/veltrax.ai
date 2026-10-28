@@ -181,6 +181,7 @@ async function readShopee(url) {
       setTimeout(done, 20000);
     });
     let best = null;
+    let missing = false;
     for (let i = 0; i < 12; i += 1) {
       await new Promise((r) => setTimeout(r, 1200));
       const current = await chrome.tabs.get(tab.id).catch(() => null);
@@ -191,11 +192,31 @@ async function readShopee(url) {
       let out = null;
       try { out = (await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: clipgringaScrapeShopee }))[0].result; } catch (_e) { out = null; }
       if (out) best = out;
+      if (out && out.missing) { missing = true; break; }
       if (best && (best.videos.length || best.images.length >= 3) && i >= 2) break;
     }
+    if (missing) return { ok: false, error: "notfound" };
     if (!best || (!best.videos.length && !best.images.length)) return { ok: false, error: "empty" };
     return { ok: true, title: best.title, videos: best.videos, images: best.images };
   } finally {
     try { await chrome.tabs.remove(tab.id); } catch (_e) { /* já fechada */ }
   }
 }
+
+
+// Ao abrir o navegador: confere se existe versão nova e marca o ícone com "NOVA" (sem permissões extras).
+async function checkForUpdate() {
+  try {
+    const response = await fetch("https://clipgringa.gringatools.com/extensao/version.json", { cache: "no-store" });
+    if (!response.ok) return;
+    const latest = String((await response.json()).version || "");
+    const mine = chrome.runtime.getManifest().version;
+    const a = latest.split(".").map(Number), b = mine.split(".").map(Number);
+    let newer = false;
+    for (let i = 0; i < 3; i += 1) { if ((a[i] || 0) !== (b[i] || 0)) { newer = (a[i] || 0) > (b[i] || 0); break; } }
+    await chrome.action.setBadgeText({ text: newer ? "NOVA" : "" });
+    if (newer) await chrome.action.setBadgeBackgroundColor({ color: "#7B3FE4" });
+  } catch (_e) { /* sem internet */ }
+}
+chrome.runtime.onStartup.addListener(checkForUpdate);
+chrome.runtime.onInstalled.addListener(checkForUpdate);

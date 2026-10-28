@@ -195,6 +195,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {user ? <TestBanner enabled={!admin} /> : null}
         {user ? <SecurityWatch enabled={!admin} /> : null}
         {children}
+        {user ? <div aria-hidden className="h-24 shrink-0" /> : null}
       </div>
 
       {user ? <nav aria-label="Mobile navigation" className="scrollbar-none fixed inset-x-0 bottom-0 z-40 flex overflow-x-auto border-t bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
