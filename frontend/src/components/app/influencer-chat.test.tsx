@@ -3,6 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import { InfluencerChat } from "./influencer-chat";
 
+vi.mock("@/lib/influencer-models", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/influencer-models")>()),
+  videoFrames: vi.fn(async () => ["data:image/jpeg;base64,/9j/AAAA", "data:image/jpeg;base64,/9j/BBBB"]),
+}));
+
 afterEach(() => vi.unstubAllGlobals());
 
 it("suggests the right spelling and searches again when clicked", async () => {
@@ -147,4 +152,22 @@ it("choosing a ready-made model fills the prompt box and enables send", async ()
   await user.type(area, "Meu texto sobre uma garrafa térmica");
   await user.click(screen.getByRole("button", { name: "Usar Bruna" }));
   expect(area.value).toBe("Meu texto sobre uma garrafa térmica");
+});
+
+it("a video attached to the new model becomes its faces and fills the look", async () => {
+  const calls: string[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    calls.push(String(url));
+    if (String(url).includes("/person-look")) return new Response(JSON.stringify({ age: "28", look: "long black hair, tan skin" }), { status: 200 });
+    return new Response(JSON.stringify({}), { status: 200 });
+  }));
+  window.localStorage.clear();
+  const user = userEvent.setup();
+  render(<InfluencerChat />);
+  await user.click(await screen.findByRole("button", { name: /Novo modelo/ }));
+  await user.upload(screen.getByLabelText("Anexar vídeo da pessoa"), new File(["v"], "maria-clara.mp4", { type: "video/mp4" }));
+  await waitFor(() => expect(calls.some((url) => url.includes("/person-look"))).toBe(true));
+  await waitFor(() => expect((screen.getByLabelText(/Como ela é/) as HTMLInputElement).value).toContain("long black hair"));
+  expect((screen.getByLabelText(/Nome do modelo/) as HTMLInputElement).value).toBe("maria clara");
+  expect(screen.getAllByRole("button", { name: /Remover rosto/ })).toHaveLength(2);
 });

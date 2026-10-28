@@ -2,7 +2,7 @@
 
 import { ShopeeImport } from "@/components/app/shopee-import";
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, ArrowUp, Check, ClipboardCopy, ImagePlus, Loader2, Plus, Search, Sparkles, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUp, Check, ClipboardCopy, Film, ImagePlus, Loader2, Plus, Search, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth-client";
 import { FLOW_CHOICES, defaultFlowCategory, effectiveFlowId, saveFlowCategory, visibleFlowChoices } from "@/lib/flow-models";
@@ -18,7 +18,7 @@ import { loadMySkills, loadPinned, saveMySkills, type PinnedSkill } from "@/lib/
 import { PolicyNotice } from "@/components/app/policy-notice";
 import { checkPolicy, policySignature } from "@/lib/shopee-policy";
 import { PRESET_BRIEFS, PRESET_MODELS } from "@/lib/influencer-presets";
-import { dataUrlToFile, fileToDataUrl, loadModels, saveModels, type MyModel } from "@/lib/influencer-models";
+import { dataUrlToFile, fileToDataUrl, loadModels, saveModels, videoFrames, type MyModel } from "@/lib/influencer-models";
 
 type Option = { label: string; detail?: string };
 type Question = { question: string; options: Option[] };
@@ -246,7 +246,7 @@ const S = {
   usePreset: ["Usar", "Use", "Usar"],
   presetNote: ["Clique na foto ou em Usar: o texto da modelo entra na caixa lá em cima, é só completar com o produto e apertar o botão roxo. Para manter o mesmo rosto em todos os vídeos, anexe uma foto em Novo modelo.", "Click the photo or Use to create the video with this person. To keep the same face in every video, attach a photo in New model.", "Haz clic en la foto o en Usar para crear el video con esta persona. Para mantener el mismo rostro en todos los videos, adjunta una foto en Nuevo modelo."],
   saveModel: ["Salvar modelo", "Save model", "Guardar modelo"],
-  modelNote: ["O rosto vira a foto de referência e a voz entra em todas as cenas. O Flow não clona a voz de um áudio: a voz é descrita no prompt.", "The face becomes the reference photo and the voice goes into every scene. Flow does not clone a voice from audio: the voice is described in the prompt.", "El rostro es la foto de referencia y la voz entra en todas las escenas. Flow no clona la voz desde un audio: la voz se describe en el prompt."],
+  modelNote: ["Anexe fotos do rosto ou um vídeo da pessoa: do vídeo eu pego alguns quadros como rosto e descrevo como ela é. O rosto vira a foto de referência e a voz entra em todas as cenas. O Flow não clona a voz de um áudio: a voz é descrita no prompt.", "The face becomes the reference photo and the voice goes into every scene. Flow does not clone a voice from audio: the voice is described in the prompt.", "El rostro es la foto de referencia y la voz entra en todas las escenas. Flow no clona la voz desde un audio: la voz se describe en el prompt."],
   usingModel: ["Trabalhando em cima do modelo", "Working on model", "Trabajando sobre el modelo"],
   downloadFace: ["Baixar o rosto para anexar no Flow (Ingredientes)", "Download the face to attach in Flow (Ingredients)", "Descargar el rostro para adjuntar en Flow (Ingredientes)"],
   deleteModel: ["Apagar modelo", "Delete model", "Borrar modelo"],
@@ -366,6 +366,8 @@ export function InfluencerChat() {
   const [models, setModels] = useState<MyModel[]>([]);
   const [selModelId, setSelModelId] = useState("");
   const [modelForm, setModelForm] = useState(false);
+  const [readingVideo, setReadingVideo] = useState(false);
+  const videoRef2 = useRef<HTMLInputElement>(null);
   const [mName, setMName] = useState("");
   const [mLook, setMLook] = useState("");
   const [mVoice, setMVoice] = useState("");
@@ -741,6 +743,25 @@ export function InfluencerChat() {
     const urls = await Promise.all(Array.from(files).slice(0, 3).map((file) => fileToDataUrl(file)));
     setMFaces(urls);
   }
+  /** Vídeo da pessoa: tira alguns quadros como rosto e a IA descreve como ela é para preencher o modelo. */
+  async function addFromVideo(file: File | undefined) {
+    if (!file) return;
+    if (!file.type.startsWith("video/")) { setError("Envie um arquivo de vídeo (mp4, mov ou webm)."); return; }
+    setError(""); setReadingVideo(true);
+    try {
+      const frames = await videoFrames(file);
+      if (!frames.length) { setError("Não consegui ler esse vídeo. Tente outro arquivo ou anexe fotos do rosto."); return; }
+      setMFaces(frames);
+      const form = new FormData();
+      await Promise.all(frames.map(async (src, n) => form.append("images", await dataUrlToFile(src), `quadro-${n + 1}.jpg`)));
+      const response = await fetch("/api/multiplier/clone/person-look", { method: "POST", body: form });
+      const data = await response.json().catch(() => null);
+      if (response.ok && typeof data?.look === "string" && data.look.trim()) {
+        setMLook((current) => current.trim() || `${data.age ? `${data.age}, ` : ""}${data.look}`.slice(0, 300));
+        setMName((current) => current.trim() || file.name.replace(/\.[^.]+$/, "").replace(/[._-]+/g, " ").trim().slice(0, 40) || "Minha influencer");
+      }
+    } catch { setError("Não consegui descrever a pessoa do vídeo. Os quadros foram anexados como rosto; escreva como ela é."); } finally { setReadingVideo(false); }
+  }
   function saveModel() {
     const nameClean = mName.trim().slice(0, 40);
     if (!nameClean) return;
@@ -1016,9 +1037,14 @@ export function InfluencerChat() {
                 <input ref={faceRef} type="file" multiple accept="image/png,image/jpeg,image/webp" className="sr-only" aria-label={t("modelFace")} onChange={(event) => { void addFaces(event.target.files); event.target.value = ""; }} />
                 <div className="flex flex-wrap items-center gap-2">
                   <Button type="button" variant="outline" className="rounded-full" onClick={() => faceRef.current?.click()}><ImagePlus className="size-4" /> {t("modelFace")}</Button>
+                  <input ref={videoRef2} type="file" accept="video/*" className="sr-only" aria-label="Anexar vídeo da pessoa" onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; void addFromVideo(file); }} />
+                  <Button type="button" variant="outline" className="rounded-full" disabled={readingVideo} onClick={() => videoRef2.current?.click()}>{readingVideo ? <Loader2 className="size-4 animate-spin" /> : <Film className="size-4" />} {readingVideo ? "Lendo o vídeo…" : "Anexar vídeo"}</Button>
                   {mFaces.map((src, n) => (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img key={n} src={src} alt="" className="h-12 rounded-md" />
+                    <span key={n} className="relative">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={src} alt="" className="h-12 rounded-md" />
+                      <button type="button" aria-label={`Remover rosto ${n + 1}`} onClick={() => setMFaces((current) => current.filter((_, i) => i !== n))} className="absolute -right-1 -top-1 grid size-4 place-items-center rounded-full bg-black/70 text-[10px] text-white">×</button>
+                    </span>
                   ))}
                 </div>
                 <p className="text-xs text-muted-foreground">{t("modelNote")}</p>

@@ -602,6 +602,46 @@ async def product_look(request: Request, db: AsyncSession = Depends(get_db)):
     return {"look": _text(out.description, 500)}
 
 
+class _Person(BaseModel):
+    age: str = Field(description="Apparent age as a number or short range, empty if unclear")
+    look: str = Field(description="Short English description of the visible look: hair, skin tone, eyes, build, clothes, style. Empty if no adult person is visible")
+
+
+PERSON_LOOK_SYSTEM = """You look at frames of a video of ONE adult person and describe only how the person looks, so an image model can draw a similar-looking virtual influencer.
+Write 25-45 words in English: apparent age, hair (color, length, style), skin tone, eyes, build, clothes, style. Describe only what is visible.
+Never say who the person is, never guess a name, never mention logos or readable text. If no adult person is clearly visible, return empty fields."""
+
+
+@router.post("/person-look")
+async def person_look(request: Request, db: AsyncSession = Depends(get_db)):
+    """Reads up to 3 frames taken from the member's own video and describes the person's look so it can become a new model. Frames are not stored."""
+    user_id = await _user_id(request, db)
+    from ...integrations import load_user_keys
+    from ...usage import get_balance, set_server_blocked, set_usage_user
+
+    await load_user_keys(db, user_id)
+    set_usage_user(user_id)
+    set_server_blocked((await get_balance(db, user_id))["exhausted"])
+    form = await request.form()
+    frames = [item for item in form.getlist("images") if hasattr(item, "read")][:3]
+    if not frames:
+        raise HTTPException(status_code=400, detail="Send at least one frame")
+    from pydantic_ai import BinaryContent
+
+    parts: list[Any] = ["Describe the person shown in these frames."]
+    for frame in frames:
+        data = await frame.read()
+        if len(data) > MAX_PHOTO_BYTES * 3:
+            raise HTTPException(status_code=413, detail="Each frame can have up to 15 MB")
+        fixed = await asyncio.to_thread(_normalize_photo, data)
+        if not fixed:
+            raise HTTPException(status_code=400, detail="Send PNG, JPG or WebP frames")
+        parts.append(BinaryContent(data=fixed[0], media_type=fixed[1]))
+    _check_script_rate(user_id)
+    out = await _run_parts(PERSON_LOOK_SYSTEM, _Person, parts)
+    return {"age": _text(out.age, 20), "look": _text(out.look, 300)}
+
+
 # ---- saved influencer chats (kept in the database; deleting only hides them, admins can restore) ----
 MAX_CHAT_SNAP = 1_500_000
 
