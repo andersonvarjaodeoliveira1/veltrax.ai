@@ -243,7 +243,26 @@ function SidebarLink({ href, label, active, compact, shortcut, className, extern
   return <Tooltip><TooltipTrigger asChild>{link}</TooltipTrigger><TooltipContent side="right">{label}</TooltipContent></Tooltip>;
 }
 
-function TokenCard({ balance }: { balance: NonNullable<ReturnType<typeof useTokenBalance>> }) {
+/** Chave própria conectada: troca o aviso vermelho de tokens por um selo de "logado e pronto". */
+function ReadyCard() {
+  return (
+    <div data-testid="ready-card" className="relative overflow-hidden rounded-xl border border-[#7B3FE4]/40 bg-gradient-to-br from-[#7B3FE4]/20 via-[#141316] to-[#0d1a18] px-3 py-2.5 text-xs shadow-[0_0_30px_-12px_#7B3FE4]">
+      <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#A98BFF] to-transparent" />
+      <div className="flex items-center gap-2">
+        <span className="relative grid size-5 place-items-center" aria-hidden>
+          <span className="absolute size-5 animate-ping rounded-full bg-[#5BD69A]/30" />
+          <span className="size-2 rounded-full bg-[#5BD69A] shadow-[0_0_10px_#5BD69A]" />
+        </span>
+        <span className="font-semibold uppercase tracking-[0.14em] text-[#C9BBFA]">IA online</span>
+      </div>
+      <p className="mt-1.5 text-foreground">Logado e pronto para uso.</p>
+      <p className="mt-0.5 text-muted-foreground">Rodando com a sua chave de IA.</p>
+    </div>
+  );
+}
+
+export function TokenCard({ balance }: { balance: NonNullable<ReturnType<typeof useTokenBalance>> }) {
+  if (balance.own_key) return <ReadyCard />;
   const granted = balance.granted ?? 0;
   const remaining = balance.remaining ?? 0;
   const pct = granted > 0 ? Math.min(100, (remaining / granted) * 100) : 0;

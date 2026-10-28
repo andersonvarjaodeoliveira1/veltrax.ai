@@ -298,6 +298,20 @@ def _is_quota_error(exc: Exception) -> bool:
     return any(key in text for key in ("429", "resource_exhausted", "quota", "rate limit", "404", "not_found", "no longer available", "overloaded", "503"))
 
 
+def _is_key_error(exc: Exception) -> bool:
+    text = f"{type(exc).__name__} {exc}".lower()
+    return any(key in text for key in ("401", "403", "unauthorized", "forbidden", "permission", "api key", "api_key", "invalid_api", "authentication", "billing"))
+
+
+def _ai_fail(exc: Exception | None, fallback: str) -> HTTPException:
+    """Diz de quem é a falha: chave recusada, limite de uso da API ou erro genérico."""
+    if exc is not None and _is_key_error(exc):
+        return HTTPException(status_code=502, detail="AI_KEY_INVALID")
+    if exc is not None and _is_quota_error(exc):
+        return HTTPException(status_code=503, detail="AI_QUOTA")
+    return HTTPException(status_code=502, detail=fallback)
+
+
 async def _fallback_models() -> list[Any]:
     """Other Google models have their own free quota: used only when the main one hits its limit."""
     from ...ai import _build_transcript_model
@@ -360,13 +374,9 @@ async def _run(system: str, output_type: type[BaseModel], prompt: str, model: An
                 logger.warning("clone plan: %s failed (%s: %s), trying the next model", candidate, type(exc).__name__, str(exc)[:300])
                 continue
             logger.exception("clone plan stage failed")
-            if _is_quota_error(exc):
-                raise HTTPException(status_code=503, detail="AI_QUOTA")
-            raise HTTPException(status_code=502, detail="Could not generate this step. Try again.")
+            raise _ai_fail(exc, "Could not generate this step. Try again.")
     logger.error("clone plan: every model failed: %s", last_error)
-    if last_error is not None and _is_quota_error(last_error):
-        raise HTTPException(status_code=503, detail="AI_QUOTA")
-    raise HTTPException(status_code=502, detail="Could not generate this step. Try again.")
+    raise _ai_fail(last_error, "Could not generate this step. Try again.")
 
 
 
@@ -1204,9 +1214,9 @@ async def _run_parts(system: str, output_type: type[BaseModel], parts: list[Any]
                 logger.warning("clone product look: %s failed (%s), trying the next model", candidate, type(exc).__name__)
                 continue
             logger.exception("clone product look failed")
-            raise HTTPException(status_code=502, detail="Could not read the photos. Try again.")
+            raise _ai_fail(exc, "Could not read the photos. Try again.")
     logger.error("clone product look: every model failed: %s", last_error)
-    raise HTTPException(status_code=502, detail="Could not read the photos. Try again.")
+    raise _ai_fail(last_error, "Could not read the photos. Try again.")
 
 
 # ---------------------------------------------------------------------------

@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { toast } from "sonner";
 import { Check, KeyRound, Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/app/page-header";
@@ -37,6 +39,8 @@ export default function MyApisPage() {
       setItems(data.integrations ?? []);
       setDrafts((current) => ({ ...current, [provider]: "" }));
       setDone(provider);
+      window.dispatchEvent(new Event("gv-tokens-changed"));
+      toast.success("Chave conectada! Já pode usar o ClipGringa com a sua chave.");
     } catch {
       setError({ provider, text: "Sem conexão agora. Tente de novo em instantes." });
     } finally {
@@ -49,7 +53,7 @@ export default function MyApisPage() {
     try {
       const response = await fetch(`/api/integrations/${provider}`, { method: "DELETE" });
       const data = await response.json().catch(() => ({}));
-      if (response.ok) setItems(data.integrations ?? []);
+      if (response.ok) { setItems(data.integrations ?? []); window.dispatchEvent(new Event("gv-tokens-changed")); }
       else setError({ provider, text: "Não foi possível remover agora. Tente de novo." });
     } catch {
       setError({ provider, text: "Sem conexão agora. Tente de novo em instantes." });
@@ -61,6 +65,14 @@ export default function MyApisPage() {
   return (
     <div className="mx-auto w-full max-w-3xl space-y-6 p-4 sm:p-8">
       <PageHeader icon={KeyRound} title="Minhas APIs" description="Conecte as suas próprias chaves. Quando você conecta uma, o ClipGringa passa a usar a sua e não depende de ninguém. Elas ficam guardadas com criptografia e só você usa." />
+
+      {done && (
+        <div role="status" data-testid="key-connected" className="flex flex-wrap items-center gap-3 rounded-[18px] border border-[#5BD69A]/40 bg-[#5BD69A]/10 p-4 text-sm">
+          <span className="grid size-8 shrink-0 place-items-center rounded-full bg-[#5BD69A]/20 text-[#5BD69A]"><Check className="size-4" /></span>
+          <span className="min-w-0 flex-1"><b>Chave conectada com sucesso.</b> Você já pode usar o ClipGringa: tudo o que você gerar agora usa a sua chave, sem gastar tokens.</span>
+          <Link href="/" className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-4 py-2 text-xs font-medium text-white">Começar a criar</Link>
+        </div>
+      )}
 
       {error && !error.provider && <p role="alert" className="rounded-[14px] border border-[#F0466B]/40 bg-[#F0466B]/10 p-3 text-sm text-[#F0466B]">{error.text}</p>}
 

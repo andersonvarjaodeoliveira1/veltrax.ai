@@ -1,5 +1,6 @@
 "use client";
 
+import { aiErrorText } from "@/lib/ai-errors";
 import { ShopeeImport } from "@/components/app/shopee-import";
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, ArrowUp, Check, ClipboardCopy, Film, ImagePlus, Loader2, Plus, Search, Sparkles, X } from "lucide-react";
@@ -437,7 +438,7 @@ export function InfluencerChat() {
   const lower = chosen.id === "lower";
 
   async function fail(response: Response) {
-    try { const data = await response.json(); setError(data?.detail === "TOKENS_EXHAUSTED" ? t("tokens") : data?.detail === "AI_QUOTA" ? t("quota") : t("error")); } catch { setError(t("error")); }
+    try { const data = await response.json(); setError(data?.detail === "TOKENS_EXHAUSTED" ? t("tokens") : aiErrorText(data?.detail) ?? t("error")); } catch { setError(t("error")); }
   }
 
   function reset() {
