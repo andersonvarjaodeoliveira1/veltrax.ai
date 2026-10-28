@@ -34,6 +34,15 @@ function saveRemote(chat: ChatItem) {
   }).catch(() => undefined);
 }
 
+/** Primeiro nome de verdade: ignora nomes que são só o começo do e-mail (ex.: affiliate.wilbur). */
+function realFirstName(name?: string | null, email?: string | null): string {
+  const first = (name ?? "").trim().split(/\s+/)[0] ?? "";
+  if (!first || first.length > 20 || !/^[\p{L}'-]+$/u.test(first)) return "";
+  const local = (email ?? "").split("@")[0]?.toLowerCase() ?? "";
+  if (local && (local === first.toLowerCase() || local.startsWith(first.toLowerCase() + ".") || local.startsWith(first.toLowerCase() + "_"))) return /\s/.test((name ?? "").trim()) ? first : "";
+  return first;
+}
+
 type Phase = "home" | "intake" | "ask" | "approve" | "photos" | "prompt" | "count" | "model" | "cost" | "board";
 
 const CHANGE_HINTS: Record<"pt" | "en" | "es", string[]> = {
@@ -1009,7 +1018,7 @@ export function InfluencerChat() {
         <>
           <div className="flex items-center justify-center gap-3 pb-2 pt-10">
             <span aria-hidden className="grid size-10 shrink-0 place-items-center rounded-[12px] bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white shadow-[0_10px_28px_-10px_#7B3FE4]"><Sparkles className="size-5" /></span>
-            <h1 className="text-2xl font-extrabold uppercase tracking-tight sm:text-3xl">{session?.user?.name && <span aria-hidden>{session.user.name.split(" ")[0]}, </span>}{t("home")}</h1>
+            <h1 className="text-2xl font-extrabold uppercase tracking-tight sm:text-3xl">{realFirstName(session?.user?.name, session?.user?.email) && <span aria-hidden>{realFirstName(session?.user?.name, session?.user?.email)}, </span>}{t("home")}</h1>
           </div>
           <p data-testid="home-steps" className="text-center text-xs text-muted-foreground"><b className="text-foreground">1</b> Escolha quem vai aparecer · <b className="text-foreground">2</b> Escolha o tipo de vídeo · <b className="text-foreground">3</b> Escreva ou ajuste o texto e envie</p>
           {pinnedSkills.length > 0 && (
@@ -1215,7 +1224,12 @@ export function InfluencerChat() {
       {busy === "think" && phase === "intake" && searching && <Working hints={[t("searchHint1"), t("searchHint2"), t("searchHint3")]} text={t("searchingProduct")} />}
       {busy === "think" && phase === "intake" && !searching && !creating && <Working hints={[t("hint1"), t("hint2"), t("hint3")]} text={t("reading")} />}
       {busy === "think" && phase !== "intake" && <Working hints={[t("hint1"), t("hint2"), t("hint3")]} text={t("think")} />}
-      {error && <p role="alert" className="rounded-[14px] border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm">{error}</p>}
+      {error && (
+        <div role="alert" className="flex flex-wrap items-center gap-3 rounded-[14px] border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm">
+          <span className="flex-1">{error}</span>
+          {phase === "home" && prompt.trim().length >= 8 && <Button type="button" size="sm" variant="outline" className="rounded-full" onClick={() => start()}>Tentar de novo</Button>}
+        </div>
+      )}
 
       {answers.length > 0 && <div className="flex flex-wrap justify-center gap-2">{answers.map((a) => <span key={a.question} className="rounded-full bg-muted/50 px-3 py-1 text-xs text-muted-foreground">✓ {a.answer}</span>)}</div>}
 
@@ -1272,7 +1286,7 @@ export function InfluencerChat() {
         </div>
       )}
 
-      {phase !== "home" && phase !== "ask" && phase !== "approve" && (
+      {phase !== "home" && phase !== "ask" && phase !== "approve" && (phase !== "intake" || Boolean(persona.name)) && (
         <Msg testid="chat-photos">
           <p>{t("created")}</p>
           {busy === "pins" && <p className="flex items-center gap-2 text-muted-foreground"><Loader2 className="size-4 animate-spin" /> {t("searching")}</p>}

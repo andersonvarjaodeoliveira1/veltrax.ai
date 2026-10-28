@@ -382,10 +382,17 @@ function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (
 
   const entries = useMemo<PaletteEntry[]>(() => {
     const q = query.trim().toLowerCase();
+    const norm = (v: string) => v.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    const nq = norm(q);
     const actions: PaletteEntry[] = [
-      { id: "new", label: "New generation", hint: "Paste a link or upload", href: "/", icon: Plus },
-      { id: "library", label: "Open library", href: "/list", icon: Film },
-    ].filter((entry) => !q || entry.label.toLowerCase().includes(q));
+      { id: "new", label: "Novos cortes", hint: "Colar um link ou enviar um vídeo", href: "/", icon: Plus },
+      { id: "library", label: "Abrir biblioteca", hint: "Seus cortes prontos", href: "/list", icon: Film },
+      { id: "folders", label: "Pastas", hint: "Organizar seus vídeos", href: "/folders", icon: Film },
+      { id: "automacao", label: "Vídeo orgânico (Automação)", hint: "Clonar um vídeo e gerar prompts", href: "/automacao", icon: Film },
+      { id: "influencer", label: "Avatar influencer", hint: "Criar uma influencer com IA", href: "/influencer", icon: Film },
+      { id: "flow", label: "Conectar ao Flow", hint: "Extensão e conta do Google", href: "/conectar-flow", icon: Film },
+      { id: "apis", label: "Minhas APIs", hint: "Chaves de IA", href: "/minhas-apis", icon: Film },
+    ].filter((entry) => !nq || norm(`${entry.label} ${entry.hint ?? ""}`).includes(nq));
     const matches = generations
       .filter((generation) => !q || generation.source_title.toLowerCase().includes(q))
       .slice(0, 8)
@@ -421,14 +428,14 @@ function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (
               if (event.key === "ArrowUp") { event.preventDefault(); setActive((i) => Math.max(0, i - 1)); }
               if (event.key === "Enter") { event.preventDefault(); go(entries[active]); }
             }}
-            placeholder="Search generations or jump to…"
+            placeholder="Buscar cortes ou ir para uma página…"
             aria-label="Search generations or jump to a page"
             className="h-12 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
           <Kbd>esc</Kbd>
         </div>
         <div ref={listRef} className="max-h-80 overflow-y-auto p-1.5" role="listbox">
-          {entries.length === 0 && <p className="px-3 py-8 text-center text-sm text-muted-foreground">Nothing matches “{query}”.</p>}
+          {entries.length === 0 && <p className="px-3 py-8 text-center text-sm text-muted-foreground">Nada encontrado para “{query}”.</p>}
           {entries.map((entry, index) => (
             <button
               key={entry.id}

@@ -401,6 +401,11 @@ def _fail() -> HTTPException:
     return HTTPException(status_code=502, detail="Could not generate this step. Try again.")
 
 
+def _incomplete(got: int, wanted: int, what: str) -> HTTPException:
+    logger.warning("clone plan: %s incomplete (%s of %s)", what, got, wanted)
+    return HTTPException(status_code=502, detail=f"AI_INCOMPLETE:{what}:{got}/{wanted}")
+
+
 def _changes_block(ctx: dict[str, Any]) -> str:
     """Changes the member asked for in the chat ("troque o cenário", "ela fala mais devagar"...). Applies to everything written."""
     text = ctx.get("changes") or ""
@@ -421,11 +426,14 @@ async def stage_scenes(ctx: dict[str, Any], model: Any = None) -> list[dict[str,
     if _changes_block(ctx):
         prompt += "\n\n" + _changes_block(ctx)
     n = ctx["scene_count"]
-    out = await _run(scenes_system(n, bool(ctx["product"] or ctx["product_info"] or ctx["product_look"])) + lang_note(ctx) + SPEECH_LAW + (ctx.get("scene_note") or ""), _Scenes, prompt, model)
-    scenes = [{"what": _text(s.what, 240), "line": apply_speech_law(_text(s.line, 300), ctx.get("language", "pt-BR"))} for s in out.items if s.line.strip()]
-    if len(scenes) < n:
-        raise _fail()
-    return scenes[:n]
+    system = scenes_system(n, bool(ctx["product"] or ctx["product_info"] or ctx["product_look"])) + lang_note(ctx) + SPEECH_LAW + (ctx.get("scene_note") or "")
+    scenes: list[dict[str, str]] = []
+    for attempt in range(2):
+        out = await _run(system if attempt == 0 else system + f"\nIMPORTANT: return EXACTLY {n} scenes, each with a non-empty spoken line.", _Scenes, prompt, model)
+        scenes = [{"what": _text(s.what, 240), "line": apply_speech_law(_text(s.line, 300), ctx.get("language", "pt-BR"))} for s in out.items if s.line.strip()]
+        if len(scenes) >= n:
+            return scenes[:n]
+    raise _incomplete(len(scenes), n, "scenes")
 
 
 def _product_block(ctx: dict[str, Any]) -> str:
@@ -461,8 +469,17 @@ async def stage_variations(ctx: dict[str, Any], scenes: list[dict[str, str]], mo
     prompt = f"N = {count}\nAvatar mode: {ctx['mode']}\n\nScenes:\n{_scene_block(scenes)}\n\nAvatars:\n{avatars}"
     if _changes_block(ctx):
         prompt += "\n\n" + _changes_block(ctx)
-    out = await _run(VARIATIONS_SYSTEM, _Variations, prompt, model)
-    items = [
+    items: list[dict[str, str]] = []
+    for attempt in range(2):
+        out = await _run(VARIATIONS_SYSTEM if attempt == 0 else VARIATIONS_SYSTEM + f"\nIMPORTANT: return EXACTLY {count} items.", _Variations, prompt, model)
+        items = _variation_items(out)
+        if len(items) >= count:
+            return items[:count]
+    raise _incomplete(len(items), count, "variations")
+
+
+def _variation_items(out: Any) -> list[dict[str, str]]:
+    return [
         {
             "title": _text(v.title, 80),
             "avatar": _text(v.avatar, 40) or "Pessoa comum",
@@ -473,9 +490,6 @@ async def stage_variations(ctx: dict[str, Any], scenes: list[dict[str, str]], mo
         for v in out.items
         if v.title.strip() and v.look.strip()
     ]
-    if len(items) < count:
-        raise _fail()
-    return items[:count]
 
 
 def _lines_in(data: dict[str, Any], scenes: list[dict[str, str]], cta: str, total: int) -> list[list[str]]:

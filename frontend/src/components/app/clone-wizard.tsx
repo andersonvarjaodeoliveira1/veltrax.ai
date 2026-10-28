@@ -1148,6 +1148,7 @@ export function CloneWizard() {
     const low = lowPriority;
     const model = FLOW_CHOICES.find((m) => m.id === flowModelId) ?? FLOW_MODELS[0];
     const perVideo = model.credits * p.sceneCount;
+    const nVideos = p.variations.length || p.count;
     return (
       <div className="space-y-2" data-testid="flow-model-chooser">
         <div className="space-y-2 rounded-[12px] border border-[#F5B454]/40 bg-[#F5B454]/10 p-3">
@@ -1160,7 +1161,7 @@ export function CloneWizard() {
                 </button>
               ))}
             </div>
-            {!low && <><p className="text-sm font-medium" data-testid="flow-credits">Cada vídeo de {p.sceneCount} {p.sceneCount === 1 ? "cena" : "cenas"} gasta cerca de {perVideo} créditos ({p.variations.length} {p.variations.length === 1 ? "vídeo" : "vídeos"}: {perVideo * p.variations.length} créditos).</p>
+            {!low && <><p className="text-sm font-medium" data-testid="flow-credits">Cada vídeo de {p.sceneCount} {p.sceneCount === 1 ? "cena" : "cenas"} gasta cerca de {perVideo} créditos ({nVideos} {nVideos === 1 ? "vídeo" : "vídeos"}: {perVideo * nVideos} créditos).</p>
             <p className="text-xs text-muted-foreground">Mais as imagens e qualquer cena que você refizer. Valores do Flow podem mudar: confira em Configurações, no topo do campo de prompt.</p></>}
           </div>
       </div>

@@ -574,7 +574,7 @@ export default function HomeApp() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Input type="number" min={250} max={3000} step={50} value={pauseThresholdMs} onChange={(e) => setPauseThresholdMs(e.target.value)} disabled={!cutLongPauses} aria-label="Pause threshold (ms)" className="h-8 w-24" />
-                    <span className="text-xs text-muted-foreground">milliseconds</span>
+                    <span className="text-xs text-muted-foreground">milissegundos</span>
                   </div>
                   <div className="flex items-center justify-between gap-4">
                     <div>
@@ -616,7 +616,7 @@ export default function HomeApp() {
                 <span>{error}</span>
                 {needsDownload && (
                   <Button asChild size="sm" className="mt-2 w-fit">
-                    <a href="https://turboscribe.ai/pt/downloader/youtube/video" target="_blank" rel="noopener noreferrer">Baixar vídeo</a>
+                    <a href="https://turboscribe.ai/pt/downloader/youtube/video" target="_blank" rel="noopener noreferrer" title="Abre o site externo turboscribe.ai em outra aba">Baixar vídeo (site externo)</a>
                   </Button>
                 )}
               </AlertDescription>
@@ -632,7 +632,7 @@ export default function HomeApp() {
 
         <section className="mt-16 md:mt-24" aria-labelledby="recent-heading">
           <div className="mb-4 flex items-end justify-between">
-            <h2 id="recent-heading" className="font-display text-lg font-bold tracking-tight">Recent</h2>
+            <h2 id="recent-heading" className="font-display text-lg font-bold tracking-tight">Recentes</h2>
             {recent && recent.length > 0 && (
               <Link href="/list" className="group flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
                 View library<ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />

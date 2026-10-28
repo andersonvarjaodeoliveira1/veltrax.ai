@@ -338,7 +338,7 @@ export default function ListPage() {
         <div>
           <h1 className="font-display text-3xl font-bold tracking-tight">Library</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {tasks.length} {tasks.length === 1 ? "generation" : "generations"} · hover to preview, select to batch-manage
+            {tasks.length} {tasks.length === 1 ? "geração" : "gerações"} · passe o mouse para ver, selecione para gerenciar em lote
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -421,7 +421,7 @@ export default function ListPage() {
           </div>
         ) : visibleTasks.length === 0 ? (
           <p className="rounded-2xl border border-dashed px-6 py-16 text-center text-sm text-muted-foreground">
-            Nothing matches{query ? ` “${search.trim()}”` : " this filter"}.
+            Nada encontrado{query ? ` “${search.trim()}”` : " com este filtro"}.
           </p>
         ) : (
           <div className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">

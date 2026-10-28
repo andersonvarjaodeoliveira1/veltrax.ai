@@ -153,7 +153,7 @@ export default function FoldersPage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h1 className="font-display text-2xl font-bold tracking-tight">{openFolder.name}</h1>
-              <p className="mt-1 text-sm text-muted-foreground">{inFolder.length} {inFolder.length === 1 ? "video" : "videos"} stored in this folder</p>
+              <p className="mt-1 text-sm text-muted-foreground">{inFolder.length} {inFolder.length === 1 ? "vídeo guardado" : "vídeos guardados"} nesta pasta</p>
             </div>
             <Button onClick={() => { setPickedIds([]); setAdding(true); }} disabled={available.length === 0}>
               <Plus className="size-4" aria-hidden />Add videos

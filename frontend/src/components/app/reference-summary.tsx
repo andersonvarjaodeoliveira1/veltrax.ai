@@ -39,6 +39,9 @@ export function ReferenceSummary({ file, transcript }: { file: File | null; tran
         video.preload = "auto";
         video.src = url;
         await once(video, "loadedmetadata", 10000);
+        // Sem o primeiro quadro decodificado, videoWidth fica 0 e o desenho sai preto (codec que o navegador não abre).
+        if (!video.videoWidth) await once(video, "loadeddata", 10000);
+        if (!video.videoWidth || !video.videoHeight) throw new Error("undecodable");
         const duration = video.duration;
         if (!Number.isFinite(duration) || duration <= 0) throw new Error("no duration");
         if (cancelled) return;
@@ -51,6 +54,7 @@ export function ReferenceSummary({ file, transcript }: { file: File | null; tran
         canvas.height = thumbH;
         const context = canvas.getContext("2d");
         if (!context) throw new Error("no canvas");
+        let lit = 0;
         for (let i = 0; i < count; i += 1) {
           const t = Math.min(duration - 0.05, ((i + 0.5) / count) * duration);
           const seeked = once(video, "seeked", 6000);
@@ -58,10 +62,14 @@ export function ReferenceSummary({ file, transcript }: { file: File | null; tran
           await seeked;
           if (cancelled) return;
           context.drawImage(video, 0, 0, thumbW, thumbH);
+          const px = context.getImageData(0, 0, thumbW, thumbH).data;
+          for (let k = 0; k < px.length; k += 64) if (px[k] > 8 || px[k + 1] > 8 || px[k + 2] > 8) { lit += 1; break; }
           const src = canvas.toDataURL("image/jpeg", 0.72);
           setFrames((current) => [...current, { t, src }]);
         }
-        if (!cancelled) setState("done");
+        if (cancelled) return;
+        if (lit === 0) { setFrames([]); throw new Error("black frames"); }
+        setState("done");
       } catch {
         if (!cancelled) setState("failed");
       }
