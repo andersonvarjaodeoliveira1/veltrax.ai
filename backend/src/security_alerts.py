@@ -34,6 +34,8 @@ KINDS = {
     "view_source": "tentou ver o código-fonte da página (Ctrl+U)",
     "paste_code": "colou um trecho parecido com código em um campo",
     "copy_large": "copiou um bloco grande de texto da tela",
+    "automation": "navegador automatizado / robô detectado (conta bloqueada)",
+    "blocked": "conta bloqueada por atividade incomum (2 tentativas)",
     "scanner": "ferramenta de varredura bloqueada",
     "probe": "tentou acessar um caminho de sondagem",
     "rate": "excesso de requisições (bloqueado)",
@@ -137,16 +139,75 @@ class Report(BaseModel):
     detail: str = Field(default="", max_length=120)
 
 
+# Tentativas de copiar o aplicativo que contam para o bloqueio. Botão direito só gera alerta, não conta.
+STRIKE_KINDS = ("devtools_shortcut", "view_source", "paste_code", "copy_large", "automation")
+BLOCK_AT = 2
+STRIKE_DEDUPE_SECONDS = 20
+
+
+async def _strike_state(db: AsyncSession, user_id: str) -> dict:
+    row = (await db.execute(text("SELECT strikes, blocked_at FROM security_strikes WHERE user_id = :u"), {"u": user_id})).first()
+    strikes = int(row[0]) if row else 0
+    return {"strikes": strikes, "blocked": bool(row and row[1]), "limit": BLOCK_AT}
+
+
 @router.post("/report")
 async def report(body: Report, request: Request, db: AsyncSession = Depends(get_db)):
-    """O site avisa quando alguém tenta copiar o aplicativo (botão direito, F12, colar código). Administradores não contam."""
-    if body.kind not in ("contextmenu", "devtools_shortcut", "view_source", "paste_code", "copy_large"):
+    """O site avisa quando alguém tenta copiar o aplicativo (botão direito, F12, colar código, robô). Administradores não contam.
+    Na 2ª tentativa (ou na hora, se for robô) a conta é bloqueada e a pessoa é mandada falar com o administrador."""
+    if body.kind not in ("contextmenu",) + STRIKE_KINDS:
         raise HTTPException(status_code=400, detail="Tipo desconhecido")
     user_id = get_authenticated_user_id(request, get_config())
     row = (await db.execute(text("SELECT email, is_admin FROM users WHERE id = :u"), {"u": user_id})).first()
     if not row or row[1]:
-        return {"ok": True}
+        return {"ok": True, "strikes": 0, "blocked": False, "limit": BLOCK_AT}
     who = row[0] or user_id
     page = body.page.split("?")[0]
     buffer.add(body.kind, who, f"{page} {body.detail}".strip(), dedupe_seconds=USER_THROTTLE_SECONDS)
+    if body.kind not in STRIKE_KINDS:
+        return {"ok": True, **await _strike_state(db, user_id)}
+    current = (await db.execute(
+        text("SELECT strikes, blocked_at, last_at, last_kind FROM security_strikes WHERE user_id = :u"), {"u": user_id}
+    )).first()
+    strikes = int(current[0]) if current else 0
+    blocked = bool(current and current[1])
+    if not blocked:
+        recent = bool(current and current[3] == body.kind and (datetime.now(timezone.utc) - current[2]).total_seconds() < STRIKE_DEDUPE_SECONDS)
+        if body.kind == "automation":
+            strikes = max(strikes, BLOCK_AT)
+        elif not recent:
+            strikes += 1
+        blocked = strikes >= BLOCK_AT
+        await db.execute(
+            text(
+                """
+                INSERT INTO security_strikes (user_id, strikes, last_kind, last_at, blocked_at)
+                VALUES (:u, :s, :k, now(), CASE WHEN :b THEN now() END)
+                ON CONFLICT (user_id) DO UPDATE SET strikes = :s, last_kind = :k, last_at = now(),
+                    blocked_at = COALESCE(security_strikes.blocked_at, CASE WHEN :b THEN now() END)
+                """
+            ),
+            {"u": user_id, "s": strikes, "k": body.kind, "b": blocked},
+        )
+        await db.commit()
+        if blocked:
+            buffer.add("blocked", who, f"{page} {body.kind}", dedupe_seconds=3600)
+    return {"ok": True, "strikes": strikes, "blocked": blocked, "limit": BLOCK_AT}
+
+
+@router.get("/status")
+async def status(request: Request, db: AsyncSession = Depends(get_db)):
+    """Se a conta está avisada ou bloqueada por atividade incomum (o site mostra o aviso amarelo)."""
+    user_id = get_authenticated_user_id(request, get_config())
+    return await _strike_state(db, user_id)
+
+
+@router.delete("/block/{user_id}")
+async def unblock(user_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    """Administrador libera uma conta bloqueada por atividade incomum."""
+    from .admin_auth import require_admin_user
+
+    await require_admin_user(request, db, get_config())
+    await db.execute(text("DELETE FROM security_strikes WHERE user_id = :u"), {"u": user_id})
+    await db.commit()
     return {"ok": True}

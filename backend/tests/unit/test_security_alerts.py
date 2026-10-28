@@ -47,3 +47,12 @@ def test_flush_sends_to_every_recipient(monkeypatch):
     assert asyncio.run(sa.flush_once()) == 2
     assert sorted(sent) == sorted(sa.DEFAULT_ALERT_EMAILS)
     assert asyncio.run(sa.flush_once()) == 0  # nada novo, nada enviado
+
+
+def test_security_strike_constants():
+    from src import security_alerts
+
+    assert security_alerts.BLOCK_AT == 2
+    assert "automation" in security_alerts.STRIKE_KINDS
+    assert "contextmenu" not in security_alerts.STRIKE_KINDS
+    assert "blocked" in security_alerts.KINDS

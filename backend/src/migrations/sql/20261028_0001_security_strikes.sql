@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS security_strikes (
+    user_id VARCHAR(36) PRIMARY KEY,
+    strikes INTEGER NOT NULL DEFAULT 0,
+    last_kind VARCHAR(40),
+    last_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    blocked_at TIMESTAMP WITH TIME ZONE
+)

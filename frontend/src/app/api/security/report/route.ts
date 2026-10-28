@@ -17,5 +17,7 @@ export async function POST(request: Request) {
     body: JSON.stringify({ kind: String(body.kind ?? "").slice(0, 40), page: String(body.page ?? "").slice(0, 120), detail: String(body.detail ?? "").slice(0, 120) }),
     cache: "no-store",
   });
-  return NextResponse.json({ ok: upstream.ok }, { status: upstream.ok ? 200 : 202 });
+  if (!upstream.ok) return NextResponse.json({ ok: false }, { status: 202 });
+  const data = (await upstream.json().catch(() => ({}))) as { strikes?: number; blocked?: boolean; limit?: number };
+  return NextResponse.json({ ok: true, strikes: data.strikes ?? 0, blocked: Boolean(data.blocked), limit: data.limit ?? 2 });
 }

@@ -28,7 +28,6 @@ export function CodeGuard() {
         (ctrl && ["u", "s"].includes(key) && !isField(event.target));
       if (blocked) {
         event.preventDefault();
-        event.stopPropagation();
       }
     };
 
