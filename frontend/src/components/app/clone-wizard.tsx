@@ -660,7 +660,11 @@ export function CloneWizard() {
       images.forEach((file) => form.append("images", file));
       const response = await fetch("/api/multiplier/clone/product-look", { method: "POST", body: form });
       const data = await response.json().catch(() => null);
-      if (!response.ok || typeof data?.look !== "string") throw new Error("failed");
+      if (!response.ok || typeof data?.look !== "string") {
+        // Mostra o motivo real (sem créditos, chave recusada, limite da API) em vez de ignorar a foto em silêncio.
+        setError(aiErrorText(data?.detail) ?? "Não consegui ler as fotos agora. Tente de novo.");
+        throw new Error("failed");
+      }
       patch({ productLook: data.look, videos: [], ctaLocked: false });
       setLookState(data.look.trim() ? "done" : "failed");
       return data.look.trim();

@@ -394,6 +394,20 @@
     return btoa(out);
   }
 
+  async function sendInParts(file, buffer) {
+    const bytes = new Uint8Array(buffer);
+    const size = 6 * 1024 * 1024;
+    const total = Math.max(1, Math.ceil(bytes.length / size));
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    let reply = null;
+    for (let index = 0; index < total; index += 1) {
+      const part = bytes.subarray(index * size, (index + 1) * size);
+      reply = await chrome.runtime.sendMessage({ type: "clipgringa-upload-part", id, index, total, upload: uploadInfo, file, b64: toBase64(part) });
+      if (!reply || !reply.ok) return reply;
+    }
+    return reply;
+  }
+
   // Lê o vídeo pronto direto do card do Flow e manda para o ClipGringa. Devolve true se enviou.
   async function uploadVideo(tile, job) {
     if (!uploadInfo) return false;
@@ -405,10 +419,15 @@
       if (!res.ok) throw new Error(`o Flow respondeu ${res.status}`);
       const buffer = await res.arrayBuffer();
       if (buffer.byteLength > 120 * 1024 * 1024) throw new Error("vídeo grande demais");
-      const reply = await chrome.runtime.sendMessage({ type: "clipgringa-upload", upload: uploadInfo, file: job.file, b64: toBase64(buffer) });
-      if (!reply || !reply.ok) throw new Error((reply && reply.error) || "sem resposta da extensão");
-      state.cloud[job.key] = "ok";
-      return true;
+      // Em pedaços de ~6 MB (a mensagem única de um vídeo grande passa do limite do Chrome) e com até 3 tentativas.
+      let lastError = "";
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        const reply = await sendInParts(job.file, buffer);
+        if (reply && reply.ok) { state.cloud[job.key] = "ok"; return true; }
+        lastError = (reply && reply.error) || "sem resposta da extensão";
+        await new Promise((r) => setTimeout(r, 1500 * attempt));
+      }
+      throw new Error(lastError);
     } catch (e) {
       state.cloud[job.key] = "fail";
       setNow(`Não consegui enviar ${job.file} pela página (${(e && e.message) || e}). Tento pelo download.`);

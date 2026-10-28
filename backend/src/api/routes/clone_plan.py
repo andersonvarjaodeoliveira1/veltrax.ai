@@ -298,15 +298,32 @@ def _is_quota_error(exc: Exception) -> bool:
     return any(key in text for key in ("429", "resource_exhausted", "quota", "rate limit", "404", "not_found", "no longer available", "overloaded", "503"))
 
 
-def _is_key_error(exc: Exception) -> bool:
+def _provider_of(exc: Exception) -> str:
     text = f"{type(exc).__name__} {exc}".lower()
-    return any(key in text for key in ("401", "403", "unauthorized", "forbidden", "permission", "api key", "api_key", "invalid_api", "authentication", "billing"))
+    for name, keys in (("openai", ("openai", "gpt-")), ("anthropic", ("anthropic", "claude")), ("gemini", ("gemini", "google", "generativelanguage"))):
+        if any(key in text for key in keys):
+            return name
+    return ""
+
+
+def _is_no_credit_error(exc: Exception) -> bool:
+    text = f"{type(exc).__name__} {exc}".lower()
+    return any(key in text for key in ("insufficient_quota", "no credits", "credit balance", "credit_balance", "billing", "exceeded your current quota"))
+
+
+def _is_key_error(exc: Exception) -> bool:
+    import re
+
+    text = f"{type(exc).__name__} {exc}".lower()
+    return bool(re.search(r"status_code:\s*40[13]\b|unauthorized|forbidden|permission denied|invalid[_ ]api[_ ]key|incorrect api key|authentication", text))
 
 
 def _ai_fail(exc: Exception | None, fallback: str) -> HTTPException:
-    """Diz de quem é a falha: chave recusada, limite de uso da API ou erro genérico."""
+    """Diz de quem é a falha: sem créditos na chave, chave recusada, limite de uso da API ou erro genérico."""
+    if exc is not None and _is_no_credit_error(exc):
+        return HTTPException(status_code=502, detail=f"AI_NO_CREDITS:{_provider_of(exc)}")
     if exc is not None and _is_key_error(exc):
-        return HTTPException(status_code=502, detail="AI_KEY_INVALID")
+        return HTTPException(status_code=502, detail=f"AI_KEY_INVALID:{_provider_of(exc)}")
     if exc is not None and _is_quota_error(exc):
         return HTTPException(status_code=503, detail="AI_QUOTA")
     return HTTPException(status_code=502, detail=fallback)

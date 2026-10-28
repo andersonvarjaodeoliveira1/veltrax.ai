@@ -27,6 +27,22 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     });
     return true;
   }
+  if (message && message.type === "clipgringa-upload-part") {
+    // Recebe o arquivo em pedaços e só envia ao ClipGringa quando o último chegar.
+    const id = String(message.id || "");
+    const store = (self.__parts = self.__parts || {});
+    const entry = store[id] || (store[id] = { parts: [], at: Date.now() });
+    entry.parts[Number(message.index) || 0] = base64ToBlob(String(message.b64 || ""), "application/octet-stream");
+    for (const key of Object.keys(store)) if (Date.now() - store[key].at > 10 * 60 * 1000) delete store[key];
+    if (Number(message.index) + 1 < Number(message.total)) { sendResponse({ ok: true, partial: true }); return; }
+    const file = String(message.file || "");
+    const blob = new Blob(entry.parts, { type: /\.(jpe?g|png|webp)$/i.test(file) ? "image/jpeg" : "video/mp4" });
+    delete store[id];
+    postVideo(message.upload, blob, file)
+      .then((r) => sendResponse(r))
+      .catch((e) => sendResponse({ ok: false, error: String((e && e.message) || e) }));
+    return true;
+  }
   if (message && message.type === "clipgringa-upload") {
     postVideo(message.upload, base64ToBlob(String(message.b64 || ""), /\.(jpe?g|png|webp)$/i.test(String(message.file || "")) ? "image/jpeg" : "video/mp4"), String(message.file || ""))
       .then((r) => sendResponse(r))
