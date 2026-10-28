@@ -25,7 +25,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Kbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
 import { DISPLAY_NAME } from "@/lib/site";
-import { LanguageSwitcher } from "@/lib/i18n";
+import { useI18n } from "@/lib/i18n";
 
 type NavItem = { href: string; label: string; icon: typeof Film; match: (path: string) => boolean; external?: boolean; badge?: string; group?: string; sub?: string; tile?: boolean; primary?: boolean };
 
@@ -39,8 +39,8 @@ const NAV: NavItem[] = [
   { href: "/automacao", label: "Vídeo orgânico", group: "Criar", tile: true, icon: Workflow, match: (p) => p.startsWith("/automacao"), badge: "BETA" },
   { href: "/influencer", label: "Avatar influencer", tile: true, icon: UserRound, match: (p) => p.startsWith("/influencer"), badge: "BETA" },
   { href: "/", label: "Novos cortes", sub: "Cortes para TikTok", primary: true, icon: Plus, match: (p) => p === "/" },
-  { href: "/list", label: "Library", sub: "Cortes para TikTok", icon: Film, match: (p) => p.startsWith("/list") || p.startsWith("/tasks") },
-  { href: "/folders", label: "Folders", sub: "Cortes para TikTok", icon: FolderOpen, match: (p) => p.startsWith("/folders") },
+  { href: "/list", label: "Biblioteca", sub: "Cortes para TikTok", icon: Film, match: (p) => p.startsWith("/list") || p.startsWith("/tasks") },
+  { href: "/folders", label: "Pastas", sub: "Cortes para TikTok", icon: FolderOpen, match: (p) => p.startsWith("/folders") },
   { href: DOWNLOADER_URL, label: "Baixar vídeo", sub: "Cortes para TikTok", icon: Download, match: () => false, external: true },
   { href: "/conectar-flow", label: "Conectar ao Flow", icon: Link2, match: (p) => p.startsWith("/conectar-flow") },
   { href: "/minhas-apis", label: "Minhas APIs", icon: KeyRound, match: (p) => p.startsWith("/minhas-apis") },
@@ -58,6 +58,9 @@ function initials(name?: string | null, email?: string | null) {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession();
   const pathname = usePathname();
+  const { lang, setLang } = useI18n();
+  // A tradução completa existe só no Avatar influencer: no resto do app, o idioma é sempre português.
+  useEffect(() => { if (lang !== "pt" && !pathname.startsWith("/influencer")) setLang("pt"); }, [lang, pathname, setLang]);
   const router = useRouter();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [billing] = useBillingSummary(Boolean(session?.user));
@@ -171,7 +174,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <div className="w-full shrink-0 space-y-2 border-t border-sidebar-border/60 pb-3 pt-2">
           <Announcements key={user.id} userId={user.id} compact={compact} />
-          {!compact && <LanguageSwitcher className="w-full justify-between" />}
           {!compact && tokens && !tokens.unlimited && <TokenCard balance={tokens} />}
           {!compact && billing?.monetization_enabled && <UsageCard billing={billing} />}
           <UserRow compact={compact} name={DISPLAY_NAME} email={user.email} />
@@ -184,7 +186,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Image src="/logo.png" alt="" width={22} height={22} className="size-[22px]" />ClipGringa
           </Link>
           <div className="flex items-center gap-1">
-            <LanguageSwitcher />
             <QuickSignOut />
             <Announcements key={user.id} userId={user.id} compact />
             <button type="button" onClick={() => setPaletteOpen(true)} aria-label="Search generations" className="rounded-lg p-2 text-muted-foreground hover:bg-accent">

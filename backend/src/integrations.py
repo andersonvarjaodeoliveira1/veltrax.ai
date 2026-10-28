@@ -24,7 +24,7 @@ PROVIDERS: dict[str, dict[str, str]] = {
     "anthropic": {"label": "Claude (Anthropic)", "help": "Chave da Anthropic (console.anthropic.com)."},
     "openrouter": {"label": "OpenRouter", "help": "Chave do OpenRouter (openrouter.ai/keys)."},
     "apify": {"label": "Apify (busca de fotos no Pinterest)", "help": "Token do Apify (console.apify.com/settings/integrations). Sem ele, a busca usa um banco de fotos grátis."},
-    "flow": {"label": "Flow / Veo (Google)", "help": "O Flow não tem chave própria: use a chave do Google AI Studio com acesso ao Veo."},
+    "flow": {"label": "Chave do Google para o Veo (opcional)", "help": "Isto NÃO é a conta do Flow. A conta do Flow conecta pela extensão, na página Conectar ao Flow. Aqui só entra uma chave do Google AI Studio com acesso ao Veo."},
 }
 
 # Chaves do usuário da requisição atual (preenchido por load_user_keys).

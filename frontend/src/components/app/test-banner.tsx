@@ -7,7 +7,10 @@ const WHATSAPP = "5511913142143";
 
 /** Aviso fixo nas contas de teste: mostra até quando a conta fica ativa e pede feedback pelo WhatsApp. */
 export function TestBanner({ enabled }: { enabled: boolean }) {
-  const [until, setUntil] = useState<Date | null>(null);
+  const [until, setUntil] = useState<Date | null>(() => {
+    // Guarda a data na sessão: nas próximas telas o aviso já nasce no lugar e não empurra o conteúdo.
+    try { const saved = window.sessionStorage.getItem("gv-test-until"); return saved ? new Date(saved) : null; } catch { return null; }
+  });
 
   useEffect(() => {
     if (!enabled) return;
@@ -15,7 +18,8 @@ export function TestBanner({ enabled }: { enabled: boolean }) {
     fetch("/api/usage/test-status", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((data: { test_expires_at?: string | null } | null) => {
-        if (alive && data?.test_expires_at) setUntil(new Date(data.test_expires_at));
+        if (alive && data && !data.test_expires_at) { setUntil(null); try { window.sessionStorage.removeItem("gv-test-until"); } catch { /* sem storage */ } }
+        if (alive && data?.test_expires_at) { setUntil(new Date(data.test_expires_at)); try { window.sessionStorage.setItem("gv-test-until", data.test_expires_at); } catch { /* sem storage */ } }
       })
       .catch(() => {});
     return () => { alive = false; };

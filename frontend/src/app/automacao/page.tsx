@@ -131,7 +131,7 @@ export default function AutomationPage() {
           id: `${Date.now()}-${index}`,
           niche,
           hook: hooks[index % hooks.length],
-          body: bodies[Math.floor(index / hooks.length) % bodies.length],
+          body: bodies[index % bodies.length],
           cta: cta.text,
           button: cta.button,
           status: "copy" as Status,

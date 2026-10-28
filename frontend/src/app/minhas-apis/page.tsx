@@ -6,10 +6,12 @@ import { toast } from "sonner";
 import { Check, KeyRound, Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/app/page-header";
+import { useFlowConnection } from "@/hooks/use-flow-connection";
 
 type Integration = { provider: string; label: string; help: string; connected: boolean; hint: string; updated_at: string | null };
 
 export default function MyApisPage() {
+  const { state: flowState, account: flowAccount } = useFlowConnection(true, false);
   const [items, setItems] = useState<Integration[] | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
@@ -73,6 +75,15 @@ export default function MyApisPage() {
           <Link href="/" className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-4 py-2 text-xs font-medium text-white">Começar a criar</Link>
         </div>
       )}
+
+      <section data-testid="flow-account-card" className="flex flex-wrap items-center gap-3 rounded-[18px] border border-border bg-card p-4 text-sm">
+        <span className={`size-2.5 rounded-full ${flowState === "connected" ? "bg-[#5BD69A]" : "bg-muted-foreground"}`} />
+        <span className="min-w-0 flex-1">
+          <b>Conta do Flow:</b> {flowState === "connected" ? `conectada${flowAccount.plan ? ` · plano ${flowAccount.plan}` : ""}` : flowState === "logged-out" ? "Flow aberto, mas sem login" : flowState === "no-extension" ? "extensão não encontrada" : "verificando…"}
+          <span className="block text-xs text-muted-foreground">A conta do Flow conecta pela extensão, não por chave. Veja o passo a passo em Conectar ao Flow.</span>
+        </span>
+        <Link href="/conectar-flow" className="rounded-full border border-[#7B3FE4]/60 px-4 py-2 text-xs font-medium text-[#A98BFF]">Conectar ao Flow</Link>
+      </section>
 
       {error && !error.provider && <p role="alert" className="rounded-[14px] border border-[#F0466B]/40 bg-[#F0466B]/10 p-3 text-sm text-[#F0466B]">{error.text}</p>}
 

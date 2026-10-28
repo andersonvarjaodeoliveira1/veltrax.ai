@@ -15,6 +15,12 @@ export function FeatureIntro({ image, title, tagline, steps, children }: Props) 
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
+    // A apresentação completa passa uma vez por sessão do navegador; nas próximas entradas a ferramenta abre direto.
+    const seenKey = `gv-intro-${title}`;
+    try {
+      if (window.sessionStorage.getItem(seenKey) === "1") { setDone(true); return; }
+      window.sessionStorage.setItem(seenKey, "1");
+    } catch { /* sem storage: mostra a apresentação */ }
     const reduce = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     const total = reduce ? 600 : DURATION;
     const start = performance.now();
@@ -27,7 +33,7 @@ export function FeatureIntro({ image, title, tagline, steps, children }: Props) 
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, []);
+  }, [title]);
 
   if (done) return <>{children}</>;
 
@@ -49,6 +55,7 @@ export function FeatureIntro({ image, title, tagline, steps, children }: Props) 
         <div className="mt-5 h-1 overflow-hidden rounded-full bg-white/10">
           <div className="h-full rounded-full bg-gradient-to-r from-[#5A1BAA] via-[#7B3FE4] to-[#A98BFF] shadow-[0_0_12px_#7B3FE4]" style={{ width: `${Math.round(progress * 100)}%` }} />
         </div>
+        <button type="button" onClick={() => setDone(true)} className="mt-3 text-xs text-white/50 underline hover:text-white">Pular</button>
         <ol className="mt-4 space-y-2.5 text-left text-sm">
           {steps.map((label, i) => (
             <li key={label} className={cn("flex items-center gap-3 transition-colors", i < active ? "text-white" : i === active ? "text-white" : "text-white/35")}>
