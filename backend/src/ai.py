@@ -539,6 +539,10 @@ def _build_transcript_model(
                 "max_tokens": 8192,
             },
         )
+    if provider == "anthropic" and provider_model_name:
+        from .integrations import claude_model
+
+        return claude_model(provider_model_name, getattr(runtime_config, "anthropic_api_key", None) or None)
     if provider != "ollama":
         return model_name
 

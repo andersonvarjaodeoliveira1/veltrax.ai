@@ -200,6 +200,15 @@ def current_keys() -> dict[str, str]:
     return _current_keys.get()
 
 
+def claude_model(name: str = "claude-sonnet-5-5", api_key: str | None = None) -> Any:
+    """Claude sem thinking: a API recusa `tool_choice` forçado (saída estruturada) com o thinking ligado (400)."""
+    from pydantic_ai.models.anthropic import AnthropicModel, AnthropicModelSettings
+    from pydantic_ai.providers.anthropic import AnthropicProvider
+
+    provider = AnthropicProvider(api_key=api_key) if api_key else "anthropic"
+    return AnthropicModel(name, provider=provider, settings=AnthropicModelSettings(anthropic_thinking={"type": "disabled"}))
+
+
 def user_models(include_account: bool = True) -> list[Any]:
     """Modelos de texto do próprio usuário: primeiro as chaves de API dele, depois a conta de IA ligada pela extensão.
 
@@ -214,9 +223,7 @@ def user_models(include_account: bool = True) -> list[Any]:
         for name in ("gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.6-flash"):
             out.append(GoogleModel(name, provider=GoogleProvider(api_key=gem)))
     if keys.get("anthropic"):
-        from pydantic_ai.models.anthropic import AnthropicModel
-        from pydantic_ai.providers.anthropic import AnthropicProvider
-        out.append(AnthropicModel("claude-sonnet-5-5", provider=AnthropicProvider(api_key=keys["anthropic"])))
+        out.append(claude_model(api_key=keys["anthropic"]))
     if keys.get("openai"):
         from pydantic_ai.models.openai import OpenAIChatModel
         from pydantic_ai.providers.openai import OpenAIProvider
@@ -246,9 +253,7 @@ def _models_from(keys: dict[str, str], skip: dict[str, str] | None = None) -> li
     out: list[Any] = []
     gem = keys.get("gemini") or keys.get("flow")
     if keys.get("anthropic") and keys["anthropic"] != skip.get("anthropic"):
-        from pydantic_ai.models.anthropic import AnthropicModel
-        from pydantic_ai.providers.anthropic import AnthropicProvider
-        out.append(AnthropicModel("claude-sonnet-5-5", provider=AnthropicProvider(api_key=keys["anthropic"])))
+        out.append(claude_model(api_key=keys["anthropic"]))
     if keys.get("openai") and keys["openai"] != skip.get("openai"):
         from pydantic_ai.models.openai import OpenAIChatModel
         from pydantic_ai.providers.openai import OpenAIProvider

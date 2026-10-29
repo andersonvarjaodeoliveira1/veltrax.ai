@@ -29,11 +29,11 @@ def is_key_error(exc: Exception) -> bool:
     return bool(re.search(r"status_code:\s*40[13]\b|unauthorized|forbidden|permission denied|invalid[_ ]api[_ ]key|incorrect api key|authentication", text))
 
 
-def brief(exc: Exception, limit: int = 180) -> str:
+def brief(exc: Exception, limit: int = 600) -> str:
     """Tipo do erro + começo da mensagem, sem nada que pareça chave ou token."""
     import re
 
-    text = f"{type(exc).__name__}: {exc}".replace("\n", " ")
+    text = f"{type(exc).__name__}: {exc}".replace("\n", " ").replace("|", "/")
     text = re.sub(r"(sk-[A-Za-z0-9_\-]{8,}|AIza[0-9A-Za-z_\-]{20,}|Bearer\s+\S+|[A-Za-z0-9_\-]{32,})", "[oculto]", text)
     return text[:limit]
 
