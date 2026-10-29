@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 # provider -> (nome na tela, como testar a chave)
 PROVIDERS: dict[str, dict[str, str]] = {
-    "gemini": {"label": "Gemini (Google)", "help": "Chave do Google AI Studio (aistudio.google.com/apikey)."},
+    "gemini": {"label": "Gemini (Google)", "help": "Tem uma cota grátis limitada (pode acabar no dia). Entre em aistudio.google.com/apikey com a sua conta Google, clique em “Create API key” e cole aqui."},
     "openai": {"label": "ChatGPT (OpenAI)", "help": "Chave da OpenAI (platform.openai.com/api-keys). Atenção: a assinatura do ChatGPT não inclui créditos de API; a API é cobrada à parte (platform.openai.com/settings/organization/billing)."},
     "anthropic": {"label": "Claude (Anthropic)", "help": "Chave da Anthropic (console.anthropic.com)."},
     "openrouter": {"label": "OpenRouter", "help": "Chave do OpenRouter (openrouter.ai/keys)."},

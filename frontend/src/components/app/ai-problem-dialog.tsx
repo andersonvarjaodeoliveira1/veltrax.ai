@@ -14,7 +14,7 @@ function copy(problem: AiProblem) {
   if (problem.kind === "no_credits") return {
     title: `Sua conta ${NAMES[problem.provider] ? `da ${who}` : "da IA"} está sem créditos`,
     text: `A chave que você conectou está certa, mas o saldo dela na ${NAMES[problem.provider] ?? "plataforma da IA"} acabou, e quem cobra é a própria plataforma, não o ClipGringa.${problem.provider === "openai" ? " A assinatura do ChatGPT (Plus/Pro) não inclui créditos da API: a API é cobrada à parte." : ""}`,
-    steps: ["Adicione créditos na sua conta do provedor (botão abaixo).", "Ou conecte outra chave em Minhas APIs (a do Google Gemini tem plano grátis).", "Ou fale com o administrador para liberar tokens."],
+    steps: ["Adicione créditos na sua conta do provedor (botão abaixo).", "Ou use uma chave do Google Gemini, que tem uma cota grátis limitada: entre em aistudio.google.com/apikey, clique em “Create API key” e cole em Minhas APIs.", "Ou fale com o administrador para liberar tokens."],
   };
   if (problem.kind === "key_invalid") return {
     title: "A IA recusou a sua chave",
@@ -60,6 +60,9 @@ export function AiProblemDialog() {
         <div className="flex flex-wrap justify-end gap-2">
           {billing && problem.kind !== "quota" && problem.kind !== "tokens" && (
             <a href={billing} target="_blank" rel="noopener noreferrer" className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-4 py-2 text-xs font-medium text-white">Abrir a conta no provedor</a>
+          )}
+          {(problem.kind === "no_credits" || problem.kind === "key_invalid") && problem.provider !== "gemini" && (
+            <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="rounded-full border border-[#5BD69A]/50 px-4 py-2 text-xs font-medium text-[#5BD69A]">Pegar chave do Gemini</a>
           )}
           <Link href="/minhas-apis" onClick={() => setProblem(null)} className="rounded-full border border-[#7B3FE4]/60 px-4 py-2 text-xs font-medium text-[#C9BBFA]">Abrir Minhas APIs</Link>
           <a href={ADMIN_WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className="rounded-full border border-border px-4 py-2 text-xs font-medium">Chamar o administrador</a>

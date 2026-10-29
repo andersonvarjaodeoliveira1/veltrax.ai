@@ -653,7 +653,9 @@ export function CloneWizard() {
   }
 
   /** Fotos do produto (até 3): a IA descreve o produto para ele aparecer igual nas cenas. Não bloqueia o resto se falhar. */
+  const photoAiError = useRef("");
   async function addProductPhotos(files: File[]): Promise<string> {
+    photoAiError.current = "";
     const images = await Promise.all(files.filter(isImageFile).slice(0, 3).map((file) => toJpegFile(file)));
     if (!images.length) { setError("Envie fotos do produto em PNG, JPG ou WebP."); return ""; }
     setError(null);
@@ -666,7 +668,9 @@ export function CloneWizard() {
       const data = await response.json().catch(() => null);
       if (!response.ok || typeof data?.look !== "string") {
         // Mostra o motivo real (sem créditos, chave recusada, limite da API) em vez de ignorar a foto em silêncio.
-        setError(aiErrorText(data?.detail) ?? "Não consegui ler as fotos agora. Tente de novo.");
+        const why = aiErrorText(data?.detail);
+        photoAiError.current = why ?? "";
+        setError(why ?? "Não consegui ler as fotos agora. Tente de novo.");
         throw new Error("failed");
       }
       patch({ productLook: data.look, videos: [], ctaLocked: false });
@@ -1384,7 +1388,8 @@ export function CloneWizard() {
       void addProductPhotos(images).then((look) => {
         const name = (projRef.current.product || title).trim();
         if (!look && !name) {
-          setError("Não consegui entender a foto. Escreva o nome do produto em “Falar sobre o meu produto” ou envie outra foto.");
+          // Se a IA recusou por causa da conta/chave, mostra esse motivo em vez do aviso genérico da foto.
+          setError(photoAiError.current || "Não consegui entender a foto. Escreva o nome do produto em “Falar sobre o meu produto” ou envie outra foto.");
           setQuestHold(false); setQuestPhoto(false); setReadDone(false);
           patch({ copySource: "video", ownCopy: "", reference: "" });
           return;
