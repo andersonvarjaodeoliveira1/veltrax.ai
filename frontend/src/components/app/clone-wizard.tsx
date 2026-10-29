@@ -1024,6 +1024,16 @@ export function CloneWizard() {
     }, () => { arm(); try { window.postMessage({ source: "clipgringa-page", type: "flow-package", raw, upload: null }, window.location.origin); } catch { /* sem janela */ } });
   });
   const extensionGotIt = useRef<Promise<boolean>>(Promise.resolve(false));
+  // A extensão (painel do Flow) pode pedir o pacote de novo se não o recebeu: reenvia o último pronto.
+  const resendRef = useRef<() => void>(() => undefined);
+  useEffect(() => {
+    const onAsk = (event: MessageEvent) => {
+      if (event.source !== window || event.data?.source !== "clipgringa-ext" || event.data?.type !== "package?") return;
+      resendRef.current();
+    };
+    window.addEventListener("message", onAsk);
+    return () => window.removeEventListener("message", onAsk);
+  }, []);
   // Quem tem Flow (conta conectada, plano e créditos) e quem não tem: o funil se adapta.
   const { state: flowState, account: flowAccount } = useFlowConnection(true, false);
   const flowStateRef = useRef(flowState);
@@ -1040,6 +1050,7 @@ export function CloneWizard() {
     }
     return <p role="status" data-testid="flow-account" className={`${base} border-[#F5B454]/40 bg-[#F5B454]/10`}>Não encontrei a extensão do Flow neste navegador. <a className="underline" href="/conectar-flow">Conectar ao Flow</a> (leva 2 minutos). Sem ela, você usa os prompts à mão.</p>;
   })();
+  resendRef.current = () => { if (p.videos.length > 0) void pushPackage(flowPackage()); };
   const markSent = () => { try { window.localStorage.setItem(SENT_KEY, "1"); } catch { /* storage unavailable */ } };
   function reset() {
     try { window.localStorage.removeItem(SENT_KEY); window.localStorage.removeItem(TOUCH_KEY); } catch { /* storage unavailable */ }
@@ -1395,7 +1406,7 @@ export function CloneWizard() {
       if (policyBlocked) return;
       markSent();
       void copy("flow-send", flowPackage());
-      void pushPackage(flowPackage()).then((ok) => { if (!ok) window.open(FLOW_HOME_URL, "_blank", "noopener"); });
+      void pushPackage(flowPackage()).then((ok) => { if (!ok) { setError("A extensão não confirmou o recebimento do pacote. Aperte Ctrl+F5 nesta página (e confira se a extensão está ligada e na versão 1.15.1) e clique em Enviar para o Flow de novo."); window.open(FLOW_HOME_URL, "_blank", "noopener"); } });
     };
     const assembling_ = Object.values(built).some((b) => b.state === "running");
     return (
@@ -1616,7 +1627,7 @@ export function CloneWizard() {
 
         {ready && (redirectIn !== null || redirectBlocked) && (
           <section role="status" className="space-y-2 rounded-[18px] border border-[#7B3FE4]/60 bg-[#7B3FE4]/15 p-4" data-testid="flow-redirect">
-            <p className="text-sm font-semibold">{redirectBlocked ? "A extensão não respondeu. Recarregue esta página (F5) e confira se a extensão 1.15.0 está ligada; ou abra o Flow pelo botão abaixo." : `Abrindo o Flow e enviando tudo em ${redirectIn}s…`}</p>
+            <p className="text-sm font-semibold">{redirectBlocked ? "A extensão não respondeu. Recarregue esta página (F5) e confira se a extensão 1.15.1 está ligada; ou abra o Flow pelo botão abaixo." : `Abrindo o Flow e enviando tudo em ${redirectIn}s…`}</p>
             <div className="h-1.5 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A98BFF] transition-all duration-1000" style={{ width: `${redirectBlocked ? 100 : ((1 - (redirectIn ?? 1)) / 1) * 100}%` }} /></div>
             <p className="text-xs text-muted-foreground">Tudo pronto. A extensão recebe o pacote, abre um projeto novo e gera as imagens e os vídeos sozinha. Você não precisa copiar nem colar nada.</p>
             <div className="flex gap-2">

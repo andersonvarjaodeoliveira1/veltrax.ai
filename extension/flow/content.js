@@ -942,19 +942,33 @@
     }
     try {
       // Usa o primeiro pacote que for válido: o do painel, o já carregado, o pendente do site ou o último enviado (até 6 horas).
-      const ok = (text) => { try { parsePackage(text); return true; } catch (_e) { return false; } };
       let raw = "";
-      const pending = (await chrome.storage.local.get(PENDING_KEY))[PENDING_KEY];
-      const last = (await chrome.storage.local.get("clipgringa-flow-last-v1"))["clipgringa-flow-last-v1"];
-      const options = [
-        { text: el("pkg").value.trim() },
-        { text: state.raw || "" },
-        { text: pending && pending.raw ? pending.raw.trim() : "", upload: pending && pending.upload },
-        { text: last && last.raw && Date.now() - last.at < 6 * 3600 * 1000 ? last.raw.trim() : "", upload: last && last.upload },
-      ];
-      const found = options.find((o) => o.text && ok(o.text));
+      let badReason = "";
+      const findPackage = async () => {
+        const pending = (await chrome.storage.local.get(PENDING_KEY))[PENDING_KEY];
+        const last = (await chrome.storage.local.get("clipgringa-flow-last-v1"))["clipgringa-flow-last-v1"];
+        const options = [
+          { text: el("pkg").value.trim() },
+          { text: state.raw || "" },
+          { text: pending && pending.raw ? pending.raw.trim() : "", upload: pending && pending.upload },
+          { text: last && last.raw && Date.now() - last.at < 6 * 3600 * 1000 ? last.raw.trim() : "", upload: last && last.upload },
+        ];
+        for (const o of options) {
+          if (!o.text) continue;
+          try { parsePackage(o.text); return o; } catch (e) { badReason = badReason || (e && e.message) || "pacote inválido"; }
+        }
+        return null;
+      };
+      let found = await findPackage();
+      if (!found) {
+        // Sem pacote: pede à aba do ClipGringa para mandar de novo e espera um pouco.
+        setNow("Procurando o pacote no ClipGringa…");
+        try { await new Promise((res) => chrome.runtime.sendMessage({ type: "clipgringa-request-package" }, () => { void chrome.runtime.lastError; res(); })); } catch (_e) { /* sem resposta */ }
+        for (let i = 0; i < 8 && !found; i += 1) { await sleep(800); found = await findPackage(); }
+      }
       if (found) { raw = found.text; if (found.upload) uploadInfo = found.upload; el("pkg").value = raw; }
-      if (!raw) throw new Error("Ainda não recebi o pacote. Volte ao ClipGringa (Clonar vídeo), deixe chegar em “Tudo pronto” e clique em “Enviar para o Flow”; ele manda sozinho para cá.");
+      if (!raw && badReason) throw new Error(`O pacote que chegou está com problema (${badReason}) Volte ao ClipGringa, gere de novo e clique em “Enviar para o Flow”.`);
+      if (!raw) throw new Error("Não achei o pacote. Volte à aba do ClipGringa (Clonar vídeo), deixe chegar em “Tudo pronto” e clique em “Enviar para o Flow”. Se você acabou de atualizar a extensão, aperte Ctrl+F5 nessa aba do ClipGringa primeiro.");
       parsePackage(raw); // define o modelo pedido pelo pacote
       if (!state.jobs.length || raw !== (state.raw || "")) {
         const parsed = parsePackage(raw);

@@ -19,6 +19,20 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     });
     return true;
   }
+  if (message && message.type === "clipgringa-request-package") {
+    // O painel do Flow não achou o pacote: pede à aba do ClipGringa (se estiver aberta) para enviá-lo de novo.
+    chrome.tabs.query({ url: "https://clipgringa.gringatools.com/*" }, async (tabs) => {
+      let asked = 0;
+      for (const tab of tabs || []) {
+        try {
+          await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => { window.postMessage({ source: "clipgringa-ext", type: "package?" }, window.location.origin); } });
+          asked += 1;
+        } catch (_e) { /* aba protegida */ }
+      }
+      sendResponse({ ok: true, asked });
+    });
+    return true;
+  }
   if (message && message.type === "clipgringa-open-flow") {
     // Abre o Flow sozinho (sem depender de pop-up do site) se ainda não houver uma aba dele.
     chrome.tabs.query({ url: ["https://labs.google/fx/*/tools/flow*", "https://labs.google/fx/*/tools/flow", "https://flow.google.com/*"] }, (tabs) => {

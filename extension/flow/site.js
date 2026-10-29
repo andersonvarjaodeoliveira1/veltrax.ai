@@ -1,13 +1,16 @@
 /* ClipGringa · Flow — ponte com o site do ClipGringa: responde se a conta do Flow está conectada. */
 (function () {
   "use strict";
-  if (window.__clipgringaBridge) return;
-  window.__clipgringaBridge = true;
+  // Se esta aba ainda tem a ponte de uma versão anterior (extensão atualizada sem recarregar a página), ela é desligada e esta assume.
+  try { if (typeof window.__clipgringaBridgeOff === "function") window.__clipgringaBridgeOff(); } catch (_e) { /* ponte antiga já morta */ }
+  const offs = [];
+  const on = (fn) => { window.addEventListener("message", fn); offs.push(() => window.removeEventListener("message", fn)); };
+  window.__clipgringaBridgeOff = () => offs.forEach((off) => off());
   const KEY = "clipgringa-flow-account-v1";
 
   const PENDING = "clipgringa-flow-pending-v1";
   // Recebe o pacote do site e guarda para a aba do Flow começar sozinha.
-  window.addEventListener("message", async (event) => {
+  on(async (event) => {
     if (event.source !== window || !event.data || event.data.source !== "clipgringa-page" || event.data.type !== "flow-package") return;
     let ok = false;
     try {
@@ -28,7 +31,7 @@
   });
 
   // O site pede para ler um anúncio da Shopee no navegador da pessoa (a Shopee bloqueia o servidor, não o navegador).
-  window.addEventListener("message", (event) => {
+  on((event) => {
     if (event.source !== window || !event.data || event.data.source !== "clipgringa-page" || event.data.type !== "shopee-read") return;
     const id = String(event.data.id || "");
     const url = String(event.data.url || "");
@@ -44,7 +47,7 @@
   });
 
   // O usuário abriu o chat de mudanças: avisa a aba do Flow para parar na etapa atual.
-  window.addEventListener("message", async (event) => {
+  on(async (event) => {
     if (event.source !== window || !event.data || event.data.source !== "clipgringa-page" || event.data.type !== "flow-stop") return;
     try { await chrome.storage.local.set({ "clipgringa-flow-stop-v1": { at: Date.now() } }); } catch (_e) { /* extensão recarregada */ }
   });
@@ -56,7 +59,7 @@
       if (changes[PROGRESS] && changes[PROGRESS].newValue) window.postMessage({ source: "clipgringa-flow", type: "progress", data: changes[PROGRESS].newValue }, window.location.origin);
     });
   } catch (_e) { /* extensão recarregada */ }
-  window.addEventListener("message", async (event) => {
+  on(async (event) => {
     if (event.source !== window || !event.data || event.data.source !== "clipgringa-page" || event.data.type !== "progress?") return;
     try { const d = (await chrome.storage.local.get(PROGRESS))[PROGRESS]; if (d) window.postMessage({ source: "clipgringa-flow", type: "progress", data: d }, window.location.origin); } catch (_e) { /* ignore */ }
   });
@@ -67,12 +70,12 @@
       if (changes[IMAGES] && changes[IMAGES].newValue) window.postMessage({ source: "clipgringa-flow", type: "images", data: changes[IMAGES].newValue }, window.location.origin);
     });
   } catch (_e) { /* extensão recarregada */ }
-  window.addEventListener("message", async (event) => {
+  on(async (event) => {
     if (event.source !== window || !event.data || event.data.source !== "clipgringa-page" || event.data.type !== "images?") return;
     try { const d = (await chrome.storage.local.get(IMAGES))[IMAGES]; if (d) window.postMessage({ source: "clipgringa-flow", type: "images", data: d }, window.location.origin); } catch (_e) { /* ignore */ }
   });
 
-  window.addEventListener("message", async (event) => {
+  on(async (event) => {
     if (event.source !== window || !event.data || event.data.source !== "clipgringa-page" || event.data.type !== "flow-status?") return;
     let data = {};
     let tabs = null;
