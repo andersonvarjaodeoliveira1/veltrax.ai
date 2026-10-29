@@ -1427,7 +1427,7 @@ export function CloneWizard() {
       if (policyBlocked) return;
       markSent();
       void copy("flow-send", flowPackage());
-      void pushPackage(flowPackage()).then((ok) => { if (!ok) { setError("A extensão não confirmou o recebimento do pacote. Aperte Ctrl+F5 nesta página (e confira se a extensão está ligada e na versão 1.16.1) e clique em Enviar para o Flow de novo."); window.open(FLOW_HOME_URL, "_blank", "noopener"); } });
+      void pushPackage(flowPackage()).then((ok) => { if (!ok) { setError("A extensão não confirmou o recebimento do pacote. Aperte Ctrl+F5 nesta página (e confira se a extensão está ligada e na versão 1.17.0) e clique em Enviar para o Flow de novo."); window.open(FLOW_HOME_URL, "_blank", "noopener"); } });
     };
     const assembling_ = Object.values(built).some((b) => b.state === "running");
     return (
@@ -1648,7 +1648,7 @@ export function CloneWizard() {
 
         {ready && (redirectIn !== null || redirectBlocked) && (
           <section role="status" className="space-y-2 rounded-[18px] border border-[#7B3FE4]/60 bg-[#7B3FE4]/15 p-4" data-testid="flow-redirect">
-            <p className="text-sm font-semibold">{redirectBlocked ? "A extensão não respondeu. Recarregue esta página (F5) e confira se a extensão 1.16.1 está ligada; ou abra o Flow pelo botão abaixo." : `Abrindo o Flow e enviando tudo em ${redirectIn}s…`}</p>
+            <p className="text-sm font-semibold">{redirectBlocked ? "A extensão não respondeu. Recarregue esta página (F5) e confira se a extensão 1.17.0 está ligada; ou abra o Flow pelo botão abaixo." : `Abrindo o Flow e enviando tudo em ${redirectIn}s…`}</p>
             <div className="h-1.5 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A98BFF] transition-all duration-1000" style={{ width: `${redirectBlocked ? 100 : ((1 - (redirectIn ?? 1)) / 1) * 100}%` }} /></div>
             <p className="text-xs text-muted-foreground">Tudo pronto. A extensão recebe o pacote, abre um projeto novo e gera as imagens e os vídeos sozinha. Você não precisa copiar nem colar nada.</p>
             <div className="flex gap-2">

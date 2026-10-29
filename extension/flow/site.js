@@ -52,6 +52,30 @@
     try { await chrome.storage.local.set({ "clipgringa-flow-stop-v1": { at: Date.now() } }); } catch (_e) { /* extensão recarregada */ }
   });
 
+  // Projeto que ficou pela metade: a página pergunta; "continuar" reabre o Flow e retoma, "novo projeto" esquece o antigo.
+  on(async (event) => {
+    if (event.source !== window || !event.data || event.data.source !== "clipgringa-page") return;
+    const kind = event.data.type;
+    if (kind !== "flow-resume" && kind !== "flow-discard") return;
+    let ok = false;
+    try {
+      if (kind === "flow-resume") {
+        const saved = (await chrome.storage.local.get("clipgringa-flow-state-v1"))["clipgringa-flow-state-v1"];
+        const left = saved && Array.isArray(saved.jobs) ? saved.jobs.filter((j) => !(saved.done || {})[j.key]).length : 0;
+        if (left) {
+          await chrome.storage.local.set({ "clipgringa-flow-resume-v1": { at: Date.now() } });
+          try { chrome.runtime.sendMessage({ type: "clipgringa-open-flow" }, () => void chrome.runtime.lastError); } catch (_e) { /* ignore */ }
+          ok = true;
+        }
+      } else {
+        await chrome.storage.local.set({ "clipgringa-flow-discard-v1": { at: Date.now() } });
+        await chrome.storage.local.remove(["clipgringa-flow-state-v1", "clipgringa-flow-progress-v1", "clipgringa-flow-images-v1", "clipgringa-flow-last-v1", "clipgringa-flow-pending-v1", "clipgringa-flow-resume-v1"]);
+        ok = true;
+      }
+    } catch (_e) { /* extensão recarregada */ }
+    window.postMessage({ source: "clipgringa-flow", type: kind === "flow-resume" ? "resume-ack" : "discard-ack", ok }, window.location.origin);
+  });
+
   // Andamento da geração no Flow, repassado para a página do ClipGringa.
   const PROGRESS = "clipgringa-flow-progress-v1";
   try {

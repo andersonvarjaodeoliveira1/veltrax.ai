@@ -12,6 +12,7 @@ import { TestBanner } from "@/components/app/test-banner";
 import { AccountAiRelay } from "@/components/app/account-ai-relay";
 import { ExtensionUpdateNotice } from "@/components/app/extension-update-notice";
 import { AccountAiSetup } from "@/components/app/account-ai-setup";
+import { FlowResumePrompt } from "@/components/app/flow-resume-prompt";
 import { SecurityWatch } from "@/components/app/security-watch";
 import { signOut, useSession } from "@/lib/auth-client";
 import { useBillingSummary } from "@/hooks/use-billing-summary";
@@ -203,6 +204,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {user ? <AccountAiRelay /> : null}
         {user ? <ExtensionUpdateNotice /> : null}
         {user ? <AccountAiSetup enabled={!admin} /> : null}
+        {user ? <FlowResumePrompt enabled={!admin} /> : null}
         {children}
         {user ? <div aria-hidden className="h-24 shrink-0" /> : null}
       </div>

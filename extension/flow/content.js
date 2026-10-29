@@ -1115,6 +1115,33 @@
     });
   } catch (_e) { /* ignore */ }
 
+  // A pessoa abriu o ClipGringa e quis continuar o projeto que ficou pela metade: retoma de onde parou (as cenas prontas ficam).
+  const RESUME_KEY = "clipgringa-flow-resume-v1";
+  const DISCARD_KEY = "clipgringa-flow-discard-v1";
+  async function takeResume() {
+    try {
+      const got = (await chrome.storage.local.get(RESUME_KEY))[RESUME_KEY];
+      if (!got || Date.now() - got.at > 60000) return;
+      await chrome.storage.local.remove(RESUME_KEY);
+      if (running || !state.jobs.length || !state.jobs.some((j) => !state.done[j.key])) return;
+      stopFlag = false; autoRun = true;
+      setNow("Continuando o projeto de onde parou…");
+      window.setTimeout(() => { if (!running) start(); }, 2500);
+    } catch (_e) { /* extensão recarregada */ }
+  }
+  try { chrome.storage.onChanged.addListener((changes) => { if (changes[RESUME_KEY] && changes[RESUME_KEY].newValue) takeResume(); }); } catch (_e) { /* ignore */ }
+  // A pessoa preferiu um projeto novo: para e esquece o antigo.
+  try {
+    chrome.storage.onChanged.addListener(async (changes) => {
+      const got = changes[DISCARD_KEY];
+      if (!got || !got.newValue || Date.now() - got.newValue.at > 15000) return;
+      stopFlag = true; autoRun = false;
+      state = { jobs: [], done: {}, errors: {}, cloud: {} };
+      el("pkg").value = ""; setError(""); setNow("Pronto para começar."); render();
+      try { await storage.set(null); await chrome.storage.local.remove([PROGRESS_KEY, IMAGES_KEY]); } catch (_e) { /* ignora */ }
+    });
+  } catch (_e) { /* ignore */ }
+
   window.__clipgringaDebug = { el, start, getState: () => state };
 
   storage.get().then((saved) => {
@@ -1128,5 +1155,5 @@
       render();
       if (autoRun && left) window.setTimeout(() => { if (!running) start(); }, 2500);
     }
-  }).then(takePending).then(updateGuide);
+  }).then(takePending).then(takeResume).then(updateGuide);
 })();
