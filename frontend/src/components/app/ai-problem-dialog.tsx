@@ -4,12 +4,20 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { aiBillingUrl, type AiProblem } from "@/lib/ai-errors";
+import { accountReasonText, ACCOUNT_SITE_NAME, aiBillingUrl, type AiProblem } from "@/lib/ai-errors";
 import { ADMIN_WHATSAPP_URL } from "@/lib/token-balance";
 
 const NAMES: Record<string, string> = { openai: "OpenAI (ChatGPT)", anthropic: "Anthropic (Claude)", gemini: "Google (Gemini)" };
 
 function copy(problem: AiProblem) {
+  if (problem.kind === "account") {
+    const name = ACCOUNT_SITE_NAME[problem.provider] ?? "da IA";
+    return {
+      title: `Não consegui gerar pela sua conta do ${name}`,
+      text: accountReasonText(problem.provider, problem.reason ?? "failed"),
+      steps: [`Confira se você está logado no ${name} neste Chrome.`, "Deixe o ClipGringa aberto e a extensão ligada enquanto gera.", "Se o problema continuar, conecte uma chave de API em Minhas APIs ou chame o administrador."],
+    };
+  }
   const who = NAMES[problem.provider] ?? "da IA";
   if (problem.kind === "no_credits") return {
     title: `Sua conta ${NAMES[problem.provider] ? `da ${who}` : "da IA"} está sem créditos`,
@@ -29,7 +37,7 @@ function copy(problem: AiProblem) {
   return {
     title: "Seus tokens acabaram",
     text: "Os tokens da sua conta chegaram a zero, por isso a IA não pôde responder.",
-    steps: ["Conecte a sua própria chave em Minhas APIs e use sem gastar tokens.", "Ou fale com o administrador para liberar mais tokens."],
+    steps: ["Gere pela sua conta do Gemini, ChatGPT ou Claude: conecte pela extensão em Minhas APIs.", "Ou conecte a sua própria chave de API e use sem gastar tokens.", "Ou fale com o administrador para liberar mais tokens."],
   };
 }
 

@@ -110,6 +110,9 @@ async def load_user_keys(db: AsyncSession, user_id: str) -> dict[str, str]:
     except Exception:
         logger.exception("não foi possível carregar as integrações do usuário")
     _current_keys.set(keys)
+    from .usage import set_usage_user
+
+    set_usage_user(user_id)  # a conta de IA ligada pela extensão é buscada por este usuário
     # Chaves da casa (dos administradores): reserva automática quando as demais falham ou a cota acaba.
     house: dict[str, str] = {}
     try:
@@ -137,8 +140,11 @@ def current_keys() -> dict[str, str]:
     return _current_keys.get()
 
 
-def user_models() -> list[Any]:
-    """Modelos de texto usando as chaves do próprio usuário (têm prioridade sobre as do servidor)."""
+def user_models(include_account: bool = True) -> list[Any]:
+    """Modelos de texto do próprio usuário: primeiro as chaves de API dele, depois a conta de IA ligada pela extensão.
+
+    Os dois têm prioridade sobre os do servidor. `include_account=False` para pedidos com imagem (a conta só recebe texto).
+    """
     keys = current_keys()
     out: list[Any] = []
     gem = keys.get("gemini") or keys.get("flow")
@@ -155,6 +161,13 @@ def user_models() -> list[Any]:
         from pydantic_ai.models.openai import OpenAIChatModel
         from pydantic_ai.providers.openai import OpenAIProvider
         out.append(OpenAIChatModel("gpt-5-mini", provider=OpenAIProvider(api_key=keys["openai"])))
+    if include_account:
+        from .ai_relay import account_model
+        from .usage import _usage_user
+
+        account = account_model(_usage_user.get())
+        if account is not None:
+            out.append(account)
     return out
 
 

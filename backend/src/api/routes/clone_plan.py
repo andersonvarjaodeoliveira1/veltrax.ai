@@ -299,7 +299,9 @@ from ...ai_errors import ai_fail as _ai_fail, is_key_error as _is_key_error, is_
 def _blame(own_error: Exception | None, last_error: Exception | None) -> Exception | None:
     """Se a chave própria da pessoa foi recusada ou está sem créditos, é esse o motivo que ela precisa ver
     (e não o limite de uma reserva que só entrou depois)."""
-    if own_error is not None and (_is_no_credit_error(own_error) or _is_key_error(own_error)):
+    from ...ai_relay import RelayError
+
+    if own_error is not None and (_is_no_credit_error(own_error) or _is_key_error(own_error) or isinstance(own_error, RelayError)):
         return own_error
     return last_error
 
@@ -355,6 +357,9 @@ async def _run(system: str, output_type: type[BaseModel], prompt: str, model: An
             from ...usage import record_usage
 
             await record_usage(output_type.__name__, candidate, result.usage(), candidate in own)
+            from ...ai_relay import path_of_model, set_ai_path
+
+            set_ai_path(path_of_model(candidate) if candidate in own else "plan")
             return result.output
         except asyncio.TimeoutError:
             raise HTTPException(status_code=504, detail="AI took too long. Try again.")
@@ -1193,7 +1198,7 @@ async def _run_parts(system: str, output_type: type[BaseModel], parts: list[Any]
     own: list[Any] = []
     if model is None:
         from ...integrations import user_models
-        own = user_models()
+        own = user_models(include_account=False)
         from ...usage import server_blocked
 
         if server_blocked() and not own:
@@ -1212,6 +1217,9 @@ async def _run_parts(system: str, output_type: type[BaseModel], parts: list[Any]
             from ...usage import record_usage
 
             await record_usage(output_type.__name__, candidate, result.usage(), candidate in own)
+            from ...ai_relay import path_of_model, set_ai_path
+
+            set_ai_path(path_of_model(candidate) if candidate in own else "plan")
             return result.output
         except asyncio.TimeoutError:
             raise HTTPException(status_code=504, detail="AI took too long. Try again.")

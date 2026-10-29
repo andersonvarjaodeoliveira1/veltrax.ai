@@ -9,6 +9,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { TestBanner } from "@/components/app/test-banner";
+import { AccountAiRelay } from "@/components/app/account-ai-relay";
+import { AccountAiSetup } from "@/components/app/account-ai-setup";
 import { SecurityWatch } from "@/components/app/security-watch";
 import { signOut, useSession } from "@/lib/auth-client";
 import { useBillingSummary } from "@/hooks/use-billing-summary";
@@ -197,6 +199,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {user ? <TestBanner enabled={!admin} /> : null}
         {user ? <SecurityWatch enabled={!admin} /> : null}
         {user ? <AiProblemDialog /> : null}
+        {user ? <AccountAiRelay /> : null}
+        {user ? <AccountAiSetup enabled={!admin} /> : null}
         {children}
         {user ? <div aria-hidden className="h-24 shrink-0" /> : null}
       </div>

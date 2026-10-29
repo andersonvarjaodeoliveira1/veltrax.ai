@@ -10,6 +10,7 @@ export const DEFAULT_FORWARDED_HEADERS = [
   "etag",
   "last-modified",
   "x-trace-id",
+  "x-ai-path",
 ] as const;
 
 export function getBackendApiBaseUrl() {

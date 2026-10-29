@@ -40,6 +40,10 @@ def brief(exc: Exception, limit: int = 180) -> str:
 
 def ai_fail(exc: Exception | None, fallback: str) -> HTTPException:
     """Diz de quem é a falha: sem créditos na chave, chave recusada, limite de uso da API ou erro genérico."""
+    from .ai_relay import RelayError
+
+    if isinstance(exc, RelayError):
+        return HTTPException(status_code=502, detail=f"AI_ACCOUNT:{exc.site}:{exc.code}")
     if exc is not None and is_no_credit_error(exc):
         return HTTPException(status_code=502, detail=f"AI_NO_CREDITS:{provider_of(exc)}")
     if exc is not None and is_key_error(exc):

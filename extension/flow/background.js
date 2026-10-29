@@ -1,5 +1,5 @@
 // Renomeia o próximo download do Flow para o nome que o ClipGringa espera (Video01_Cena01.mp4).
-importScripts("shopee.js");
+importScripts("shopee.js", "ai-bg.js");
 let pending = null;
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {

@@ -102,4 +102,34 @@
       window.location.origin
     );
   });
+  // Gerar texto pela conta de IA da pessoa (Gemini, ChatGPT, Claude): a página pede, a extensão escreve no site e devolve a resposta.
+  on((event) => {
+    if (event.source !== window || !event.data || event.data.source !== "clipgringa-page") return;
+    const d = event.data;
+    if (d.type === "ai-hello?") {
+      window.postMessage({ source: "clipgringa-flow", type: "ai-hello", version: chrome.runtime.getManifest().version, ai: true }, window.location.origin);
+      return;
+    }
+    if (d.type === "ai-ask") {
+      const id = String(d.id || "");
+      const reply = (data) => window.postMessage({ source: "clipgringa-flow", type: "ai-answer", id, data }, window.location.origin);
+      try {
+        chrome.runtime.sendMessage({ type: "clipgringa-ai-ask", site: String(d.site || ""), prompt: String(d.prompt || "").slice(0, 60000), timeoutMs: Number(d.timeoutMs) || 100000 }, (resp) => {
+          void chrome.runtime.lastError;
+          reply(resp || { ok: false, error: "nopage" });
+        });
+      } catch (_e) { reply({ ok: false, error: "nopage" }); }
+      return;
+    }
+    if (d.type === "ai-probe") {
+      const id = String(d.id || "");
+      const reply = (data) => window.postMessage({ source: "clipgringa-flow", type: "ai-probe-result", id, data }, window.location.origin);
+      try {
+        chrome.runtime.sendMessage({ type: "clipgringa-ai-probe-site", site: String(d.site || ""), open: !!d.open }, (resp) => {
+          void chrome.runtime.lastError;
+          reply(resp || { ok: false, state: "nopage" });
+        });
+      } catch (_e) { reply({ ok: false, state: "nopage" }); }
+    }
+  });
 })();

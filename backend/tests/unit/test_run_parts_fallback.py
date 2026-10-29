@@ -24,7 +24,7 @@ def test_run_parts_uses_next_model_when_quota_is_exhausted(monkeypatch):
 
     monkeypatch.setattr(clone_plan, "_build_model", build)
     monkeypatch.setattr(clone_plan, "_fallback_models", fallbacks)
-    monkeypatch.setattr("src.integrations.user_models", lambda: [])
+    monkeypatch.setattr("src.integrations.user_models", lambda **_k: [])
     monkeypatch.setattr("src.usage.server_blocked", lambda: False)
 
     async def no_usage(*a, **k):

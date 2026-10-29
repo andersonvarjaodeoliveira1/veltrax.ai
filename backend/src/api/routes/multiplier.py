@@ -1104,6 +1104,31 @@ async def _generate_copy(product: str, tone: str, model: Any = None) -> dict[str
     return {"hooks": hooks, "bodies": bodies, "ctas": ctas}
 
 
+async def _with_own_ai(db: AsyncSession, user_id: str, run: Any) -> Any:
+    """Gera com a API da própria pessoa ou com a conta de IA ligada pela extensão; sem nenhuma das duas (ou se falharem), usa a IA do servidor."""
+    from ...ai_relay import path_of_model, set_ai_path
+    from ...integrations import load_user_keys, user_models
+
+    await load_user_keys(db, user_id)
+    last: HTTPException | None = None
+    for model in user_models():
+        try:
+            out = await run(model)
+            set_ai_path(path_of_model(model))
+            return out
+        except HTTPException as exc:
+            last = exc
+            logger.warning("multiplier: IA própria falhou (%s), tentando a próxima", exc.detail)
+    try:
+        out = await run(None)
+    except HTTPException:
+        if last is not None:
+            raise last
+        raise
+    set_ai_path("plan")
+    return out
+
+
 @router.post("/script")
 async def generate_script(request: Request, db: AsyncSession = Depends(get_db)):
     user_id = await _user_id(request, db)
@@ -1118,7 +1143,7 @@ async def generate_script(request: Request, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Describe the product in at least a sentence")
     tone = " ".join(str(data.get("tone") or "").split())[:60]
     _check_script_rate(user_id)
-    return await _generate_copy(product, tone)
+    return await _with_own_ai(db, user_id, lambda model: _generate_copy(product, tone, model))
 
 
 # ---- Video prompts for Flow / Veo, one per approved creative (BETA) ---------------
@@ -1200,4 +1225,4 @@ async def video_prompts(request: Request, db: AsyncSession = Depends(get_db)):
     if not items:
         raise HTTPException(status_code=400, detail="Describe the product in at least a sentence")
     _check_script_rate(user_id)
-    return {"prompts": await _generate_video_prompts(items)}
+    return {"prompts": await _with_own_ai(db, user_id, lambda model: _generate_video_prompts(items, model))}

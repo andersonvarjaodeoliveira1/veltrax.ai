@@ -7,8 +7,61 @@ import { Check, KeyRound, Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/app/page-header";
 import { useFlowConnection } from "@/hooks/use-flow-connection";
+import { ACCOUNT_AI_EVENT, ACCOUNT_SITES, OPEN_ACCOUNT_AI_EVENT, isAccountSite, readChoice, writeChoice, type AccountChoice } from "@/lib/account-ai";
 
 type Integration = { provider: string; label: string; help: string; connected: boolean; hint: string; updated_at: string | null };
+
+const AI_API_PROVIDERS = ["gemini", "openai", "anthropic"];
+const API_NAME: Record<string, string> = { gemini: "Gemini", openai: "ChatGPT (OpenAI)", anthropic: "Claude" };
+
+/** Diz, sempre, por onde os textos de IA estão saindo: API da pessoa, conta dela (extensão) ou créditos do plano. */
+function AiSourceCard({ items }: { items: Integration[] | null }) {
+  const [choice, setChoice] = useState<AccountChoice | null>(null);
+  const [ready, setReady] = useState<boolean | null>(null);
+  useEffect(() => {
+    const sync = () => setChoice(readChoice());
+    sync();
+    window.addEventListener(ACCOUNT_AI_EVENT, sync);
+    return () => window.removeEventListener(ACCOUNT_AI_EVENT, sync);
+  }, []);
+  useEffect(() => {
+    if (!choice || !isAccountSite(choice.site)) { setReady(null); return; }
+    let cancelled = false;
+    const check = () => fetch("/api/multiplier/ai-relay/status", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (!cancelled) setReady(d ? Boolean(d.ready) : null); })
+      .catch(() => undefined);
+    void check();
+    const timer = window.setInterval(check, 15000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [choice]);
+
+  const apis = (items ?? []).filter((item) => item.connected && AI_API_PROVIDERS.includes(item.provider)).map((item) => API_NAME[item.provider] ?? item.label);
+  const account = choice && isAccountSite(choice.site) ? ACCOUNT_SITES[choice.site].label : "";
+  let headline: string;
+  let detail: string;
+  if (apis.length) {
+    headline = `Pela sua chave de API (${apis.join(", ")})`;
+    detail = account ? `A sua conta do ${account} fica de reserva: só entra se não houver chave funcionando.` : "Os textos saem pela sua chave, sem gastar tokens do ClipGringa.";
+  } else if (account) {
+    headline = `Pela sua conta do ${account} (extensão)`;
+    detail = ready === false ? "Aguardando: deixe o ClipGringa aberto no Chrome, com a extensão 1.16.0 ligada e logado no " + account + ". Enquanto isso uso os créditos do plano." : ready ? "Ligada agora." : "Verificando…";
+  } else {
+    headline = "Pelos créditos (tokens) do plano ClipGringa";
+    detail = "Conecte a sua conta do Gemini, do ChatGPT ou do Claude (pela extensão) ou uma chave de API para não gastar tokens.";
+  }
+  return (
+    <section data-testid="ai-source-card" className="flex flex-wrap items-center gap-3 rounded-[18px] border border-border bg-card p-4 text-sm">
+      <span className={`size-2.5 rounded-full ${apis.length || ready ? "bg-[#5BD69A]" : "bg-muted-foreground"}`} />
+      <span className="min-w-0 flex-1">
+        <b>Como a IA gera os seus textos agora:</b> {headline}
+        <span className="block text-xs text-muted-foreground">{detail} A ordem é: sua chave de API, depois a sua conta, depois os créditos do plano. A cada geração eu aviso por onde saiu.</span>
+      </span>
+      <button type="button" onClick={() => window.dispatchEvent(new Event(OPEN_ACCOUNT_AI_EVENT))} className="rounded-full border border-[#7B3FE4]/60 px-4 py-2 text-xs font-medium text-[#A98BFF]">{account ? "Trocar a conta" : "Conectar minha conta de IA"}</button>
+      {account && <button type="button" onClick={() => { writeChoice(null); void fetch("/api/multiplier/ai-relay/off", { method: "POST" }).catch(() => undefined); }} className="rounded-full border border-border px-4 py-2 text-xs font-medium">Desconectar</button>}
+    </section>
+  );
+}
 
 export default function MyApisPage() {
   const { state: flowState, account: flowAccount } = useFlowConnection(true, false);
@@ -75,6 +128,8 @@ export default function MyApisPage() {
           <Link href="/" className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-4 py-2 text-xs font-medium text-white">Começar a criar</Link>
         </div>
       )}
+
+      <AiSourceCard items={items} />
 
       <section data-testid="flow-account-card" className="flex flex-wrap items-center gap-3 rounded-[18px] border border-border bg-card p-4 text-sm">
         <span className={`size-2.5 rounded-full ${flowState === "connected" ? "bg-[#5BD69A]" : "bg-muted-foreground"}`} />

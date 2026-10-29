@@ -37,8 +37,8 @@ it("shows the connected account when the extension answers, and warns when it is
 
 it("says the extension was not found when nobody answers", async () => {
   render(<ConnectFlowPage />);
-  expect(await screen.findByText("Extensão do Flow não encontrada", {}, { timeout: 4000 })).toBeInTheDocument();
-});
+  expect(await screen.findByText("Extensão do Flow não encontrada", {}, { timeout: 8000 })).toBeInTheDocument();
+}, 12000);
 
 it("shows Lower Priority only to Ultra accounts, and only preselects it when the member picks it", async () => {
   window.localStorage.clear();

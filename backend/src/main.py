@@ -126,6 +126,9 @@ def create_app(
 
         logger.info("Incoming request %s %s", request.method, request.url.path)
 
+        from .ai_relay import start_path_tracking
+
+        ai_path = start_path_tracking()
         try:
             response = await call_next(request)
         except Exception:
@@ -135,6 +138,8 @@ def create_app(
 
         elapsed_ms = round((time.perf_counter() - started_at) * 1000, 2)
         response.headers[TRACE_HEADER] = trace_id
+        if ai_path.get("path"):
+            response.headers["x-ai-path"] = ai_path["path"]
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "no-referrer"
@@ -219,6 +224,12 @@ def create_app(
         app.include_router(multiplier_router)
     except Exception:  # pragma: no cover
         logging.getLogger(__name__).exception("Multiplier (beta) disabled")
+    try:  # BETA, isolated: gerar os textos pela conta de IA da pessoa (extensão)
+        from .api.routes.ai_relay import router as ai_relay_router
+
+        app.include_router(ai_relay_router)
+    except Exception:  # pragma: no cover
+        logging.getLogger(__name__).exception("AI relay (beta) disabled")
     try:  # BETA, isolated: vídeos gerados no Flow pela extensão
         from .api.routes.flow_videos import router as flow_videos_router
 
