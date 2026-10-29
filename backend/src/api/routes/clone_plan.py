@@ -53,6 +53,7 @@ STAGES = ("scenes", "mix", "variations", "images", "videos")
 
 SAFETY = """Safety rules for everything you write:
 - No celebrities or real people, no children, no violence, no logos or on-screen brand names.
+- Never write a person's name in an image or video prompt: say "the man", "the woman" or "the presenter" (keep the look the same). A name next to a face can make Google Flow refuse the scene as a "prominent person".
 - No medical or before/after claims, and do not invent product facts that were not given."""
 
 PRODUCT_SCENE = """

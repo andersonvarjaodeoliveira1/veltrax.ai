@@ -296,6 +296,17 @@
     return out;
   }
 
+  /** Diz por que o Flow marcou a geração como falha, lendo o texto do próprio cartão (política de pessoas conhecidas, conteúdo, créditos). */
+  function failReason(info) {
+    const t = String(info || "").replace(/arrow_forward|refresh|undo|delete|warning|error_outline/gi, " ").replace(/\s+/g, " ").trim();
+    if (/proeminente|prominent|pessoas? (famos|conhecid|p[úu]blic)|public figure|celebrit/i.test(t)) {
+      return "O Flow recusou esta cena pela política contra gerar pessoas conhecidas: o rosto da foto, o nome ou o texto lembrou alguém famoso. Gere de novo essa cena (ou troque a foto do avatar); os créditos voltam.";
+    }
+    if (/cr[ée]ditos|credits|cota|quota|limite|limit/i.test(t) && !/violar/i.test(t)) return "O Flow recusou por falta de créditos ou limite de uso: " + t.slice(0, 140);
+    if (/violar|viola|policy|pol[ií]tica|safety|seguran[çc]a|sens[ií]vel/i.test(t)) return "O Flow recusou esta cena por uma política de conteúdo: " + t.slice(0, 160);
+    return "O Flow marcou esta geração como falha." + (t ? " (" + t.slice(0, 140) + ")" : "");
+  }
+
   const tileKeys = () => new Set(firstTiles(12).map((t) => t.src));
 
   function pageError() {
@@ -312,7 +323,7 @@
       if (fresh) {
         const generating = /\d+\s*%/.test(fresh.info) || /gerando|generating/i.test(fresh.info);
         const failed = /falha|failed|erro|error/i.test(fresh.info.replace(/arrow_forward/g, ""));
-        if (failed) throw new Error("O Flow marcou esta geração como falha.");
+        if (failed) throw new Error(failReason(fresh.info));
         if (!generating && (kind === "image" || /play_circle|videocam|movie/.test(fresh.info) || fresh.tile.querySelector("video"))) {
           if (onTick) onTick(100);
           return fresh;
@@ -868,7 +879,7 @@
         const t = locateTile(b.rec);
         if (!t) { if (Date.now() - b.since > 90000) { failJob(b.job, "não achei esta cena na grade do Flow"); waiting.delete(key); } continue; }
         b.since = Date.now();
-        if (/falha|failed|erro|error/i.test(t.info.replace(/arrow_forward/g, ""))) { failJob(b.job, "O Flow marcou esta geração como falha."); waiting.delete(key); continue; }
+        if (/falha|failed|erro|error/i.test(t.info.replace(/arrow_forward/g, ""))) { failJob(b.job, failReason(t.info)); waiting.delete(key); continue; }
         const done = !generatingNow(t.info) && (/play_circle|videocam|movie/.test(t.info) || t.tile.querySelector("video"));
         if (done) {
           waiting.delete(key);
