@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Check, ExternalLink, Loader2, Sparkles } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { accountReasonText } from "@/lib/ai-errors";
+import { tutorialDone } from "@/components/app/setup-tutorial";
 import {
   ACCOUNT_SITES, OPEN_ACCOUNT_AI_EVENT, askAccount, dismissSetup, dismissedRecently, extensionHasAi, probeSite, readChoice, writeChoice,
   type AccountSite, type SiteState,
@@ -17,7 +18,7 @@ const OPTIONS: { id: Pick; title: string; sub: string }[] = [
   { id: "gemini", title: "Gemini", sub: "Conta do Google" },
   { id: "chatgpt", title: "ChatGPT", sub: "Conta da OpenAI" },
   { id: "claude", title: "Claude", sub: "Conta da Anthropic" },
-  { id: "api", title: "Tenho chave de API", sub: "OpenAI, Claude, Gemini, OpenRouter ou Ollama" },
+  { id: "api", title: "Tenho chave de API", sub: "OpenAI, Claude, Gemini, OpenRouter, Hugging Face ou Ollama" },
   { id: "none", title: "Nenhuma", sub: "Usar os créditos do plano" },
 ];
 
@@ -50,12 +51,12 @@ export function AccountAiSetup({ enabled }: { enabled: boolean }) {
     if (!enabled) return;
     let cancelled = false;
     const timer = window.setTimeout(async () => {
-      if (readChoice() || dismissedRecently()) return;
+      if (readChoice() || dismissedRecently() || !tutorialDone()) return; // o tutorial vem antes
       if (!(await extensionHasAi()) || cancelled) return;
       try {
         const response = await fetch("/api/integrations", { cache: "no-store" });
         const data = response.ok ? await response.json() : { integrations: [] };
-        if ((data.integrations ?? []).some((item: { provider: string; connected: boolean }) => item.connected && ["gemini", "openai", "anthropic", "openrouter", "ollama"].includes(item.provider))) return;
+        if ((data.integrations ?? []).some((item: { provider: string; connected: boolean }) => item.connected && ["gemini", "openai", "anthropic", "openrouter", "huggingface", "ollama"].includes(item.provider))) return;
       } catch { /* segue: pergunta mesmo assim */ }
       if (!cancelled && !readChoice()) { setStep("quiz"); setSite(null); setOpen(true); }
     }, 4000);

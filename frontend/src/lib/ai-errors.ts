@@ -17,6 +17,7 @@ const BILLING: Record<string, string> = {
   anthropic: "https://console.anthropic.com/settings/billing",
   gemini: "https://aistudio.google.com/apikey",
   openrouter: "https://openrouter.ai/credits",
+  huggingface: "https://huggingface.co/settings/billing",
 };
 export const aiBillingUrl = (provider: string) => BILLING[provider] ?? "";
 
@@ -25,7 +26,7 @@ export function aiProblemOf(detail: unknown): AiProblem | null {
   if (typeof detail !== "string") return null;
   const account = /AI_ACCOUNT:(gemini|chatgpt|claude):(\w+)/.exec(detail);
   if (account) return { kind: "account", provider: account[1], reason: account[2] };
-  const provider = /:(openai|anthropic|gemini|openrouter|ollama)/.exec(detail)?.[1] ?? "";
+  const provider = /:(openai|anthropic|gemini|openrouter|huggingface|ollama)/.exec(detail)?.[1] ?? "";
   if (/AI_NO_CREDITS/.test(detail)) return { kind: "no_credits", provider };
   if (/AI_KEY_INVALID/.test(detail)) return { kind: "key_invalid", provider };
   if (/AI_QUOTA/.test(detail)) return { kind: "quota", provider };
@@ -48,8 +49,8 @@ export function aiErrorText(detail: unknown): string | null {
   if (problem) announceAiProblem(problem);
   const account = /AI_ACCOUNT:(gemini|chatgpt|claude):(\w+)/.exec(detail);
   if (account) return accountReasonText(account[1], account[2]);
-  const provider = /:(openai|anthropic|gemini|openrouter|ollama)/.exec(detail)?.[1];
-  const name = provider === "openai" ? "da OpenAI (ChatGPT)" : provider === "anthropic" ? "da Anthropic (Claude)" : provider === "gemini" ? "do Google (Gemini)" : provider === "openrouter" ? "do OpenRouter" : provider === "ollama" ? "do Ollama" : "da IA";
+  const provider = /:(openai|anthropic|gemini|openrouter|huggingface|ollama)/.exec(detail)?.[1];
+  const name = provider === "openai" ? "da OpenAI (ChatGPT)" : provider === "anthropic" ? "da Anthropic (Claude)" : provider === "gemini" ? "do Google (Gemini)" : provider === "openrouter" ? "do OpenRouter" : provider === "huggingface" ? "do Hugging Face" : provider === "ollama" ? "do Ollama" : "da IA";
   const where = provider === "openai" ? " em platform.openai.com/settings/organization/billing" : provider === "anthropic" ? " em console.anthropic.com" : provider === "gemini" ? " no Google AI Studio" : "";
   if (/AI_NO_CREDITS/.test(detail)) {
     const extra = provider === "openai" ? " Atenção: a assinatura do ChatGPT (Plus/Pro) NÃO inclui créditos da API; a API da OpenAI é cobrada à parte, em platform.openai.com/settings/organization/billing." : "";

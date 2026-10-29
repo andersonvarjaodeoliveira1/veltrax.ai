@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import contextvars
 import logging
+import os
 from typing import Any
 
 import httpx
@@ -23,6 +24,7 @@ PROVIDERS: dict[str, dict[str, str]] = {
     "openai": {"label": "ChatGPT (OpenAI)", "help": "Chave da OpenAI (platform.openai.com/api-keys). Atenção: a assinatura do ChatGPT não inclui créditos de API; a API é cobrada à parte (platform.openai.com/settings/organization/billing)."},
     "anthropic": {"label": "Claude (Anthropic)", "help": "Chave da Anthropic (console.anthropic.com)."},
     "openrouter": {"label": "OpenRouter", "help": "Chave do OpenRouter (openrouter.ai/keys)."},
+    "huggingface": {"label": "Hugging Face", "help": "Token do Hugging Face (huggingface.co/settings/tokens, tipo Fine-grained com “Make calls to Inference Providers”). Atenção: conta grátis não tem créditos de inferência; precisa comprar créditos ou ter o plano PRO (inclui US$ 2 por mês). O uso é cobrado por lá, sem custo extra do ClipGringa."},
     "ollama": {"label": "Ollama (nuvem ou servidor seu)", "help": "Para o Ollama Cloud: crie a chave em ollama.com/settings/keys e deixe o endereço padrão (https://ollama.com). Se você hospeda o seu Ollama, informe o endereço público dele (https); o servidor do ClipGringa não alcança o localhost do seu computador. O modelo é opcional: sem ele, uso o primeiro que o Ollama listar."},
     "apify": {"label": "Apify (busca de fotos no Pinterest)", "help": "Token do Apify (console.apify.com/settings/integrations). Sem ele, a busca usa um banco de fotos grátis."},
     "flow": {"label": "Chave do Google para o Veo (opcional)", "help": "Isto NÃO é a conta do Flow. A conta do Flow conecta pela extensão, na página Conectar ao Flow. Aqui só entra uma chave do Google AI Studio com acesso ao Veo."},
@@ -37,6 +39,8 @@ def _hint(value: str) -> str:
 
 
 DEFAULT_OLLAMA_URL = "https://ollama.com"
+HF_BASE_URL = "https://router.huggingface.co/v1"
+HF_MODEL = os.getenv("HF_MODEL", "openai/gpt-oss-120b")
 
 
 def pack_ollama(key: str, url: str, model: str) -> str:
@@ -142,6 +146,8 @@ async def check_key(provider: str, value: str) -> tuple[bool, str]:
         url, headers = "https://api.anthropic.com/v1/models", {"x-api-key": value, "anthropic-version": "2023-06-01"}
     elif provider == "apify":
         url, headers = "https://api.apify.com/v2/users/me", {"Authorization": f"Bearer {value}"}
+    elif provider == "huggingface":
+        url, headers = "https://huggingface.co/api/whoami-v2", {"Authorization": f"Bearer {value}"}
     elif provider == "openrouter":
         url, headers = "https://openrouter.ai/api/v1/auth/key", {"Authorization": f"Bearer {value}"}
     else:
@@ -232,6 +238,12 @@ def user_models(include_account: bool = True) -> list[Any]:
         from pydantic_ai.models.openrouter import OpenRouterModel
         from pydantic_ai.providers.openrouter import OpenRouterProvider
         out.append(OpenRouterModel("anthropic/claude-sonnet-5.5", provider=OpenRouterProvider(api_key=keys["openrouter"])))
+    if keys.get("huggingface"):
+        from pydantic_ai.models.openai import OpenAIChatModel
+        from pydantic_ai.providers.openai import OpenAIProvider
+        hf = OpenAIChatModel(HF_MODEL, provider=OpenAIProvider(base_url=HF_BASE_URL, api_key=keys["huggingface"]))
+        hf.is_huggingface = True  # type: ignore[attr-defined]
+        out.append(hf)
     if keys.get("ollama"):
         cfg = unpack_ollama(keys["ollama"])
         if cfg["model"]:

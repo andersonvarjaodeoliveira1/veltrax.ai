@@ -71,3 +71,17 @@ async def test_connect_ollama_checks_and_stores_the_chosen_model(monkeypatch):
     with pytest.raises(HTTPException) as caught:
         await route.connect("ollama", NoKey(), None)
     assert "chave" in caught.value.detail
+
+
+def test_huggingface_model_uses_router_and_is_labeled():
+    from src import integrations
+    from src.ai_relay import path_of_model
+
+    token = integrations._current_keys.set({"huggingface": "hf_abcdefghijkl"})
+    try:
+        models = integrations.user_models(include_account=False)
+    finally:
+        integrations._current_keys.reset(token)
+    assert len(models) == 1
+    assert path_of_model(models[0]) == "api:huggingface"
+    assert "router.huggingface.co" in str(models[0]._provider.base_url)

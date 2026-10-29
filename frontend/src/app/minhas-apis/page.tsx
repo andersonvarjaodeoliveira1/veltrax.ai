@@ -11,8 +11,8 @@ import { ACCOUNT_AI_EVENT, ACCOUNT_SITES, OPEN_ACCOUNT_AI_EVENT, isAccountSite, 
 
 type Integration = { provider: string; label: string; help: string; connected: boolean; hint: string; updated_at: string | null };
 
-const AI_API_PROVIDERS = ["gemini", "openai", "anthropic", "openrouter", "ollama"];
-const API_NAME: Record<string, string> = { gemini: "Gemini", openai: "ChatGPT (OpenAI)", anthropic: "Claude", openrouter: "OpenRouter", ollama: "Ollama" };
+const AI_API_PROVIDERS = ["gemini", "openai", "anthropic", "openrouter", "huggingface", "ollama"];
+const API_NAME: Record<string, string> = { gemini: "Gemini", openai: "ChatGPT (OpenAI)", anthropic: "Claude", openrouter: "OpenRouter", huggingface: "Hugging Face", ollama: "Ollama" };
 
 /** Diz, sempre, por onde os textos de IA estão saindo: API da pessoa, conta dela (extensão) ou créditos do plano. */
 function AiSourceCard({ items }: { items: Integration[] | null }) {

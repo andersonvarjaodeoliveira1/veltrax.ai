@@ -11,7 +11,7 @@ def is_quota_error(exc: Exception) -> bool:
 
 def provider_of(exc: Exception) -> str:
     text = f"{type(exc).__name__} {exc}".lower()
-    for name, keys in (("openrouter", ("openrouter",)), ("ollama", ("ollama",)), ("openai", ("openai", "gpt-")), ("anthropic", ("anthropic", "claude")), ("gemini", ("gemini", "google", "generativelanguage"))):
+    for name, keys in (("huggingface", ("huggingface",)), ("openrouter", ("openrouter",)), ("ollama", ("ollama",)), ("openai", ("openai", "gpt-")), ("anthropic", ("anthropic", "claude")), ("gemini", ("gemini", "google", "generativelanguage"))):
         if any(key in text for key in keys):
             return name
     return ""

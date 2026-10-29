@@ -81,7 +81,7 @@ async def my_balance(request: Request, db: AsyncSession = Depends(get_db)):
     user_id = _uid(request)
     balance = await get_balance(db, user_id)
     # Chave própria de IA conectada (Gemini/Flow, Claude ou ChatGPT): a pessoa usa a dela e não depende dos tokens.
-    rows = (await db.execute(text("SELECT 1 FROM user_integrations WHERE user_id = :u AND provider IN ('gemini','flow','anthropic','openai','openrouter','ollama') LIMIT 1"), {"u": user_id})).first()
+    rows = (await db.execute(text("SELECT 1 FROM user_integrations WHERE user_id = :u AND provider IN ('gemini','flow','anthropic','openai','openrouter','huggingface','ollama') LIMIT 1"), {"u": user_id})).first()
     return {**balance, "own_key": rows is not None}
 
 
