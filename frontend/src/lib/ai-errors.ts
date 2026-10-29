@@ -41,8 +41,13 @@ export function aiErrorText(detail: unknown): string | null {
   if (/AI_KEY_INVALID/.test(detail)) return "A IA recusou a chave (inválida, sem saldo ou sem permissão). Confira a sua chave em Minhas APIs ou fale com o administrador.";
   if (/AI_QUOTA/.test(detail)) return "A API da IA está no limite de uso agora. Espere alguns minutos e tente de novo, ou conecte a sua própria chave em Minhas APIs.";
   if (/TOKENS_EXHAUSTED/.test(detail)) return "Seus tokens acabaram. Conecte a sua própria chave em Minhas APIs ou chame o administrador para liberar mais.";
+  const generic = /^AI_ERROR:([a-z]+):([\s\S]*?)\|/.exec(detail);
+  if (generic) {
+    const who = generic[1] === "openai" ? "da OpenAI" : generic[1] === "anthropic" ? "da Anthropic (Claude)" : generic[1] === "gemini" ? "do Google (Gemini)" : "da IA";
+    return `A IA ${who} respondeu com um erro que não é de saldo, de chave nem de limite. Tente de novo; se repetir, envie este texto ao suporte: ${generic[2].trim()}`;
+  }
   if (/AI_INCOMPLETE/.test(detail)) return "A IA respondeu incompleto (menos cenas ou variações do que o pedido). Tente de novo; se repetir, reduza a quantidade de cenas.";
-  if (/Could not (generate this step|read the photos)/i.test(detail)) return "A IA (API) não respondeu a este pedido. Tente de novo; se repetir, confira as chaves em Minhas APIs ou avise o administrador.";
+  if (/Could not (generate this step|read the photos)/i.test(detail)) return "A IA (API) não respondeu a este pedido. Tente de novo; se repetir, avise o administrador (a sua chave e o seu saldo podem estar certos).";
   if (/took too long/i.test(detail)) return "A IA (API) demorou demais para responder. Tente de novo.";
   return null;
 }

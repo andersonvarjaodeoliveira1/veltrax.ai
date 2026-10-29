@@ -7,4 +7,4 @@ def test_classifies_provider_failures():
     assert is_no_credit_error(no_credit)
     assert ai_fail(no_credit, "x").detail == "AI_NO_CREDITS:openai"
     assert ai_fail(Exception("429 RESOURCE_EXHAUSTED quota gemini"), "x").detail == "AI_QUOTA"
-    assert ai_fail(Exception("something else"), "fallback").detail == "fallback"
+    assert ai_fail(Exception("something else"), "fallback").detail.endswith("|fallback")

@@ -2306,6 +2306,37 @@ def _download_link_video(url: str, folder: str) -> str | None:
     return max(files, key=os.path.getsize) if files else None
 
 
+def _video_codec(path: str) -> str:
+    import subprocess
+
+    try:
+        out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=codec_name", "-of", "default=nw=1:nk=1", path], capture_output=True, text=True, timeout=30)
+        return out.stdout.strip().lower()
+    except Exception:
+        return ""
+
+
+def _ensure_browser_video(path: str) -> str:
+    """O Chrome não abre HEVC/AV1/VP9 em mp4 (os quadros saem vazios). Converte para H.264 + AAC; se falhar, devolve o original."""
+    import subprocess
+    from pathlib import Path
+
+    if _video_codec(path) not in {"hevc", "h265", "av1", "vp9", "vp8"}:
+        return path
+    target = str(Path(path).with_name("video-h264.mp4"))
+    try:
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", path, "-map", "0:v:0", "-map", "0:a:0?", "-vf", "scale='min(720,iw)':-2", "-c:v", "libx264", "-preset", "veryfast", "-crf", "26", "-pix_fmt", "yuv420p",
+             "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart", target],
+            capture_output=True, timeout=240, check=True,
+        )
+        if Path(target).is_file() and Path(target).stat().st_size > 1_000:
+            return target
+    except Exception:
+        logger.warning("video-from-link: conversion to H.264 failed", exc_info=True)
+    return path
+
+
 @router.post("/video-from-link")
 async def video_from_link(request: Request, db: AsyncSession = Depends(get_db)):
     """Baixa o vídeo de um link (TikTok, Instagram, YouTube...) e devolve o arquivo para ser usado como vídeo de referência."""
@@ -2339,7 +2370,8 @@ async def video_from_link(request: Request, db: AsyncSession = Depends(get_db)):
         folder = tempfile.mkdtemp(prefix="linkvideo_")
         target = Path(folder) / "video.mp4"
         target.write_bytes(body)
-        return FileResponse(str(target), media_type="video/mp4", filename="video-shopee.mp4", background=BackgroundTask(shutil.rmtree, folder, True))
+        converted = await asyncio.to_thread(_ensure_browser_video, str(target))
+        return FileResponse(converted, media_type="video/mp4", filename="video-shopee.mp4", background=BackgroundTask(shutil.rmtree, folder, True))
     url = str((data or {}).get("url") or "").strip()[:500]
     if url and not url.startswith("http"):
         url = "https://" + url
@@ -2388,6 +2420,7 @@ async def video_from_link(request: Request, db: AsyncSession = Depends(get_db)):
     if Path(path).stat().st_size > LINK_VIDEO_MAX_BYTES:
         shutil.rmtree(folder, ignore_errors=True)
         raise HTTPException(status_code=413, detail="Vídeo grande demais (máximo 150 MB).")
+    path = await asyncio.to_thread(_ensure_browser_video, path)
     suffix = Path(path).suffix.lower()
     media = {".mp4": "video/mp4", ".webm": "video/webm", ".mkv": "video/x-matroska", ".mov": "video/quicktime"}.get(suffix, "application/octet-stream")
     return FileResponse(path, media_type=media, filename="video-do-link" + suffix, background=BackgroundTask(shutil.rmtree, folder, True))

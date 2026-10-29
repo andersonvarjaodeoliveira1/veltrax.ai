@@ -19,8 +19,14 @@ describe("ReferenceSummary", () => {
     expect(await screen.findByText("Copiado")).toBeInTheDocument();
   });
 
-  it("avisa que ainda está lendo quando há vídeo sem copy", () => {
-    render(<ReferenceSummary file={new File(["x"], "a.mp4", { type: "video/mp4" })} transcript="" />);
+  it("avisa que ainda está lendo só enquanto a leitura roda", () => {
+    render(<ReferenceSummary file={new File(["x"], "a.mp4", { type: "video/mp4" })} transcript="" reading />);
     expect(screen.getByText(/Ainda lendo o que é dito/)).toBeInTheDocument();
+  });
+
+  it("vídeo sem fala mostra o aviso no próprio card, sem ficar lendo para sempre", () => {
+    render(<ReferenceSummary file={new File(["x"], "a.mp4", { type: "video/mp4" })} transcript="" noSpeech />);
+    expect(screen.queryByText(/Ainda lendo/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Não encontrei fala nesse vídeo/)).toBeInTheDocument();
   });
 });

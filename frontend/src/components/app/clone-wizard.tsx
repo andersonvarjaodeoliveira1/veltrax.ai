@@ -11,7 +11,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { takeKind, takeTag, withTake, type TakeKind } from "@/lib/take-kinds";
 import { FlowRunPanel } from "@/components/app/flow-run-panel";
 import { QuestChat } from "./clone-quest-chat";
-import { ArrowUp, Check, ChevronDown, ClipboardCopy, Download, ExternalLink, Loader2, Lock, Pencil, Plus, RefreshCw, Sparkles, Trash2, Unlock, Upload, X } from "lucide-react";
+import { ArrowUp, Check, ClipboardCopy, Download, ExternalLink, Loader2, Lock, Pencil, Plus, RefreshCw, Sparkles, Trash2, Unlock, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
@@ -506,19 +506,20 @@ export function CloneWizard() {
     setImgs({});
     setBuilt({});
     setP((cur) => ({ ...cur, sceneCount: count, scenes: [], mix: NO_MIX, variations: [], images: [], videos: [], approved: {}, checks: {}, gen: {}, final: {} }));
-    startAuto();
+    setOptionsChanged(true);
   };
   // Modo avançado: escolher a quantidade de cenas ou de vídeos já faz todo o resto sozinho (cenas, variações, prompts) e abre o Flow.
   const [autoGo, setAutoGo] = useState(0);
+  const [optionsChanged, setOptionsChanged] = useState(false);
   const startAuto = () => {
     if (p.reference.trim().length < 20 && p.notes.trim().length < 20) return;
-    if (!simple) chooseView("simple");
+    setOptionsChanged(false);
     setAutoGo((n) => n + 1);
   };
   const chooseCount = (count: number) => {
     if (count === p.count) return;
     setP((cur) => ({ ...cur, count, variations: [], images: [], videos: [], approved: {}, checks: {}, gen: {}, final: {} }));
-    startAuto();
+    setOptionsChanged(true);
   };
   const chooseLanguage = (language: string) => {
     if (language === p.language) return;
@@ -602,6 +603,7 @@ export function CloneWizard() {
     setError(null);
     setRefFile(file);
     patch({ reference: "", scenes: [], mix: NO_MIX, variations: [], images: [], videos: [], approved: {} });
+    setSpeech("ok");
     setBusy("upload");
     const fingerprint = await videoFingerprint(file);
     const known = cachedTranscript(fingerprint);
@@ -624,8 +626,15 @@ export function CloneWizard() {
       patch({ reference: heard, scenes: [], mix: NO_MIX, variations: [], images: [], videos: [], approved: {} });
       endTask(taskId, "done");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Não foi possível ler o vídeo. Tente de novo.");
-      endTask(taskId, "error", "Falhou. Veja o aviso acima.");
+      const message = err instanceof Error ? err.message : "Não foi possível ler o vídeo. Tente de novo.";
+      if (/Não encontrei fala/.test(message)) {
+        // Vídeo sem fala não é falha: o aviso fica no próprio card e a pessoa descreve o vídeo nas notas.
+        setSpeech("nospeech");
+        endTask(taskId, "done", "Sem fala nesse vídeo");
+      } else {
+        setError(message);
+        endTask(taskId, "error", "Falhou. Veja o aviso acima.");
+      }
     } finally {
       setBusy(null);
     }
@@ -1101,6 +1110,7 @@ export function CloneWizard() {
   // "Conectar ao Flow"; ela vira o padrão aqui e pode ser trocada neste projeto.
   // O vídeo anexado fica só nesta sessão (para mostrar os quadros); a copy dele já fica no projeto.
   const [refFile, setRefFile] = useState<File | null>(null);
+  const [speech, setSpeech] = useState<"ok" | "nospeech">("ok");
   const { data: authSession } = useSession();
   const isAdminUser = Boolean((authSession?.user as { is_admin?: boolean } | undefined)?.is_admin);
   const flowModelId = effectiveFlowId(p.flowModel, flowAccount.plan);
@@ -1476,7 +1486,7 @@ export function CloneWizard() {
           </div>
         )}
 
-        {!ready && (refFile || p.reference.trim()) && <ReferenceSummary file={refFile} transcript={p.reference} />}
+        {!ready && (refFile || p.reference.trim()) && <ReferenceSummary file={refFile} transcript={p.reference} reading={busy === "upload"} noSpeech={speech === "nospeech"} />}
 
         {!ready && !working && askProduct && (
           <section aria-label="Produto" className="space-y-4 rounded-[18px] border border-[#A98BFF]/40 bg-card p-5">
@@ -1619,7 +1629,6 @@ export function CloneWizard() {
                       <span className="block font-medium">Falar sobre o meu produto (opcional)</span>
                       <span className="block text-xs text-muted-foreground">Nome, o que ele faz e fotos</span>
                     </span>
-                    <ChevronDown aria-hidden className="size-4 text-muted-foreground transition-transform group-open:rotate-180" />
                   </summary>
                   <div className="mt-4 border-t border-white/10 pt-4">{productFields}</div>
                 </details>
@@ -1862,7 +1871,7 @@ export function CloneWizard() {
                 {busy === "upload" ? "Transcrevendo o vídeo…" : "Escolher vídeo"}
               </Button>
               <LinkVideo onFile={(file) => void readReference(file)} disabled={working} />
-              {(refFile || p.reference.trim()) && <ReferenceSummary file={refFile} transcript={p.reference} />}
+              {(refFile || p.reference.trim()) && <ReferenceSummary file={refFile} transcript={p.reference} reading={busy === "upload"} noSpeech={speech === "nospeech"} />}
               <Field label="Transcrição do vídeo (ou descreva o que acontece)" hint="Preenchida sozinha ao escolher o vídeo. Você pode editar ou colar o texto direto.">
                 <textarea value={p.reference} onChange={(event) => patch({ reference: event.target.value })} rows={5} maxLength={4000} className={inputClass} />
               </Field>
@@ -1883,8 +1892,11 @@ export function CloneWizard() {
               <Group label="Quantas cenas" hint="Cada cena tem cerca de 8 segundos. Com 4 cenas o vídeo fica com cerca de 32 segundos, tempo de sobra para mostrar e falar do produto.">
                 <Chips label="Quantas cenas" value={p.sceneCount} onPick={chooseScenes} disabled={working} options={[1, 2, 3, 4, 5, 6].map((n) => ({ value: n, text: n === 1 ? "1 cena" : `${n} cenas` }))} />
               </Group>
-              <Group label="Quantos vídeos" hint="Ao escolher, o ClipGringa separa as cenas, cria as variações e os prompts sozinho e abre o Flow.">
+              <Group label="Quantos vídeos" hint="Escolha a quantidade e depois clique em “Gerar com essas opções”. Nada é gerado até você clicar.">
                 <Chips label="Quantos vídeos" value={p.count} onPick={chooseCount} disabled={working} options={COUNT_OPTIONS.map((n) => ({ value: n, text: String(n) }))} />
+                {optionsChanged && (
+                  <Button type="button" className="mt-2 rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white" disabled={working || (p.reference.trim().length < 20 && p.notes.trim().length < 20)} onClick={() => startAuto()}>Gerar com essas opções</Button>
+                )}
               </Group>
               {paid && (
                 <div className="space-y-4 rounded-[18px] border border-[#A98BFF]/40 bg-gradient-to-br from-[#7B3FE4]/25 via-[#7B3FE4]/10 to-transparent p-5 shadow-[0_18px_40px_-24px_#7B3FE4]">

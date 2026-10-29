@@ -56,10 +56,14 @@ export function useFlowConnection(enabled: boolean, report = true) {
       apply(d.loggedIn === false ? "logged-out" : "connected", info);
     };
 
+    let first = true;
     const ask = () => {
       answered = false;
+      // na 1ª checagem a extensão ainda pode estar carregando: espera mais antes de dizer que não existe
+      const wait = first ? 6000 : 2500;
+      first = false;
       window.postMessage({ source: "clipgringa-page", type: "flow-status?" }, window.location.origin);
-      window.setTimeout(() => { if (!answered) apply("no-extension", { plan: null, credits: null, seenAt: null }); }, 2500);
+      window.setTimeout(() => { if (!answered) apply("no-extension", { plan: null, credits: null, seenAt: null }); }, wait);
     };
 
     window.addEventListener("message", onMessage);

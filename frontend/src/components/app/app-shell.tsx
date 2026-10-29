@@ -374,6 +374,7 @@ function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [generations, setGenerations] = useState<GenerationSummary[]>([]);
+  const [folderList, setFolderList] = useState<{ id: string; name: string }[]>([]);
   const [active, setActive] = useState(0);
   const listRef = useRef<HTMLDivElement | null>(null);
 
@@ -382,6 +383,10 @@ function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (
     setQuery("");
     setActive(0);
     void fetchGenerations().then(setGenerations).catch(() => {});
+    void fetch("/api/folders", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { folders: [] }))
+      .then((d) => setFolderList(Array.isArray(d.folders) ? d.folders.map((f: { id: string; name: string }) => ({ id: String(f.id), name: String(f.name) })) : []))
+      .catch(() => {});
   }, [open]);
 
   const entries = useMemo<PaletteEntry[]>(() => {
@@ -404,8 +409,12 @@ function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (
         id: generation.id, label: generation.source_title, hint: timeAgo(generation.created_at),
         href: `/tasks/${generation.id}`, icon: Film, generation,
       }));
-    return [...actions, ...matches];
-  }, [generations, query]);
+    const folderMatches: PaletteEntry[] = nq
+      ? folderList.filter((f) => norm(f.name).includes(nq)).slice(0, 5)
+          .map((f) => ({ id: `folder-${f.id}`, label: f.name, hint: "Pasta", href: "/folders", icon: FolderOpen }))
+      : [];
+    return [...actions, ...folderMatches, ...matches];
+  }, [generations, folderList, query]);
 
   const go = useCallback((entry: PaletteEntry | undefined) => {
     if (!entry) return;

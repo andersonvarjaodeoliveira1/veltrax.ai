@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 
 import LandingPage from "@/components/landing-page";
+import { HelpBubbles } from "@/components/app/help-bubbles";
 import { useSession } from "@/lib/auth-client";
 import { isLandingOnlyModeEnabled } from "@/lib/app-flags";
 
@@ -14,7 +15,7 @@ export function HomeRouter() {
   const { data: session, isPending } = useSession();
 
   if (!isLandingOnlyModeEnabled && !isPending && session?.user) {
-    return <HomeApp />;
+    return <><HomeApp /><HelpBubbles email={session.user.email ?? ""} /></>;
   }
 
   return <LandingPage />;

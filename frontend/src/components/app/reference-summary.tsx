@@ -17,7 +17,7 @@ function once(target: HTMLVideoElement, event: string, ms: number) {
 }
 
 /** Resumo visual (quadros com o tempo de cada um) e a copy (transcrição) do criativo que a pessoa anexou. */
-export function ReferenceSummary({ file, transcript }: { file: File | null; transcript: string }) {
+export function ReferenceSummary({ file, transcript, reading = false, noSpeech = false }: { file: File | null; transcript: string; reading?: boolean; noSpeech?: boolean }) {
   const [frames, setFrames] = useState<Frame[]>([]);
   const [meta, setMeta] = useState<Meta | null>(null);
   const [state, setState] = useState<"idle" | "working" | "done" | "failed">("idle");
@@ -128,7 +128,9 @@ export function ReferenceSummary({ file, transcript }: { file: File | null; tran
           <blockquote className="max-h-72 overflow-y-auto whitespace-pre-line border-l-2 border-[#A98BFF] pl-4 text-sm leading-relaxed">{text}</blockquote>
           <p className="text-xs text-muted-foreground">{text.split(/\s+/).filter(Boolean).length} palavras.</p>
         </div>
-      ) : file ? (
+      ) : noSpeech ? (
+        <p role="status" className="text-xs text-muted-foreground">Não encontrei fala nesse vídeo. Isso não é um erro: descreva o que acontece nele no campo de notas e o ClipGringa segue a partir daí.</p>
+      ) : file && reading ? (
         <p className="text-xs text-muted-foreground">Ainda lendo o que é dito no vídeo…</p>
       ) : null}
     </section>

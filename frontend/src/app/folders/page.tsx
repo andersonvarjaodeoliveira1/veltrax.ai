@@ -208,7 +208,7 @@ export default function FoldersPage() {
                     <span className="flex size-11 items-center justify-center rounded-xl bg-muted"><FolderOpen className="size-5" aria-hidden /></span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-semibold">{folder.name}</span>
-                      <span className="block text-xs text-muted-foreground">{folder.task_count} {folder.task_count === 1 ? "video" : "videos"}</span>
+                      <span className="block text-xs text-muted-foreground">{`${folder.task_count} ${folder.task_count === 1 ? "video" : "videos"}`}</span>
                     </span>
                   </button>
                   <div className="absolute right-2 top-2 flex gap-1">

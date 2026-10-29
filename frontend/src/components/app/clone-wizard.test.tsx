@@ -368,6 +368,8 @@ it("lets the member choose 1 to 3 scenes and generates only that many", async ()
   window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ sceneCount: 3, step: 1, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora.", count: 1 }));
   render(<CloneWizard />);
   await user.click(await screen.findByRole("radio", { name: "1 cena" }));
+  expect(log).toHaveLength(0); // escolher a quantidade não gera nada sozinho
+  await user.click(await screen.findByRole("button", { name: "Gerar com essas opções" }));
   await screen.findByRole("link", { name: /Baixar vídeo 01/ }, { timeout: 8000 });
   expect(log.filter((x) => x === "image")).toHaveLength(1);
   expect(log.filter((x) => x === "video")).toHaveLength(1);
@@ -625,12 +627,14 @@ test("tells whether the Flow account is connected and has a plan", async () => {
   await waitFor(() => expect(screen.getByTestId("flow-account")).toHaveTextContent(/plano Pro · 250 créditos/));
 });
 
-test("advanced mode: picking the number of scenes prepares everything by itself", async () => {
+test("advanced mode: picking the number of scenes only generates after clicking the button", async () => {
   const calls = mockApi();
   const user = userEvent.setup();
   render(<CloneWizard />);
   await user.type(screen.getByLabelText(/Transcrição do vídeo/), "Você sabe por que o seu vídeo não viraliza? Eu explico agora.");
   await user.click(screen.getByRole("radio", { name: "2 cenas" }));
+  expect(calls).toHaveLength(0);
+  await user.click(await screen.findByRole("button", { name: "Gerar com essas opções" }));
   await waitFor(() => expect(calls.map((c) => c.stage)).toEqual(expect.arrayContaining(["scenes", "variations", "images", "videos"])), { timeout: 15000 });
 }, 30000);
 

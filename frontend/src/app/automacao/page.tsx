@@ -238,14 +238,6 @@ export default function AutomationPage() {
         </p>
       </div>
 
-      {tab !== "clonagem" && tab !== "videos" && tab !== "imagens" && (
-      <Alert>
-        <AlertDescription>
-          Os textos e os prompts de vídeo são gerados pela IA. O vídeo é gerado por você no Flow, em lower priority, e enviado aqui. Para criar variações, baixe o vídeo e envie na aba Variações do Multiplicador. Os vídeos ficam só nesta página: se você atualizar, envie de novo.
-        </AlertDescription>
-      </Alert>
-      )}
-
       <nav aria-label="Etapas" className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <div className="inline-flex flex-wrap items-center gap-1 rounded-full border border-white/10 bg-white/[0.03] p-1 backdrop-blur">
@@ -285,6 +277,14 @@ export default function AutomationPage() {
           </div>
         )}
       </nav>
+
+      {tab !== "clonagem" && tab !== "videos" && tab !== "imagens" && (
+      <Alert>
+        <AlertDescription>
+          Os textos e os prompts de vídeo são gerados pela IA. O vídeo é gerado por você no Flow, em lower priority, e enviado aqui. Para criar variações, baixe o vídeo e envie na aba Variações do Multiplicador. Os vídeos ficam só nesta página: se você atualizar, envie de novo.
+        </AlertDescription>
+      </Alert>
+      )}
 
       {error && (
         <Alert variant="destructive">

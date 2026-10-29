@@ -24,4 +24,4 @@ def test_ai_fail_tells_no_credits_from_invalid_key():
     assert _ai_fail(no_credit, "x").detail == "AI_NO_CREDITS:openai"
     bad_key = Exception("status_code: 401, model_name: claude-sonnet-5-5, body: invalid x-api-key authentication_error anthropic")
     assert _ai_fail(bad_key, "x").detail == "AI_KEY_INVALID:anthropic"
-    assert _ai_fail(Exception("boom 1403ms"), "fallback").detail == "fallback"
+    assert _ai_fail(Exception("boom 1403ms"), "fallback").detail.endswith("|fallback")

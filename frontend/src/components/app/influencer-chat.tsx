@@ -38,8 +38,8 @@ function saveRemote(chat: ChatItem) {
 function realFirstName(name?: string | null, email?: string | null): string {
   const first = (name ?? "").trim().split(/\s+/)[0] ?? "";
   if (!first || first.length > 20 || !/^[\p{L}'-]+$/u.test(first)) return "";
-  const local = (email ?? "").split("@")[0]?.toLowerCase() ?? "";
-  if (local && (local === first.toLowerCase() || local.startsWith(first.toLowerCase() + ".") || local.startsWith(first.toLowerCase() + "_"))) return /\s/.test((name ?? "").trim()) ? first : "";
+  const local = (email ?? "").split("@")[0]?.toLowerCase().replace(/[^\p{L}]/gu, "") ?? "";
+  if (local && local.startsWith(first.toLowerCase())) return "";
   return first;
 }
 
