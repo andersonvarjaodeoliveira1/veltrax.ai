@@ -1,0 +1,1 @@
+ALTER TABLE user_integrations ALTER COLUMN hint TYPE VARCHAR(120)

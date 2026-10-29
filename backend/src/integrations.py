@@ -23,6 +23,7 @@ PROVIDERS: dict[str, dict[str, str]] = {
     "openai": {"label": "ChatGPT (OpenAI)", "help": "Chave da OpenAI (platform.openai.com/api-keys). Atenção: a assinatura do ChatGPT não inclui créditos de API; a API é cobrada à parte (platform.openai.com/settings/organization/billing)."},
     "anthropic": {"label": "Claude (Anthropic)", "help": "Chave da Anthropic (console.anthropic.com)."},
     "openrouter": {"label": "OpenRouter", "help": "Chave do OpenRouter (openrouter.ai/keys)."},
+    "ollama": {"label": "Ollama (nuvem ou servidor seu)", "help": "Para o Ollama Cloud: crie a chave em ollama.com/settings/keys e deixe o endereço padrão (https://ollama.com). Se você hospeda o seu Ollama, informe o endereço público dele (https); o servidor do ClipGringa não alcança o localhost do seu computador. O modelo é opcional: sem ele, uso o primeiro que o Ollama listar."},
     "apify": {"label": "Apify (busca de fotos no Pinterest)", "help": "Token do Apify (console.apify.com/settings/integrations). Sem ele, a busca usa um banco de fotos grátis."},
     "flow": {"label": "Chave do Google para o Veo (opcional)", "help": "Isto NÃO é a conta do Flow. A conta do Flow conecta pela extensão, na página Conectar ao Flow. Aqui só entra uma chave do Google AI Studio com acesso ao Veo."},
 }
@@ -33,6 +34,65 @@ _current_keys: contextvars.ContextVar[dict[str, str]] = contextvars.ContextVar("
 
 def _hint(value: str) -> str:
     return value[-4:] if len(value) >= 8 else ""
+
+
+DEFAULT_OLLAMA_URL = "https://ollama.com"
+
+
+def pack_ollama(key: str, url: str, model: str) -> str:
+    """O Ollama precisa de endereço, chave (opcional) e modelo: guardados juntos, criptografados como as outras chaves."""
+    import json
+
+    return json.dumps({"url": url.rstrip("/") or DEFAULT_OLLAMA_URL, "key": key, "model": model}, ensure_ascii=False)
+
+
+def unpack_ollama(value: str) -> dict[str, str]:
+    import json
+
+    try:
+        data = json.loads(value)
+        if isinstance(data, dict):
+            return {"url": str(data.get("url") or DEFAULT_OLLAMA_URL).rstrip("/"), "key": str(data.get("key") or ""), "model": str(data.get("model") or "")}
+    except Exception:
+        pass
+    return {"url": DEFAULT_OLLAMA_URL, "key": value, "model": ""}
+
+
+async def ollama_probe(url: str, key: str) -> tuple[bool, str, list[str]]:
+    """Testa o endereço e a chave do Ollama e lista os modelos. (ok, motivo, modelos)."""
+    import asyncio
+    from urllib.parse import urlparse
+
+    from .api.routes.clone_plan import _public_https
+
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or not parsed.hostname:
+        return False, "O endereço do Ollama precisa começar com https:// (ex.: https://ollama.com).", []
+    if not await asyncio.to_thread(_public_https, url):
+        return False, "Esse endereço não é público. O servidor do ClipGringa não alcança o localhost do seu computador: use o Ollama Cloud ou um endereço https público.", []
+    headers = {"Authorization": f"Bearer {key}"} if key else {}
+    try:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=False) as client:
+            r = await client.get(f"{url.rstrip('/')}/api/tags", headers=headers)
+    except Exception:
+        return False, "Não consegui falar com esse endereço. Confira se ele está no ar e é https.", []
+    if r.status_code in (401, 403):
+        return False, "O Ollama recusou essa chave. Confira se copiou inteira.", []
+    if r.status_code != 200:
+        return False, "Esse endereço não respondeu como um Ollama.", []
+    try:
+        models = [str(m.get("name") or m.get("model") or "") for m in (r.json().get("models") or []) if isinstance(m, dict)]
+    except Exception:
+        models = []
+    return True, "", [m for m in models if m]
+
+
+def pick_ollama_model(models: list[str]) -> str:
+    for preferred in ("gpt-oss", "qwen", "llama", "deepseek"):
+        for name in models:
+            if preferred in name.lower():
+                return name
+    return models[0] if models else ""
 
 
 async def list_integrations(db: AsyncSession, user_id: str) -> list[dict[str, Any]]:
@@ -51,7 +111,7 @@ async def list_integrations(db: AsyncSession, user_id: str) -> list[dict[str, An
     return out
 
 
-async def save_integration(db: AsyncSession, user_id: str, provider: str, value: str) -> None:
+async def save_integration(db: AsyncSession, user_id: str, provider: str, value: str, hint: str | None = None) -> None:
     await db.execute(
         text(
             """
@@ -61,7 +121,7 @@ async def save_integration(db: AsyncSession, user_id: str, provider: str, value:
             DO UPDATE SET encrypted_value = EXCLUDED.encrypted_value, hint = EXCLUDED.hint, updated_at = CURRENT_TIMESTAMP
             """
         ),
-        {"u": user_id, "p": provider, "v": encrypt_setting_value(value), "h": _hint(value)},
+        {"u": user_id, "p": provider, "v": encrypt_setting_value(value), "h": hint if hint is not None else _hint(value)},
     )
     await db.commit()
 
@@ -161,6 +221,16 @@ def user_models(include_account: bool = True) -> list[Any]:
         from pydantic_ai.models.openai import OpenAIChatModel
         from pydantic_ai.providers.openai import OpenAIProvider
         out.append(OpenAIChatModel("gpt-5-mini", provider=OpenAIProvider(api_key=keys["openai"])))
+    if keys.get("openrouter"):
+        from pydantic_ai.models.openrouter import OpenRouterModel
+        from pydantic_ai.providers.openrouter import OpenRouterProvider
+        out.append(OpenRouterModel("anthropic/claude-sonnet-5.5", provider=OpenRouterProvider(api_key=keys["openrouter"])))
+    if keys.get("ollama"):
+        cfg = unpack_ollama(keys["ollama"])
+        if cfg["model"]:
+            from pydantic_ai.models.ollama import OllamaModel
+            from pydantic_ai.providers.ollama import OllamaProvider
+            out.append(OllamaModel(cfg["model"], provider=OllamaProvider(base_url=cfg["url"] + "/v1", api_key=cfg["key"] or None)))
     if include_account:
         from .ai_relay import account_model
         from .usage import _usage_user

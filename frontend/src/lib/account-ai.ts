@@ -88,7 +88,7 @@ export async function askAccount(site: AccountSite, prompt: string, timeoutMs = 
 /** Texto do aviso fixo sobre por onde a IA gerou (o servidor diz em x-ai-path). */
 export function aiPathLabel(path: string): { text: string; kind: "api" | "account" | "plan" } {
   const [kind, who] = path.split(":");
-  const names: Record<string, string> = { gemini: "Gemini", chatgpt: "ChatGPT", claude: "Claude" };
+  const names: Record<string, string> = { gemini: "Gemini", chatgpt: "ChatGPT", claude: "Claude", openrouter: "OpenRouter", ollama: "Ollama" };
   if (kind === "api") return { kind: "api", text: `Texto gerado pela sua chave de API do ${names[who] ?? "provedor"}.` };
   if (kind === "account") return { kind: "account", text: `Texto gerado pela sua conta do ${names[who] ?? "provedor"} (extensão).` };
   return { kind: "plan", text: "Texto gerado com os créditos do plano ClipGringa." };

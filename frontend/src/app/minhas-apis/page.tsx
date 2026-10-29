@@ -11,8 +11,8 @@ import { ACCOUNT_AI_EVENT, ACCOUNT_SITES, OPEN_ACCOUNT_AI_EVENT, isAccountSite, 
 
 type Integration = { provider: string; label: string; help: string; connected: boolean; hint: string; updated_at: string | null };
 
-const AI_API_PROVIDERS = ["gemini", "openai", "anthropic"];
-const API_NAME: Record<string, string> = { gemini: "Gemini", openai: "ChatGPT (OpenAI)", anthropic: "Claude" };
+const AI_API_PROVIDERS = ["gemini", "openai", "anthropic", "openrouter", "ollama"];
+const API_NAME: Record<string, string> = { gemini: "Gemini", openai: "ChatGPT (OpenAI)", anthropic: "Claude", openrouter: "OpenRouter", ollama: "Ollama" };
 
 /** Diz, sempre, por onde os textos de IA estão saindo: API da pessoa, conta dela (extensão) ou créditos do plano. */
 function AiSourceCard({ items }: { items: Integration[] | null }) {
@@ -67,6 +67,7 @@ export default function MyApisPage() {
   const { state: flowState, account: flowAccount } = useFlowConnection(true, false);
   const [items, setItems] = useState<Integration[] | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [ollama, setOllama] = useState({ url: "", model: "" });
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<{ provider: string; text: string } | null>(null);
   const [done, setDone] = useState<string | null>(null);
@@ -85,14 +86,16 @@ export default function MyApisPage() {
 
   async function connect(provider: string) {
     const key = (drafts[provider] ?? "").trim();
-    if (!key) return;
+    // O Ollama pode não ter chave quando o servidor é do próprio membro (endereço próprio).
+    if (!key && !(provider === "ollama" && ollama.url.trim())) return;
     setBusy(provider); setError(null); setDone(null);
     try {
-      const response = await fetch(`/api/integrations/${provider}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key }) });
+      const response = await fetch(`/api/integrations/${provider}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(provider === "ollama" ? { key, url: ollama.url.trim(), model: ollama.model.trim() } : { key }) });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) { setError({ provider, text: String(data.detail || "Não foi possível conectar. Confira a chave e tente de novo.") }); return; }
       setItems(data.integrations ?? []);
       setDrafts((current) => ({ ...current, [provider]: "" }));
+      if (provider === "ollama") setOllama({ url: "", model: "" });
       setDone(provider);
       window.dispatchEvent(new Event("gv-tokens-changed"));
       toast.success("Chave conectada! Já pode usar o ClipGringa com a sua chave.");
@@ -151,10 +154,18 @@ export default function MyApisPage() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="flex items-center gap-2 font-medium"><KeyRound className="size-4 text-[#A98BFF]" /> {item.label}</p>
                 {item.connected
-                  ? <span className="inline-flex items-center gap-1 rounded-full bg-[#5BD69A]/15 px-3 py-1 text-xs text-[#5BD69A]"><Check className="size-3" /> Conectado{item.hint ? ` · …${item.hint}` : ""}</span>
+                  ? <span className="inline-flex items-center gap-1 rounded-full bg-[#5BD69A]/15 px-3 py-1 text-xs text-[#5BD69A]"><Check className="size-3" /> Conectado{item.hint ? (item.provider === "ollama" ? ` · ${item.hint}` : ` · …${item.hint}`) : ""}</span>
                   : <span className="rounded-full bg-border px-3 py-1 text-xs text-muted-foreground">Não conectado</span>}
               </div>
               <p className="text-xs text-muted-foreground">{item.help}</p>
+              {item.provider === "ollama" && (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <input type="url" autoComplete="off" value={ollama.url} onChange={(event) => setOllama((cur) => ({ ...cur, url: event.target.value }))} aria-label="Endereço do Ollama"
+                    placeholder="Endereço (vazio = https://ollama.com)" className="min-w-0 rounded-full border border-border bg-background px-4 py-2 text-sm" />
+                  <input type="text" autoComplete="off" value={ollama.model} onChange={(event) => setOllama((cur) => ({ ...cur, model: event.target.value }))} aria-label="Modelo do Ollama"
+                    placeholder="Modelo (opcional, ex.: gpt-oss:120b)" className="min-w-0 rounded-full border border-border bg-background px-4 py-2 text-sm" />
+                </div>
+              )}
               <form className="flex flex-wrap items-center gap-2" onSubmit={(event) => { event.preventDefault(); void connect(item.provider); }}>
                 <input
                   type="password"
@@ -162,10 +173,10 @@ export default function MyApisPage() {
                   value={drafts[item.provider] ?? ""}
                   onChange={(event) => setDrafts((current) => ({ ...current, [item.provider]: event.target.value }))}
                   aria-label={`Chave de ${item.label}`}
-                  placeholder={item.connected ? "Colar uma chave nova para trocar" : "Cole a chave aqui"}
+                  placeholder={item.provider === "ollama" ? (item.connected ? "Chave nova para trocar (opcional em servidor próprio)" : "Chave do Ollama (opcional em servidor próprio)") : item.connected ? "Colar uma chave nova para trocar" : "Cole a chave aqui"}
                   className="min-w-0 flex-1 rounded-full border border-border bg-background px-4 py-2 text-sm"
                 />
-                <Button type="submit" size="sm" className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white" disabled={busy === item.provider || !(drafts[item.provider] ?? "").trim()}>
+                <Button type="submit" size="sm" className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white" disabled={busy === item.provider || (!(drafts[item.provider] ?? "").trim() && !(item.provider === "ollama" && ollama.url.trim()))}>
                   {busy === item.provider ? <Loader2 className="size-4 animate-spin" /> : null}
                   {busy === item.provider ? "Testando a chave…" : item.connected ? "Trocar chave" : "Conectar"}
                 </Button>

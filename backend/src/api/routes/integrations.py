@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...auth_headers import get_authenticated_user_id
 from ...config import get_config
 from ...database import get_db
-from ...integrations import PROVIDERS, check_key, delete_integration, list_integrations, save_integration
+from ...integrations import DEFAULT_OLLAMA_URL, PROVIDERS, check_key, delete_integration, list_integrations, ollama_probe, pack_ollama, pick_ollama_model, save_integration
 
 router = APIRouter(prefix="/integrations", tags=["integrations"])
 
@@ -31,12 +31,34 @@ async def connect(provider: str, request: Request, db: AsyncSession = Depends(ge
     except Exception:
         raise HTTPException(status_code=400, detail="Corpo inválido")
     value = str((data or {}).get("key") or "").strip()
-    if len(value) < 8 or len(value) > 400 or any(c.isspace() for c in value):
-        raise HTTPException(status_code=400, detail="Cole a chave inteira, sem espaços.")
-    ok, reason = await check_key(provider, value)
-    if not ok:
-        raise HTTPException(status_code=400, detail=reason)
-    await save_integration(db, user_id, provider, value)
+    hint: str | None = None
+    if provider == "ollama":
+        import re
+        from urllib.parse import urlparse
+
+        url = str((data or {}).get("url") or "").strip() or DEFAULT_OLLAMA_URL
+        model = str((data or {}).get("model") or "").strip()
+        if len(value) > 400 or any(c.isspace() for c in value):
+            raise HTTPException(status_code=400, detail="Cole a chave inteira, sem espaços.")
+        if not value and url.rstrip("/") == DEFAULT_OLLAMA_URL:
+            raise HTTPException(status_code=400, detail="O Ollama Cloud precisa de uma chave (ollama.com/settings/keys).")
+        if model and not re.fullmatch(r"[A-Za-z0-9._:/-]{1,80}", model):
+            raise HTTPException(status_code=400, detail="O nome do modelo tem caracteres que não são aceitos.")
+        ok, reason, models = await ollama_probe(url, value)
+        if not ok:
+            raise HTTPException(status_code=400, detail=reason)
+        model = model or pick_ollama_model(models)
+        if not model:
+            raise HTTPException(status_code=400, detail="O Ollama respondeu, mas não listou nenhum modelo. Escreva o nome do modelo (ex.: gpt-oss:120b).")
+        hint = f"{model} · {urlparse(url).hostname}"[:120]
+        value = pack_ollama(value, url, model)
+    else:
+        if len(value) < 8 or len(value) > 400 or any(c.isspace() for c in value):
+            raise HTTPException(status_code=400, detail="Cole a chave inteira, sem espaços.")
+        ok, reason = await check_key(provider, value)
+        if not ok:
+            raise HTTPException(status_code=400, detail=reason)
+    await save_integration(db, user_id, provider, value, hint)
     return {"integrations": await list_integrations(db, user_id)}
 
 
@@ -59,7 +81,7 @@ async def my_balance(request: Request, db: AsyncSession = Depends(get_db)):
     user_id = _uid(request)
     balance = await get_balance(db, user_id)
     # Chave própria de IA conectada (Gemini/Flow, Claude ou ChatGPT): a pessoa usa a dela e não depende dos tokens.
-    rows = (await db.execute(text("SELECT 1 FROM user_integrations WHERE user_id = :u AND provider IN ('gemini','flow','anthropic','openai') LIMIT 1"), {"u": user_id})).first()
+    rows = (await db.execute(text("SELECT 1 FROM user_integrations WHERE user_id = :u AND provider IN ('gemini','flow','anthropic','openai','openrouter','ollama') LIMIT 1"), {"u": user_id})).first()
     return {**balance, "own_key": rows is not None}
 
 

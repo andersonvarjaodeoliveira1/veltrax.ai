@@ -210,7 +210,7 @@ def path_of_model(model: Any) -> str:
     if getattr(model, "is_account_relay", False):
         return f"account:{getattr(model, 'site', 'gemini')}"
     name = type(model).__name__
-    for key, label in (("Anthropic", "claude"), ("OpenAI", "chatgpt"), ("Google", "gemini")):
+    for key, label in (("OpenRouter", "openrouter"), ("Ollama", "ollama"), ("Anthropic", "claude"), ("OpenAI", "chatgpt"), ("Google", "gemini")):
         if key in name:
             return f"api:{label}"
     return "plan"

@@ -17,7 +17,7 @@ const OPTIONS: { id: Pick; title: string; sub: string }[] = [
   { id: "gemini", title: "Gemini", sub: "Conta do Google" },
   { id: "chatgpt", title: "ChatGPT", sub: "Conta da OpenAI" },
   { id: "claude", title: "Claude", sub: "Conta da Anthropic" },
-  { id: "api", title: "Tenho chave de API", sub: "OpenAI, Claude ou Gemini" },
+  { id: "api", title: "Tenho chave de API", sub: "OpenAI, Claude, Gemini, OpenRouter ou Ollama" },
   { id: "none", title: "Nenhuma", sub: "Usar os créditos do plano" },
 ];
 
@@ -55,7 +55,7 @@ export function AccountAiSetup({ enabled }: { enabled: boolean }) {
       try {
         const response = await fetch("/api/integrations", { cache: "no-store" });
         const data = response.ok ? await response.json() : { integrations: [] };
-        if ((data.integrations ?? []).some((item: { provider: string; connected: boolean }) => item.connected && ["gemini", "openai", "anthropic"].includes(item.provider))) return;
+        if ((data.integrations ?? []).some((item: { provider: string; connected: boolean }) => item.connected && ["gemini", "openai", "anthropic", "openrouter", "ollama"].includes(item.provider))) return;
       } catch { /* segue: pergunta mesmo assim */ }
       if (!cancelled && !readChoice()) { setStep("quiz"); setSite(null); setOpen(true); }
     }, 4000);
