@@ -257,3 +257,7 @@ the app via `APP_STORE_ID`/`APP_STORE_URL` in `frontend/src/lib/site.ts`
 - **Tools:** create/list/get/wait/cancel/resume/delete tasks, list/download/
   export clips, and public discovery (templates, transitions, fonts, B-roll).
 - Run with `cd mcp && uv run clipgringa-mcp`. Details in `mcp/README.md`.
+
+## Extension releases (Chrome extension `extension/flow`)
+
+Whenever `extension/flow` changes: bump `manifest.json` version, run `bash scripts/build-extension-zip.sh` (writes the zip and `frontend/public/extensao/version.json`), update the version texts in the frontend (`conectar-flow/page.tsx`, `clone-wizard.tsx`, `link-video.tsx`), and send the zip to the user. Members are told about the update automatically: `ExtensionUpdateNotice` (app-shell) compares their installed version with `version.json` and shows a persistent "Atualização da extensão" notice with a button to `/conectar-flow`, on every visit until they update; the extension badge "NOVA" does the same inside Chrome.
