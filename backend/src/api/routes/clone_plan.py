@@ -235,6 +235,7 @@ def _context(data: dict[str, Any], need_cta: bool = False) -> dict[str, Any]:
         "own_copy": own_copy,
         "copy_brief": copy_brief,
         "mode": mode,
+        "presenter": data.get("presenter") if data.get("presenter") in ("woman", "man") else "",
         "count": max(1, min(MAX_VARIATIONS, count)),
     }
 
@@ -451,6 +452,9 @@ async def stage_variations(ctx: dict[str, Any], scenes: list[dict[str, str]], mo
     count = ctx["count"]
     avatars = "\n".join(f"- {a['name']}: {a['look'] or 'no description'}" for a in ctx["avatars"]) or "(none)"
     prompt = f"N = {count}\nAvatar mode: {ctx['mode']}\n\nScenes:\n{_scene_block(scenes)}\n\nAvatars:\n{avatars}"
+    if ctx.get("presenter") and ctx["mode"] != "own":
+        who = "woman" if ctx["presenter"] == "woman" else "man"
+        prompt += f"\n\nPRESENTER (mandatory): every avatar is a {who}. The names and the looks must all be a {who}'s, in every variation."
     if _changes_block(ctx):
         prompt += "\n\n" + _changes_block(ctx)
     items: list[dict[str, str]] = []
@@ -628,12 +632,14 @@ async def product_look(request: Request, db: AsyncSession = Depends(get_db)):
 
 
 class _Person(BaseModel):
+    gender: str = Field(default="", description='"woman" or "man" for the apparent gender of the person, empty if unclear or no person is visible')
     age: str = Field(description="Apparent age as a number or short range, empty if unclear")
     look: str = Field(description="Short English description of the visible look: hair, skin tone, eyes, build, clothes, style. Empty if no adult person is visible")
 
 
 PERSON_LOOK_SYSTEM = """You look at frames of a video of ONE adult person and describe only how the person looks, so an image model can draw a similar-looking virtual influencer.
 Write 25-45 words in English: apparent age, hair (color, length, style), skin tone, eyes, build, clothes, style. Describe only what is visible.
+Also return gender: "woman" or "man" for the apparent gender of the person on screen (empty if unclear).
 Never say who the person is, never guess a name, never mention logos or readable text. If no adult person is clearly visible, return empty fields."""
 
 
@@ -664,7 +670,8 @@ async def person_look(request: Request, db: AsyncSession = Depends(get_db)):
         parts.append(BinaryContent(data=fixed[0], media_type=fixed[1]))
     _check_script_rate(user_id)
     out = await _run_parts(PERSON_LOOK_SYSTEM, _Person, parts)
-    return {"age": _text(out.age, 20), "look": _text(out.look, 300)}
+    gender = out.gender.strip().lower() if out.gender else ""
+    return {"age": _text(out.age, 20), "look": _text(out.look, 300), "gender": gender if gender in ("woman", "man") else ""}
 
 
 # ---- saved influencer chats (kept in the database; deleting only hides them, admins can restore) ----

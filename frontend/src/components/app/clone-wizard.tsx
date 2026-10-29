@@ -17,6 +17,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import { FLOW_CHOICES, FLOW_MODELS, defaultFlowCategory, effectiveFlowId, saveFlowCategory, visibleFlowChoices } from "@/lib/flow-models";
 import { ReferenceSummary } from "@/components/app/reference-summary";
+import { PresenterChoice, useReferenceGender, type Presenter } from "@/components/app/presenter-choice";
 import { useSession } from "@/lib/auth-client";
 import { ADMIN_WHATSAPP_URL } from "@/lib/token-balance";
 import { flowUploadInfo } from "@/lib/flow-upload";
@@ -56,6 +57,7 @@ type Project = {
   copyMode: "same" | "mix";
   mix: Mix;
   avatarMode: "own" | "random";
+  presenter?: Presenter;
   avatars: Avatar[];
   objects: SceneObject[];
   count: number;
@@ -291,6 +293,7 @@ async function callStage(stage: Stage, proj: Project): Promise<{ items?: unknown
       language: proj.language,
       cta: proj.cta,
       avatar_mode: proj.avatarMode,
+      ...(proj.presenter ? { presenter: proj.presenter } : {}),
       avatars: proj.avatars.filter((a) => a.name.trim()).map(({ name, look }) => ({ name, look })),
       objects: (proj.objects ?? []).filter((o) => o.name.trim()).map(({ name, place, position }) => ({ name, place, position })),
       count: proj.count,
@@ -1110,6 +1113,9 @@ export function CloneWizard() {
   // "Conectar ao Flow"; ela vira o padrão aqui e pode ser trocada neste projeto.
   // O vídeo anexado fica só nesta sessão (para mostrar os quadros); a copy dele já fica no projeto.
   const [refFile, setRefFile] = useState<File | null>(null);
+  const refGender = useReferenceGender(refFile);
+  // O vídeo novo muda quem aparece: a escolha volta ao padrão (manter) e passa a ser a pessoa vista no vídeo.
+  useEffect(() => { if (refFile) setP((cur) => ((cur.presenter ?? "") === refGender.gender ? cur : { ...cur, presenter: refGender.gender })); }, [refGender.gender, refFile]);
   const [speech, setSpeech] = useState<"ok" | "nospeech">("ok");
   const { data: authSession } = useSession();
   const isAdminUser = Boolean((authSession?.user as { is_admin?: boolean } | undefined)?.is_admin);
@@ -1487,6 +1493,7 @@ export function CloneWizard() {
         )}
 
         {!ready && (refFile || p.reference.trim()) && <ReferenceSummary file={refFile} transcript={p.reference} reading={busy === "upload"} noSpeech={speech === "nospeech"} />}
+        {!ready && refFile && p.avatarMode !== "own" && <PresenterChoice detected={refGender.gender} reading={refGender.reading} value={p.presenter ?? ""} onChange={(value) => patch({ presenter: value })} />}
 
         {!ready && !working && askProduct && (
           <section aria-label="Produto" className="space-y-4 rounded-[18px] border border-[#A98BFF]/40 bg-card p-5">
@@ -1872,6 +1879,7 @@ export function CloneWizard() {
               </Button>
               <LinkVideo onFile={(file) => void readReference(file)} disabled={working} />
               {(refFile || p.reference.trim()) && <ReferenceSummary file={refFile} transcript={p.reference} reading={busy === "upload"} noSpeech={speech === "nospeech"} />}
+              {refFile && p.avatarMode !== "own" && <PresenterChoice detected={refGender.gender} reading={refGender.reading} value={p.presenter ?? ""} onChange={(value) => patch({ presenter: value })} />}
               <Field label="Transcrição do vídeo (ou descreva o que acontece)" hint="Preenchida sozinha ao escolher o vídeo. Você pode editar ou colar o texto direto.">
                 <textarea value={p.reference} onChange={(event) => patch({ reference: event.target.value })} rows={5} maxLength={4000} className={inputClass} />
               </Field>
