@@ -1,3 +1,33 @@
+export type AiProblem = { kind: "no_credits" | "key_invalid" | "quota" | "tokens"; provider: string };
+
+const BILLING: Record<string, string> = {
+  openai: "https://platform.openai.com/settings/organization/billing",
+  anthropic: "https://console.anthropic.com/settings/billing",
+  gemini: "https://aistudio.google.com/apikey",
+};
+export const aiBillingUrl = (provider: string) => BILLING[provider] ?? "";
+
+/** Descobre se o erro é um problema de conta/chave/limite da IA (e de qual provedor). */
+export function aiProblemOf(detail: unknown): AiProblem | null {
+  if (typeof detail !== "string") return null;
+  const problem = aiProblemOf(detail);
+  if (problem) announceAiProblem(problem);
+  const provider = /:(openai|anthropic|gemini)/.exec(detail)?.[1] ?? "";
+  if (/AI_NO_CREDITS/.test(detail)) return { kind: "no_credits", provider };
+  if (/AI_KEY_INVALID/.test(detail)) return { kind: "key_invalid", provider };
+  if (/AI_QUOTA/.test(detail)) return { kind: "quota", provider };
+  if (/TOKENS_EXHAUSTED/.test(detail)) return { kind: "tokens", provider };
+  return null;
+}
+
+let lastAnnounce = 0;
+/** Abre o aviso em janela (popup) em qualquer tela. Evita repetir o mesmo aviso em seguida. */
+export function announceAiProblem(problem: AiProblem) {
+  if (typeof window === "undefined" || Date.now() - lastAnnounce < 4000) return;
+  lastAnnounce = Date.now();
+  try { window.dispatchEvent(new CustomEvent("gv-ai-problem", { detail: problem })); } catch { /* sem janela */ }
+}
+
 /** Mensagem clara em português quando a falha é da IA (API), da chave ou do limite de uso. Devolve null se o erro não é desse tipo. */
 export function aiErrorText(detail: unknown): string | null {
   if (typeof detail !== "string") return null;

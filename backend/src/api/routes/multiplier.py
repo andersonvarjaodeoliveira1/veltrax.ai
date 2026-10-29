@@ -1086,9 +1086,11 @@ async def _generate_copy(product: str, tone: str, model: Any = None) -> dict[str
         raise HTTPException(status_code=504, detail="AI took too long. Try again.")
     except HTTPException:
         raise
-    except Exception:
+    except Exception as exc:
         logger.exception("multiplier script generation failed")
-        raise HTTPException(status_code=502, detail="Could not generate the texts. Try again.")
+        from ...ai_errors import ai_fail
+
+        raise ai_fail(exc, "Could not generate the texts. Try again.")
     data = result.output
     hooks = [_clip(item, 90) for item in data.hooks if item.strip()][:3]
     bodies = [_clip(item, 220) for item in data.bodies if item.strip()][:2]
@@ -1162,9 +1164,11 @@ async def _generate_video_prompts(items: list[dict[str, str]], model: Any = None
         raise HTTPException(status_code=504, detail="AI took too long. Try again.")
     except HTTPException:
         raise
-    except Exception:
+    except Exception as exc:
         logger.exception("multiplier video prompts failed")
-        raise HTTPException(status_code=502, detail="Could not generate the texts. Try again.")
+        from ...ai_errors import ai_fail
+
+        raise ai_fail(exc, "Could not generate the texts. Try again.")
     prompts = [_clip(value, 900) for value in result.output.prompts if value.strip()]
     if len(prompts) < len(items):
         raise HTTPException(status_code=502, detail="Could not generate the texts. Try again.")

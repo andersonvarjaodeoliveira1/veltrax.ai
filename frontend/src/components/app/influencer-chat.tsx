@@ -447,7 +447,7 @@ export function InfluencerChat() {
   const lower = chosen.id === "lower";
 
   async function fail(response: Response) {
-    try { const data = await response.json(); setError(data?.detail === "TOKENS_EXHAUSTED" ? t("tokens") : aiErrorText(data?.detail) ?? t("error")); } catch { setError(t("error")); }
+    try { const data = await response.json(); const ai = aiErrorText(data?.detail); setError(data?.detail === "TOKENS_EXHAUSTED" ? t("tokens") : ai ?? t("error")); } catch { setError(t("error")); }
   }
 
   function reset() {

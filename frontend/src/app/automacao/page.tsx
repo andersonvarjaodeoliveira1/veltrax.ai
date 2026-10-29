@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import { FlowLibrary } from "@/components/app/flow-library";
 import { CloneWizard } from "@/components/app/clone-wizard";
+import { aiErrorText } from "@/lib/ai-errors";
 
 type Status = "copy" | "awaiting" | "ready";
 type Creative = {
@@ -56,6 +57,8 @@ function load(): Saved {
 
 function ptError(detail: unknown) {
   if (typeof detail !== "string") return "Não foi possível gerar os textos. Tente de novo.";
+  const ai = aiErrorText(detail);
+  if (ai) return ai;
   if (/Describe the product/i.test(detail)) return "Descreva o produto em pelo menos uma frase.";
   if (/Too many AI requests/i.test(detail)) return "Muitos pedidos à IA em pouco tempo. Tente de novo daqui a pouco.";
   if (/AI is not configured/i.test(detail)) return "A IA não está disponível agora.";

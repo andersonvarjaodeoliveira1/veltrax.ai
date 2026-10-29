@@ -26,6 +26,7 @@ import { Kbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
 import { DISPLAY_NAME } from "@/lib/site";
 import { useI18n } from "@/lib/i18n";
+import { AiProblemDialog } from "@/components/app/ai-problem-dialog";
 
 type NavItem = { href: string; label: string; icon: typeof Film; match: (path: string) => boolean; external?: boolean; badge?: string; group?: string; sub?: string; tile?: boolean; primary?: boolean };
 
@@ -195,6 +196,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </header> : null}
         {user ? <TestBanner enabled={!admin} /> : null}
         {user ? <SecurityWatch enabled={!admin} /> : null}
+        {user ? <AiProblemDialog /> : null}
         {children}
         {user ? <div aria-hidden className="h-24 shrink-0" /> : null}
       </div>
