@@ -329,6 +329,14 @@ def _ai_fail(exc: Exception | None, fallback: str) -> HTTPException:
     return HTTPException(status_code=502, detail=fallback)
 
 
+def _blame(own_error: Exception | None, last_error: Exception | None) -> Exception | None:
+    """Se a chave própria da pessoa foi recusada ou está sem créditos, é esse o motivo que ela precisa ver
+    (e não o limite de uma reserva que só entrou depois)."""
+    if own_error is not None and (_is_no_credit_error(own_error) or _is_key_error(own_error)):
+        return own_error
+    return last_error
+
+
 async def _fallback_models() -> list[Any]:
     """Other Google models have their own free quota: used only when the main one hits its limit."""
     from ...ai import _build_transcript_model
@@ -372,6 +380,7 @@ async def _run(system: str, output_type: type[BaseModel], prompt: str, model: An
         reserve = house_models() if explicit is None else []
         candidates = own + [model] + reserve + (await _fallback_models() if explicit is None else [])
     last_error: Exception | None = None
+    own_error: Exception | None = None
     for index, candidate in enumerate(candidates):
         agent = Agent(candidate, output_type=output_type, system_prompt=system, output_retries=2)
         try:
@@ -386,14 +395,16 @@ async def _run(system: str, output_type: type[BaseModel], prompt: str, model: An
             raise
         except Exception as exc:
             last_error = exc
+            if candidate in own and own_error is None:
+                own_error = exc
             if index + 1 < len(candidates):
                 # Qualquer falha de um modelo (cota, chave sem saldo, modelo indisponível) passa para o próximo.
                 logger.warning("clone plan: %s failed (%s: %s), trying the next model", candidate, type(exc).__name__, str(exc)[:300])
                 continue
             logger.exception("clone plan stage failed")
-            raise _ai_fail(exc, "Could not generate this step. Try again.")
+            raise _ai_fail(_blame(own_error, exc), "Could not generate this step. Try again.")
     logger.error("clone plan: every model failed: %s", last_error)
-    raise _ai_fail(last_error, "Could not generate this step. Try again.")
+    raise _ai_fail(_blame(own_error, last_error), "Could not generate this step. Try again.")
 
 
 
@@ -1226,6 +1237,7 @@ async def _run_parts(system: str, output_type: type[BaseModel], parts: list[Any]
     else:
         candidates = [model]
     last_error: Exception | None = None
+    own_error: Exception | None = None
     for index, candidate in enumerate(candidates):
         agent = Agent(candidate, output_type=output_type, system_prompt=system, output_retries=2)
         try:
@@ -1240,14 +1252,16 @@ async def _run_parts(system: str, output_type: type[BaseModel], parts: list[Any]
             raise
         except Exception as exc:
             last_error = exc
+            if candidate in own and own_error is None:
+                own_error = exc
             # Cota esgotada, modelo fora do ar ou que não aceita imagem: tenta o próximo da lista.
             if index + 1 < len(candidates):
                 logger.warning("clone product look: %s failed (%s), trying the next model", candidate, type(exc).__name__)
                 continue
             logger.exception("clone product look failed")
-            raise _ai_fail(exc, "Could not read the photos. Try again.")
+            raise _ai_fail(_blame(own_error, exc), "Could not read the photos. Try again.")
     logger.error("clone product look: every model failed: %s", last_error)
-    raise _ai_fail(last_error, "Could not read the photos. Try again.")
+    raise _ai_fail(_blame(own_error, last_error), "Could not read the photos. Try again.")
 
 
 # ---------------------------------------------------------------------------
