@@ -700,7 +700,7 @@ test("a single sentence answers several quest questions at once", async () => {
 
 test("shows the created videos panel with time, remaining, progress, photo and download arrows", async () => {
   vi.stubGlobal("fetch", vi.fn(async (url: string) => {
-    if (String(url).includes("/flow-videos")) return new Response(JSON.stringify({ videos: [{ id: "abc", file: "Video01_Cena01.mp4" }] }), { status: 200 });
+    if (String(url).includes("/flow-videos")) return new Response(JSON.stringify({ videos: [{ id: "abc", file: "Video01_Cena01.mp4", created_at: new Date().toISOString() }] }), { status: 200 });
     return new Response(JSON.stringify({ detail: "nope" }), { status: 500 });
   }));
   window.localStorage.setItem("gv-clonagem-view-v2", "simple");

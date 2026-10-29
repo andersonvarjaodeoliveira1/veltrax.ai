@@ -44,14 +44,22 @@ export function FlowRunPanel({ onRetake, onVariations }: { onRetake: (vbase: num
       try {
         const response = await fetch("/api/multiplier/flow-videos", { cache: "no-store" });
         if (!response.ok) return;
-        const list = ((await response.json()).videos ?? []) as { id: string; file: string }[];
-        if (!stop) setFlowFiles(Object.fromEntries(list.map((v) => [v.file, v.id])));
+        const list = ((await response.json()).videos ?? []) as { id: string; file: string; created_at?: string }[];
+        // Só vale o que foi enviado nesta geração: criativos antigos têm os mesmos nomes (Video01_Cena01.mp4) e mostrariam a cena errada.
+        // A lista vem do mais novo para o mais antigo: fica o mais novo de cada nome.
+        const since = (flowProg.startedAt || 0) - 30_000;
+        const mine: Record<string, string> = {};
+        for (const v of list) {
+          if (since > 0 && (!v.created_at || Date.parse(v.created_at) < since)) continue;
+          if (!(v.file in mine)) mine[v.file] = v.id;
+        }
+        if (!stop) setFlowFiles(mine);
       } catch { /* sem lista: o painel segue sem as setas */ }
     };
     void load();
     const timer = flowActive ? window.setInterval(load, 6000) : 0;
     return () => { stop = true; if (timer) window.clearInterval(timer); };
-  }, [flowProg?.total, flowProg?.done, flowActive]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [flowProg?.total, flowProg?.done, flowProg?.startedAt, flowActive]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const onMsg = (event: MessageEvent) => {
       if (event.source !== window || event.data?.source !== "clipgringa-flow" || event.data?.type !== "progress" || !event.data.data) return;

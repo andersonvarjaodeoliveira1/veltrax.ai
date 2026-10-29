@@ -60,3 +60,22 @@ describe("FlowRunPanel · variações ao terminar", () => {
     expect(screen.queryByTestId("ask-variations")).toBeNull();
   });
 });
+
+describe("FlowRunPanel · só a geração atual", () => {
+  it("não mostra o vídeo de um criativo antigo que tem o mesmo nome de arquivo", async () => {
+    const old = new Date(Date.now() - 3 * 3600_000).toISOString();
+    const fresh = new Date().toISOString();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ videos: [
+      { id: "novo", file: "b.mp4", created_at: fresh },
+      { id: "antigo-a", file: "a.mp4", created_at: old },
+      { id: "antigo-b", file: "b.mp4", created_at: old },
+    ] }))));
+    render(<FlowRunPanel onRetake={() => {}} />);
+    send(progress(null));
+    // a cena 2 (b.mp4) tem vídeo novo; a cena 1 (a.mp4) só tem o antigo e não pode aparecer
+    expect(await screen.findByLabelText("Assistir a cena 2 do vídeo 1")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Assistir a cena 1 do vídeo 1")).not.toBeInTheDocument();
+    expect(document.querySelector('video[src*="antigo"]')).toBeNull();
+    expect(document.querySelector('video[src*="/novo/"]')).not.toBeNull();
+  });
+});
