@@ -8,7 +8,18 @@ it("abre a janela explicando que a conta da OpenAI está sem créditos", async (
   render(<AiProblemDialog />);
   act(() => { window.dispatchEvent(new CustomEvent("gv-ai-problem", { detail: { kind: "no_credits", provider: "openai" } })); });
   const box = await screen.findByTestId("ai-problem");
-  expect(box).toHaveTextContent("sem créditos");
+  expect(box).toHaveTextContent("saldo da sua chave da OpenAI (ChatGPT) acabou");
   expect(box).toHaveTextContent("assinatura do ChatGPT");
-  expect(screen.getByText("Abrir a conta no provedor")).toHaveAttribute("href", expect.stringContaining("platform.openai.com"));
+  expect(screen.getByRole("link", { name: "Colocar saldo na OpenAI (ChatGPT)" })).toHaveAttribute("href", expect.stringContaining("platform.openai.com"));
+});
+
+it("cada opção traz o seu próprio botão", async () => {
+  render(<AiProblemDialog />);
+  act(() => { window.dispatchEvent(new CustomEvent("gv-ai-problem", { detail: { kind: "no_credits", provider: "openai" } })); });
+  const box = await screen.findByTestId("ai-problem");
+  expect(box).toHaveTextContent("Opção 1");
+  expect(box).toHaveTextContent("Opção 3");
+  expect(screen.getByRole("link", { name: "Pegar chave do Gemini" })).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Abrir Minhas APIs" })).toHaveAttribute("href", "/minhas-apis");
+  expect(screen.getByRole("link", { name: "Chamar o administrador" })).toBeInTheDocument();
 });

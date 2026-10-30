@@ -7,38 +7,86 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { accountReasonText, ACCOUNT_SITE_NAME, aiBillingUrl, type AiProblem } from "@/lib/ai-errors";
 import { ADMIN_WHATSAPP_URL } from "@/lib/token-balance";
 
-const NAMES: Record<string, string> = { openai: "OpenAI (ChatGPT)", anthropic: "Anthropic (Claude)", gemini: "Google (Gemini)" };
+const NAMES: Record<string, string> = {
+  openai: "OpenAI (ChatGPT)", anthropic: "Anthropic (Claude)", gemini: "Google (Gemini)", openrouter: "OpenRouter", huggingface: "Hugging Face", ollama: "Ollama",
+};
 
-function copy(problem: AiProblem) {
+type Action = { label: string; href: string; external?: boolean };
+type Choice = { title: string; text: string; action: Action[] };
+type Copy = { title: string; text: string; choices: Choice[] };
+
+const GEMINI_KEY: Action = { label: "Pegar chave do Gemini", href: "https://aistudio.google.com/apikey", external: true };
+const MY_APIS: Action = { label: "Abrir Minhas APIs", href: "/minhas-apis" };
+const ADMIN: Action = { label: "Chamar o administrador", href: ADMIN_WHATSAPP_URL, external: true };
+
+/** Textos simples: o que aconteceu, e cada saída com o botão dela logo embaixo (a pessoa clica no botão da opção que escolher). */
+function copy(problem: AiProblem): Copy {
   if (problem.kind === "account") {
     const name = ACCOUNT_SITE_NAME[problem.provider] ?? "da IA";
     return {
       title: `Não consegui gerar pela sua conta do ${name}`,
       text: accountReasonText(problem.provider, problem.reason ?? "failed"),
-      steps: [`Confira se você está logado no ${name} neste Chrome.`, "Deixe o ClipGringa aberto e a extensão ligada enquanto gera.", "Se o problema continuar, conecte uma chave de API em Minhas APIs ou chame o administrador."],
+      choices: [
+        { title: "Conferir a sua conta", text: `Abra o ${name} neste Chrome, entre na conta e deixe o ClipGringa aberto. Depois é só gerar de novo.`, action: [] },
+        { title: "Usar uma chave de API", text: "Conecte uma chave em Minhas APIs e a geração não depende da conta aberta no navegador.", action: [MY_APIS] },
+        { title: "Pedir ajuda", text: "Se continuar, fale com a gente.", action: [ADMIN] },
+      ],
     };
   }
-  const who = NAMES[problem.provider] ?? "da IA";
-  if (problem.kind === "no_credits") return {
-    title: `Sua conta ${NAMES[problem.provider] ? `da ${who}` : "da IA"} está sem créditos`,
-    text: `A chave que você conectou está certa, mas o saldo dela na ${NAMES[problem.provider] ?? "plataforma da IA"} acabou, e quem cobra é a própria plataforma, não o ClipGringa.${problem.provider === "openai" ? " A assinatura do ChatGPT (Plus/Pro) não inclui créditos da API: a API é cobrada à parte." : ""}`,
-    steps: ["Adicione créditos na sua conta do provedor (botão abaixo).", "Ou use uma chave do Google Gemini, que tem uma cota grátis limitada: entre em aistudio.google.com/apikey, clique em “Create API key” e cole em Minhas APIs.", "Ou fale com o administrador para liberar tokens."],
-  };
+  const name = NAMES[problem.provider];
+  const who = name ?? "da IA";
+  if (problem.kind === "no_credits") {
+    const billing = aiBillingUrl(problem.provider);
+    return {
+      title: name ? `O saldo da sua chave da ${name} acabou` : "O saldo da sua chave de IA acabou",
+      text: "A chave está certa, mas não tem mais saldo para gerar. Escolha uma das opções abaixo e clique no botão dela.",
+      choices: [
+        ...(billing && problem.provider !== "gemini" ? [{
+          title: `Colocar saldo na ${name ?? "plataforma da IA"}`,
+          text: `Abre o site de cobrança. Lá você adiciona crédito e depois volta aqui para gerar de novo.${problem.provider === "openai" ? " Atenção: a assinatura do ChatGPT (Plus/Pro) não vale para isso; a API é cobrada à parte." : ""}`,
+          action: [{ label: `Colocar saldo na ${name ?? "plataforma"}`, href: billing, external: true }],
+        }] : []),
+        ...(problem.provider !== "gemini" ? [{
+          title: "Usar o Gemini, do Google",
+          text: "Tem uma cota grátis limitada. Crie uma chave (clique em “Create API key”) e cole em Minhas APIs.",
+          action: [GEMINI_KEY, MY_APIS],
+        }] : [{ title: "Tentar outra chave", text: "A cota do Gemini acabou por hoje. Cole outra chave em Minhas APIs ou espere ela voltar.", action: [MY_APIS] }]),
+        { title: "Pedir ajuda", text: "O administrador pode liberar tokens para você gerar sem chave.", action: [ADMIN] },
+      ],
+    };
+  }
   if (problem.kind === "key_invalid") return {
-    title: "A IA recusou a sua chave",
-    text: "A chave conectada foi recusada pelo provedor: pode estar errada, revogada, sem permissão ou com a cobrança pendente.",
-    steps: ["Confira ou cole a chave de novo em Minhas APIs.", "Veja no painel do provedor se a conta está ativa e com a cobrança em dia."],
+    title: `A IA ${who} recusou a sua chave`,
+    text: "A chave que você colou não foi aceita: pode estar errada, apagada ou com a cobrança pendente.",
+    choices: [
+      { title: "Colar a chave de novo", text: "Copie a chave inteira no site da IA e cole outra vez em Minhas APIs.", action: [MY_APIS] },
+      { title: "Conferir a cobrança", text: "No site da IA, veja se a conta está ativa e com o pagamento em dia.", action: aiBillingUrl(problem.provider) ? [{ label: "Abrir o site da IA", href: aiBillingUrl(problem.provider), external: true }] : [] },
+      { title: "Pedir ajuda", text: "Se não resolver, fale com a gente.", action: [ADMIN] },
+    ],
   };
   if (problem.kind === "quota") return {
-    title: "A IA atingiu o limite de uso",
-    text: "O limite de uso da API da IA foi atingido agora. Não é um erro seu, e costuma voltar em alguns minutos.",
-    steps: ["Espere alguns minutos e tente de novo.", "Para não depender desse limite, conecte a sua própria chave em Minhas APIs."],
+    title: "A IA está no limite de uso agora",
+    text: "Não é erro seu. O limite costuma voltar em poucos minutos.",
+    choices: [
+      { title: "Esperar e tentar de novo", text: "Aguarde uns minutos e gere outra vez.", action: [] },
+      { title: "Usar a sua própria chave", text: "Com a sua chave você não depende desse limite.", action: [MY_APIS] },
+    ],
   };
   return {
     title: "Seus tokens acabaram",
-    text: "Os tokens da sua conta chegaram a zero, por isso a IA não pôde responder.",
-    steps: ["Gere pela sua conta do Gemini, ChatGPT ou Claude: conecte pela extensão em Minhas APIs.", "Ou conecte a sua própria chave de API e use sem gastar tokens.", "Ou fale com o administrador para liberar mais tokens."],
+    text: "Os tokens da sua conta chegaram a zero, por isso a IA não pôde responder. Escolha uma das opções abaixo.",
+    choices: [
+      { title: "Usar a sua conta de IA", text: "Gemini, ChatGPT ou Claude: conecte pela extensão ou com uma chave, sem gastar tokens.", action: [MY_APIS] },
+      { title: "Pedir mais tokens", text: "O administrador pode liberar.", action: [ADMIN] },
+    ],
   };
+}
+
+function ActionButton({ action, onDone }: { action: Action; onDone: () => void }) {
+  const cls = "inline-block rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-4 py-2 text-xs font-medium text-white";
+  return action.external
+    ? <a href={action.href} target="_blank" rel="noopener noreferrer" className={cls}>{action.label}</a>
+    : <Link href={action.href} onClick={onDone} className={cls}>{action.label}</Link>;
 }
 
 /** Janela de aviso para falhas da IA que dependem da conta da pessoa: sem créditos, chave recusada, limite ou tokens. */
@@ -51,10 +99,9 @@ export function AiProblemDialog() {
   }, []);
   if (!problem) return null;
   const c = copy(problem);
-  const billing = aiBillingUrl(problem.provider);
   return (
     <Dialog open onOpenChange={(open) => { if (!open) setProblem(null); }}>
-      <DialogContent data-testid="ai-problem" className="max-w-md border-[#F5B454]/40 bg-card">
+      <DialogContent data-testid="ai-problem" className="max-h-[90vh] max-w-md overflow-y-auto border-[#F5B454]/40 bg-card">
         <div className="flex items-start gap-3">
           <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[#F5B454]/15 text-[#F5B454]"><AlertTriangle className="size-5" /></span>
           <div className="space-y-1">
@@ -62,19 +109,17 @@ export function AiProblemDialog() {
             <DialogDescription>{c.text}</DialogDescription>
           </div>
         </div>
-        <ol className="space-y-1.5 text-sm">
-          {c.steps.map((step, i) => <li key={step} className="flex gap-2"><span className="text-[#A98BFF]">{i + 1}.</span>{step}</li>)}
-        </ol>
-        <div className="flex flex-wrap justify-end gap-2">
-          {billing && problem.kind !== "quota" && problem.kind !== "tokens" && (
-            <a href={billing} target="_blank" rel="noopener noreferrer" className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-4 py-2 text-xs font-medium text-white">Abrir a conta no provedor</a>
-          )}
-          {(problem.kind === "no_credits" || problem.kind === "key_invalid") && problem.provider !== "gemini" && (
-            <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="rounded-full border border-[#5BD69A]/50 px-4 py-2 text-xs font-medium text-[#5BD69A]">Pegar chave do Gemini</a>
-          )}
-          <Link href="/minhas-apis" onClick={() => setProblem(null)} className="rounded-full border border-[#7B3FE4]/60 px-4 py-2 text-xs font-medium text-[#C9BBFA]">Abrir Minhas APIs</Link>
-          <a href={ADMIN_WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className="rounded-full border border-border px-4 py-2 text-xs font-medium">Chamar o administrador</a>
-        </div>
+        <ul className="space-y-2.5">
+          {c.choices.map((choice, i) => (
+            <li key={choice.title} className="space-y-2 rounded-[14px] border border-border bg-background/40 p-3">
+              <p className="text-sm font-semibold"><span className="mr-1.5 text-[#A98BFF]">Opção {i + 1}</span>{choice.title}</p>
+              <p className="text-xs text-muted-foreground">{choice.text}</p>
+              {choice.action.length > 0 && (
+                <div className="flex flex-wrap gap-2">{choice.action.map((a) => <ActionButton key={a.label} action={a} onDone={() => setProblem(null)} />)}</div>
+              )}
+            </li>
+          ))}
+        </ul>
       </DialogContent>
     </Dialog>
   );
