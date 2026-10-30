@@ -45,6 +45,7 @@ class _Job:
     system: str
     prompt: str
     future: asyncio.Future[str]
+    images: list[dict[str, str]] = field(default_factory=list)
 
 
 @dataclass
@@ -107,7 +108,10 @@ async def poll(user_id: str, site: str, wait: float = 20.0) -> dict[str, str] | 
     while True:
         if slot.queue:
             job = slot.queue.pop(0)
-            return {"id": job.id, "system": job.system, "prompt": job.prompt}
+            out: dict[str, Any] = {"id": job.id, "system": job.system, "prompt": job.prompt}
+            if job.images:
+                out["images"] = job.images
+            return out
         left = deadline - time.monotonic()
         if left <= 0:
             return None
@@ -135,10 +139,10 @@ def submit_result(user_id: str, job_id: str, text: str = "", error: str = "") ->
     return True
 
 
-async def ask(user_id: str, system: str, prompt: str, timeout: float = ASK_TIMEOUT) -> str:
+async def ask(user_id: str, system: str, prompt: str, timeout: float = ASK_TIMEOUT, images: list[dict[str, str]] | None = None) -> str:
     slot = _slot(user_id)
     site = slot.site or "gemini"
-    job = _Job(id=uuid.uuid4().hex, system=system, prompt=prompt, future=asyncio.get_running_loop().create_future())
+    job = _Job(id=uuid.uuid4().hex, system=system, prompt=prompt, future=asyncio.get_running_loop().create_future(), images=images or [])
     slot.jobs[job.id] = job
     slot.queue.append(job)
     slot.in_flight += 1
@@ -218,6 +222,37 @@ def path_of_model(model: Any) -> str:
     return "plan"
 
 
+MAX_IMAGES = 8
+MAX_IMAGE_BYTES = 6_000_000
+
+
+def images_of(content: Any) -> list[dict[str, str]]:
+    """Imagens (bytes ou data URL) de um pedido, prontas para a extensão colar no chat. Limita quantidade e tamanho."""
+    import base64
+
+    if isinstance(content, str):
+        return []
+    out: list[dict[str, str]] = []
+    total = 0
+    for item in content:
+        mime, b64 = "", ""
+        data = getattr(item, "data", None)
+        if isinstance(data, (bytes, bytearray)) and str(getattr(item, "media_type", "")).startswith("image/"):
+            mime, b64 = item.media_type, base64.b64encode(bytes(data)).decode()
+        else:
+            url = str(getattr(item, "url", "") or "")
+            m = re.match(r"data:(image/[\w.+-]+);base64,(.+)$", url, re.S)
+            if m:
+                mime, b64 = m.group(1), m.group(2)
+        if not b64:
+            continue
+        total += len(b64)
+        if total > MAX_IMAGE_BYTES or len(out) >= MAX_IMAGES:
+            break
+        out.append({"mime": mime, "data": b64})
+    return out
+
+
 def account_model(user_id: str | None) -> Any | None:
     """Modelo que gera pela conta da pessoa, ou None quando a página dela não está ligada."""
     site = ready_site(user_id)
@@ -229,6 +264,7 @@ def account_model(user_id: str | None) -> Any | None:
     async def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
         system = ""
         prompt = ""
+        images: list[dict[str, str]] = []
         notes: list[str] = []
         for message in messages:
             for part in getattr(message, "parts", []):
@@ -236,10 +272,11 @@ def account_model(user_id: str | None) -> Any | None:
                     system += part.content + "\n"
                 elif isinstance(part, UserPromptPart):
                     prompt = part.content if isinstance(part.content, str) else " ".join(str(c) for c in part.content if isinstance(c, str))
+                    images = images_of(part.content) or images
                 elif isinstance(part, RetryPromptPart):
                     notes = [str(part.content)[:400]]
         tool = info.output_tools[0] if info.output_tools else None
-        text = await ask(user_id, "", build_chat_prompt(system, prompt, tool.parameters_json_schema if tool else None, notes))
+        text = await ask(user_id, "", build_chat_prompt(system, prompt, tool.parameters_json_schema if tool else None, notes), images=images)
         if tool is None:
             from pydantic_ai.messages import TextPart
 

@@ -80,8 +80,9 @@ export async function probeSite(site: AccountSite, open = false): Promise<SiteSt
 }
 
 export type AskResult = { ok: boolean; text?: string; error?: string };
-export async function askAccount(site: AccountSite, prompt: string, timeoutMs = 100_000): Promise<AskResult> {
-  const reply = await bridgeCall<AskResult>("ai-ask", { site, prompt, timeoutMs }, "ai-answer", timeoutMs + 40_000);
+export type AskImage = { mime: string; data: string };
+export async function askAccount(site: AccountSite, prompt: string, timeoutMs = 100_000, images: AskImage[] = []): Promise<AskResult> {
+  const reply = await bridgeCall<AskResult>("ai-ask", { site, prompt, timeoutMs: timeoutMs + (images.length ? 40_000 : 0), images }, "ai-answer", timeoutMs + (images.length ? 40_000 : 0) + 40_000);
   return reply ?? { ok: false, error: "nopage" };
 }
 

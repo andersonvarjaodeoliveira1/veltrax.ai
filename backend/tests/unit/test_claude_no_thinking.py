@@ -56,3 +56,25 @@ def test_claude_falls_back_to_disabled_when_api_rejects_thinking(monkeypatch):
     except Exception:
         pass
     assert seen[:2] == ["between_tools", "disabled"]
+
+
+def test_relay_carries_images_to_the_account_job():
+    import asyncio as aio
+    from pydantic_ai.messages import BinaryContent
+
+    from src import ai_relay
+
+    content = ["descreva", BinaryContent(data=b"\xff\xd8abc", media_type="image/jpeg")]
+    imgs = ai_relay.images_of(content)
+    assert imgs and imgs[0]["mime"] == "image/jpeg" and imgs[0]["data"]
+    assert ai_relay.images_of("só texto") == []
+
+    async def go():
+        ai_relay.heartbeat("u1", "gemini")
+        task = aio.create_task(ai_relay.ask("u1", "", "oi", timeout=2, images=imgs))
+        job = await ai_relay.poll("u1", "gemini", 1)
+        assert job and job["images"] == imgs
+        ai_relay.submit_result("u1", job["id"], "ok")
+        assert await task == "ok"
+
+    aio.run(go())

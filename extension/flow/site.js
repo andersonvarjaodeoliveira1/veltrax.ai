@@ -138,7 +138,7 @@
       const id = String(d.id || "");
       const reply = (data) => window.postMessage({ source: "clipgringa-flow", type: "ai-answer", id, data }, window.location.origin);
       try {
-        chrome.runtime.sendMessage({ type: "clipgringa-ai-ask", site: String(d.site || ""), prompt: String(d.prompt || "").slice(0, 60000), timeoutMs: Number(d.timeoutMs) || 100000 }, (resp) => {
+        chrome.runtime.sendMessage({ type: "clipgringa-ai-ask", site: String(d.site || ""), prompt: String(d.prompt || "").slice(0, 60000), images: Array.isArray(d.images) ? d.images.slice(0, 8) : [], timeoutMs: Number(d.timeoutMs) || 100000 }, (resp) => {
           void chrome.runtime.lastError;
           reply(resp || { ok: false, error: "nopage" });
         });

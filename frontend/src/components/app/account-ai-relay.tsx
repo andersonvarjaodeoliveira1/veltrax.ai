@@ -62,14 +62,14 @@ export function AccountAiRelay() {
       try {
         if (!(await extensionHasAi())) return;
         while (alive()) {
-          let job: { id: string; prompt: string } | null = null;
+          let job: { id: string; prompt: string; images?: { mime: string; data: string }[] } | null = null;
           try {
             const response = await fetch("/api/multiplier/ai-relay/poll", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ site, wait: 20 }), cache: "no-store" });
             if (!response.ok) { await sleep(10_000); continue; }
-            job = ((await response.json()) as { job: { id: string; prompt: string } | null }).job;
+            job = ((await response.json()) as { job: { id: string; prompt: string; images?: { mime: string; data: string }[] } | null }).job;
           } catch { await sleep(5_000); continue; }
           if (!job) continue;
-          const result = await askAccount(site, job.prompt);
+          const result = await askAccount(site, job.prompt, 100_000, job.images ?? []);
           try {
             await fetch("/api/multiplier/ai-relay/result", {
               method: "POST", headers: JSON_HEADERS,

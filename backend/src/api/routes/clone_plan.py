@@ -1206,7 +1206,7 @@ async def _run_parts(system: str, output_type: type[BaseModel], parts: list[Any]
     own: list[Any] = []
     if model is None:
         from ...integrations import user_models
-        own = user_models(include_account=False)
+        own = user_models()
         from ...usage import server_blocked
 
         if server_blocked() and not own:

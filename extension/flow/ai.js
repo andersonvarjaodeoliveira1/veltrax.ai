@@ -117,13 +117,49 @@
     return flat.slice(at + marker.length).trim();
   }
 
-  async function run(prompt, timeoutMs) {
+  /** Cola as imagens no campo do chat (como se a pessoa colasse prints). Devolve quantas o site aceitou. */
+  async function attachImages(composer, images) {
+    const files = [];
+    (images || []).slice(0, 8).forEach((img, i) => {
+      try {
+        const bin = atob(String(img.data || ""));
+        const bytes = new Uint8Array(bin.length);
+        for (let k = 0; k < bin.length; k += 1) bytes[k] = bin.charCodeAt(k);
+        const mime = /^image\//.test(img.mime) ? img.mime : "image/jpeg";
+        files.push(new File([bytes], `quadro-${i + 1}.${mime.split("/")[1].replace("jpeg", "jpg")}`, { type: mime }));
+      } catch (_e) { /* imagem inválida: ignora */ }
+    });
+    if (!files.length) return 0;
+    composer.focus();
+    const data = new DataTransfer();
+    files.forEach((f) => data.items.add(f));
+    composer.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+    // plano B: arrastar para dentro do campo
+    await sleep(1500);
+    const attached = () => document.querySelectorAll('img[src^="blob:"], [data-testid*="attachment"], [class*="attachment"], uploader-file-preview, [class*="file-preview"]').length;
+    if (!attached()) {
+      const drop = new DataTransfer();
+      files.forEach((f) => drop.items.add(f));
+      ["dragenter", "dragover", "drop"].forEach((type) => composer.dispatchEvent(new DragEvent(type, { dataTransfer: drop, bubbles: true, cancelable: true })));
+      await sleep(1500);
+    }
+    // espera o envio dos arquivos terminar (o botão de enviar só habilita depois)
+    for (let i = 0; i < 40 && !attached(); i += 1) await sleep(500);
+    await sleep(1200);
+    return attached() ? files.length : 0;
+  }
+
+  async function run(prompt, timeoutMs, images) {
     const s = await waitState(25000);
     if (s === "blocked") return { ok: false, error: "blocked" };
     if (s === "login") return { ok: false, error: "login" };
     const composer = first(SEL.composer);
     if (!composer) return { ok: false, error: "nopage:sem campo de texto" };
     const before = replyCount();
+    if (images && images.length) {
+      const n = await attachImages(composer, images);
+      if (!n) return { ok: false, error: "failed:o site não aceitou as imagens" };
+    }
     setText(composer, prompt);
     await sleep(500);
     await send(composer);
@@ -153,7 +189,7 @@
       return true;
     }
     if (message.type === "clipgringa-ai-run" && message.site === SITE) {
-      run(String(message.prompt || ""), Number(message.timeoutMs) || 100000)
+      run(String(message.prompt || ""), Number(message.timeoutMs) || 100000, message.images)
         .then(sendResponse)
         .catch((e) => sendResponse({ ok: false, error: "failed:" + String((e && e.message) || e).slice(0, 120) }));
       return true;

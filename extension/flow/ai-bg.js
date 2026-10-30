@@ -60,12 +60,12 @@ function aiCloseLater(site, ms) {
 
 chrome.tabs.onRemoved.addListener((id) => { for (const site of Object.keys(aiOwned)) if (aiOwned[site].tabId === id) delete aiOwned[site]; });
 
-async function aiAsk(site, prompt, timeoutMs) {
+async function aiAsk(site, prompt, timeoutMs, images) {
   if (!AI_URLS[site]) return { ok: false, error: "failed:site desconhecido" };
   const keep = setInterval(() => chrome.runtime.getPlatformInfo(() => void chrome.runtime.lastError), 20000);
   try {
     const tabId = await aiOwnedTab(site);
-    const resp = await aiSendToTab(tabId, { type: "clipgringa-ai-run", site, prompt, timeoutMs });
+    const resp = await aiSendToTab(tabId, { type: "clipgringa-ai-run", site, prompt, timeoutMs, images: images || [] });
     aiCloseLater(site, 30000);
     return resp || { ok: false, error: "nopage" };
   } catch (e) {
@@ -94,7 +94,7 @@ async function aiProbe(site, open) {
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!message) return;
   if (message.type === "clipgringa-ai-ask") {
-    aiChain = aiChain.then(() => aiAsk(String(message.site || ""), String(message.prompt || ""), Number(message.timeoutMs) || 100000)).then((r) => { sendResponse(r); }, (e) => { sendResponse({ ok: false, error: "failed:" + String((e && e.message) || e).slice(0, 120) }); });
+    aiChain = aiChain.then(() => aiAsk(String(message.site || ""), String(message.prompt || ""), Number(message.timeoutMs) || 100000, message.images)).then((r) => { sendResponse(r); }, (e) => { sendResponse({ ok: false, error: "failed:" + String((e && e.message) || e).slice(0, 120) }); });
     return true;
   }
   if (message.type === "clipgringa-ai-probe-site") {
