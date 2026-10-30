@@ -236,6 +236,12 @@ def create_app(
         app.include_router(flow_videos_router)
     except Exception:  # pragma: no cover
         logging.getLogger(__name__).exception("Flow videos (beta) disabled")
+    try:  # BETA, isolated: vídeo final (juntar cenas, legenda e título)
+        from .api.routes.final_video import router as final_video_router
+
+        app.include_router(final_video_router)
+    except Exception:  # pragma: no cover
+        logging.getLogger(__name__).exception("Final video (beta) disabled")
     try:  # BETA, isolated: Clonagem de Vídeo
         from .api.routes.clone_plan import router as clone_router
 

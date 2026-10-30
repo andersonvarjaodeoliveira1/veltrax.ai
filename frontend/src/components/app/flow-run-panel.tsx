@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Download, ImageDown } from "lucide-react";
 import { TAKE_KINDS, type TakeKind } from "@/lib/take-kinds";
+import { FinalVideoMaker } from "@/components/app/final-video-maker";
 
 export type FlowProgress = {
   at: number; running: boolean; total: number; done: number; errors: number; phase: string; now: string;
@@ -132,6 +133,9 @@ export function FlowRunPanel({ onRetake, onVariations }: { onRetake: (vbase: num
             return (
               <div key={vi} className="space-y-2">
                 <p className="text-sm font-medium">{mine[0]?.vname ?? `Vídeo ${String(vi + 1).padStart(2, "0")}`} <span className="font-normal text-muted-foreground">· {doneN}/{mine.length} cenas</span></p>
+                {mine.length > 0 && doneN === mine.length && !flowProg.running && mine.every((j) => flowFiles[j.file]) && (
+                  <FinalVideoMaker videoIds={mine.map((j) => flowFiles[j.file])} defaultTitle="" />
+                )}
                 <ul className="grid gap-2 sm:grid-cols-2">
                   {mine.map((job) => {
                     const running = flowProg.running && flowProg.current?.vi === job.vi && flowProg.current?.si === job.si;
