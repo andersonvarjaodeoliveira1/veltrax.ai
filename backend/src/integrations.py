@@ -206,7 +206,7 @@ def current_keys() -> dict[str, str]:
     return _current_keys.get()
 
 
-CLAUDE_THINKING_TYPES = ("between_tools", "disabled")
+CLAUDE_THINKING_TYPES = ("between_tools", "disabled", "adaptive")
 
 
 def claude_model(name: str = "claude-sonnet-5-5", api_key: str | None = None) -> Any:
@@ -229,8 +229,13 @@ def claude_model(name: str = "claude-sonnet-5-5", api_key: str | None = None) ->
     class AnthropicModel(_Base):
         _idx = 0
 
-        def _settings_for(self, kind: str):
-            return AnthropicModelSettings(anthropic_thinking={"type": kind})
+        def _infer_tool_choice(self, tools, model_settings, model_request_parameters):  # type: ignore[override]
+            # Sonnet 5.5, Opus 5.5, Fable/Mythos 5.1 recusam tool_choice forçado (any/tool) com 400. Com "auto"
+            # o modelo chama a ferramenta de saída sozinho; se responder em texto o pydantic-ai pede de novo.
+            choice = super()._infer_tool_choice(tools, model_settings, model_request_parameters)
+            if choice and choice.get("type") in ("any", "tool"):
+                choice = {**choice, "type": "auto"}
+            return choice
 
         async def request(self, messages, model_settings, model_request_parameters):  # type: ignore[override]
             last: Exception | None = None

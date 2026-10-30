@@ -25,7 +25,7 @@ def test_claude_sends_thinking_between_tools_with_forced_tool(monkeypatch):
     except Exception:
         pass
     assert sent["thinking"] == {"type": "between_tools"}
-    assert sent["tool_choice"]["type"] in ("any", "tool")
+    assert sent["tool_choice"]["type"] == "auto"  # Sonnet 5.5 recusa tool_choice forçado
 
 
 def test_build_model_for_anthropic_name_sets_thinking():
