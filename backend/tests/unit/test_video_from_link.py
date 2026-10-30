@@ -4,8 +4,16 @@ from src.api.routes import clone_plan as cp
 def test_only_known_video_sites_over_https():
     for ok in ("https://www.tiktok.com/@a/video/1", "https://vm.tiktok.com/ZM123/", "https://www.instagram.com/reel/abc/", "https://youtu.be/dQw4w9WgXcQ", "https://www.youtube.com/watch?v=x", "https://x.com/u/status/1"):
         assert cp._is_link_video_url(ok), ok
-    for bad in ("http://www.tiktok.com/x", "https://evil.com/tiktok.com", "https://tiktok.com.evil.com/x", "https://localhost/video", "https://169.254.169.254/latest", "file:///etc/passwd", "ftp://tiktok.com/x"):
+    for bad in ("http://www.tiktok.com/x", "https://localhost/video", "https://169.254.169.254/latest", "https://10.0.0.5/v.mp4", "file:///etc/passwd", "ftp://tiktok.com/x"):
         assert not cp._is_link_video_url(bad), bad
+
+
+def test_any_public_https_link_is_accepted(monkeypatch):
+    monkeypatch.setattr(cp, "_public_https", lambda url: "intranet" not in url)
+    assert cp._is_link_video_url("https://meusite.com.br/videos/produto.mp4")
+    assert cp._is_link_video_url("https://www.kuaishou.com/short-video/1")
+    assert not cp._is_link_video_url("https://intranet.local/v.mp4")
+    assert not cp._is_link_video_url("http://meusite.com.br/v.mp4")
 
 
 def test_shopee_links_are_accepted_for_video():

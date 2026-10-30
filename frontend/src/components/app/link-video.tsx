@@ -95,7 +95,7 @@ export function LinkVideo({ onFile, onPhotos, photoLabel, disabled }: { onFile: 
       // A Shopee bloqueia o servidor, então cair no download pelo servidor só esconde o motivo real. Diz o que houve de verdade.
       setBusy(false);
       if (read.error === "login") setError("A Shopee pediu login ou uma verificação no seu navegador. Entre na Shopee (shopee.com.br) nesse mesmo Chrome e tente de novo.");
-      else if (read.error === "no-extension") setError("Não encontrei a extensão ClipGringa · Flow neste Chrome. Aperte Ctrl+F5 nesta página; se continuar, confira em chrome://extensions se ela está ligada (versão 1.18.0) e recarregue-a.");
+      else if (read.error === "no-extension") setError("Não encontrei a extensão ClipGringa · Flow neste Chrome. Aperte Ctrl+F5 nesta página; se continuar, confira em chrome://extensions se ela está ligada (versão 1.18.1) e recarregue-a.");
       else if (read.error === "notfound") setError("Esse anúncio da Shopee não existe mais ou saiu do ar. Confira o link e tente com outro produto.");
       else if (read.error === "empty") setError("Abri o anúncio, mas não achei vídeo nem fotos do vendedor. Confira se o link é de um produto e tente de novo.");
       else setError("A Shopee demorou ou bloqueou a leitura do anúncio. Tente de novo; se repetir, baixe a foto ou o vídeo e suba o arquivo.");
@@ -121,7 +121,7 @@ export function LinkVideo({ onFile, onPhotos, photoLabel, disabled }: { onFile: 
       <form className="flex flex-wrap gap-2 rounded-[26px] bg-card p-3" onSubmit={(event) => { event.preventDefault(); if (link.trim() && !busy) void load(); }}>
         <div className="relative min-w-0 flex-1">
           <Link2 aria-hidden className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <input value={link} onChange={(event) => setLink(event.target.value)} onPaste={(event) => { const text = event.clipboardData.getData("text").trim(); if (/^https?:\/\/\S+$/i.test(text) && !busy && !disabled) { event.preventDefault(); setLink(text); void load(text); } }} disabled={busy || disabled} aria-label="Link do vídeo para clonar" placeholder="Ou cole o link do vídeo (TikTok, Instagram, YouTube, Shopee)"
+          <input value={link} onChange={(event) => setLink(event.target.value)} onPaste={(event) => { const text = event.clipboardData.getData("text").trim(); if (/^https?:\/\/\S+$/i.test(text) && !busy && !disabled) { event.preventDefault(); setLink(text); void load(text); } }} disabled={busy || disabled} aria-label="Link do vídeo para clonar" placeholder="Ou cole o link do vídeo (qualquer site: TikTok, Instagram, YouTube, Shopee…)"
             className="w-full rounded-full border border-border bg-background py-2.5 pl-10 pr-4 text-sm" />
         </div>
         <button type="submit" disabled={busy || disabled || !link.trim()} className="inline-flex items-center gap-2 rounded-full border border-[#7B3FE4]/60 px-5 py-2.5 text-sm font-medium text-[#A98BFF] disabled:opacity-50">

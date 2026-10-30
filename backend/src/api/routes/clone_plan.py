@@ -2272,7 +2272,12 @@ def _is_link_video_url(url: str) -> bool:
 
     parsed = urlparse(url)
     host = (parsed.hostname or "").lower()
-    return parsed.scheme == "https" and any(host == h or host.endswith("." + h) for h in LINK_VIDEO_HOSTS + SHOPEE_HOSTS)
+    if parsed.scheme != "https":
+        return False
+    if any(host == h or host.endswith("." + h) for h in LINK_VIDEO_HOSTS + SHOPEE_HOSTS):
+        return True
+    # Qualquer outro site: o yt-dlp lê mais de mil sites e links diretos de vídeo. Só endereços públicos (nada de rede interna).
+    return _public_https(url)
 
 
 def _shopee_page_videos(html: str) -> list[str]:
@@ -2392,7 +2397,7 @@ async def video_from_link(request: Request, db: AsyncSession = Depends(get_db)):
     if url and not url.startswith("http"):
         url = "https://" + url
     if not url or not _is_link_video_url(url):
-        raise HTTPException(status_code=400, detail="Use um link de vídeo do TikTok, Instagram, YouTube, Shopee, Facebook, X ou Kwai.")
+        raise HTTPException(status_code=400, detail="Use um link https público de um vídeo (TikTok, Instagram, YouTube, Shopee, Facebook, X, Kwai ou outro site).")
 
     folder = tempfile.mkdtemp(prefix="linkvideo_")
     path: str | None = None

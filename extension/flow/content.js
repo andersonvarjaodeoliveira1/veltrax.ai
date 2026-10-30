@@ -266,27 +266,47 @@
     return all.sort((x, y) => dist(x) - dist(y))[0];
   };
 
+  /** Fecha avisos simples do Flow que ficam por cima da caixa (dicas, "entendi"). Não aceita termos nem permissões. */
+  async function dismissNotices() {
+    const dialogs = $$('[role="dialog"], [role="alertdialog"], .cdk-overlay-pane', document).filter(visible);
+    let closed = 0;
+    for (const d of dialogs) {
+      const ok = $$("button", d).filter(visible).find((x) => /^(entendi|got it|ok|fechar|close|dispensar|dismiss|agora não|not now|pular|skip)$/i.test(text(x).replace(/\s+/g, " ").trim()));
+      if (ok) { ok.click(); closed += 1; await sleep(500); }
+    }
+    return closed;
+  }
+
   async function pressGenerate() {
+    await dismissNotices();
     const btn = await waitFor(() => { const b = generateButton(); return b && !b.disabled && b.getAttribute("aria-disabled") !== "true" ? b : null; }, 8000);
-    if (!btn) throw new Error("O botão de gerar do Flow está desativado.");
+    if (!btn) throw new Error(`O botão de gerar do Flow está desativado. [${flowDiagnosis()}]`);
     const before = tileKeys();
+    const typed = text(editor() || document.body).trim();
     const startedNow = () => {
       const ed = editor();
       if (ed && !text(ed).trim()) return true; // o Flow limpa a caixa ao enviar
+      if (ed && typed && text(ed).trim() !== typed) return true; // a caixa mudou (ex.: voltou ao texto de exemplo)
       return firstTiles(12).some((t) => !before.has(t.src) || /%/.test(t.info));
     };
-    const settle = async () => { for (let i = 0; i < 10; i += 1) { await sleep(400); if (startedNow()) return true; } return false; };
+    const settle = async (n = 10) => { for (let i = 0; i < n; i += 1) { await sleep(400); if (startedNow()) return true; } return false; };
     btn.scrollIntoView({ block: "center" });
     const r = btn.getBoundingClientRect();
-    // 1) clique confiável (chrome.debugger)
+    // 1) clique confiável (chrome.debugger) — espera mais: o Flow às vezes demora a reagir
     try { await chrome.runtime.sendMessage({ type: "clipgringa-click", x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }); } catch (_) {}
-    if (await settle()) return;
-    // 2) clique direto com eventos completos
+    if (await settle(20)) return;
+    // 2) um aviso pode ter aparecido por cima: fecha e tenta de novo
+    if (await dismissNotices()) {
+      const again = generateButton();
+      if (again) { const q = again.getBoundingClientRect(); try { await chrome.runtime.sendMessage({ type: "clipgringa-click", x: Math.round(q.left + q.width / 2), y: Math.round(q.top + q.height / 2) }); } catch (_) {} }
+      if (await settle(12)) return;
+    }
+    // 3) clique direto com eventos completos
     for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) btn.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
     if (await settle()) return;
     btn.click();
     if (await settle()) return;
-    // 3) Enter de verdade na caixa de prompt, depois Enter simulado
+    // 4) Enter de verdade na caixa de prompt, depois Enter simulado
     const ed = editor();
     if (ed) {
       ed.focus();
@@ -295,7 +315,9 @@
       for (const type of ["keydown", "keypress", "keyup"]) ed.dispatchEvent(new KeyboardEvent(type, { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true }));
       if (await settle()) return;
     }
-    throw new Error("Escrevi o prompt, mas o Flow não aceitou o envio. Clique na seta do Flow uma vez; eu continuo daí.");
+    const cur = generateButton();
+    const dlg = $$('[role="dialog"], [role="alertdialog"]', document).filter(visible).map((d) => text(d).replace(/\s+/g, " ").trim().slice(0, 90)).join(" / ");
+    throw new Error(`Escrevi o prompt, mas o Flow não aceitou o envio. Clique na seta do Flow uma vez; eu continuo daí. [texto na caixa ${text(editor() || document.body).trim().length} letras; seta ${cur ? (cur.disabled ? "desativada" : "ativa") : "não achada"}; aviso: ${dlg || "nenhum"}; ${flowDiagnosis()}]`);
   }
 
   /* ---------- Flow: grade de mídias ---------- */
