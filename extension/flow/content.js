@@ -57,6 +57,9 @@
   let flowModel = "[Lower Priority]"; // modelo do Flow pedido pelo pacote (padrão: Lower Priority, 0 créditos)
   let productImage = ""; // foto real do produto (data URL) enviada pelo site: vai como referência na imagem de cada cena
   let refDone = false;
+  const sceneImages = {}; // imagem já criada de cada cena: se só o vídeo falhar, a próxima rodada reaproveita (não gasta outra imagem)
+  const baselines = new Map(); // peças que já existiam antes de cada cena começar (não vai para o estado salvo)
+  const claimedTiles = new Set(); // peças da grade do Flow que já pertencem a uma cena
   let fallbackModels = []; // modelos mais baratos a tentar quando a conta não tem o pedido (ex.: sem Lower Priority)
   const isLowerPriority = () => flowModel === "[Lower Priority]";
 
@@ -145,14 +148,57 @@
     return `página ${location.pathname.slice(0, 48)}; Agente ${panel && visible(panel) ? "aberto" : "fechado"}; caixa de texto ${editor() ? "sim" : "não"}; ajustes ${settingsTrigger() ? "sim" : "não"}; janela ${innerWidth}x${innerHeight}; campos: ${fields.join(" ") || "nenhum"}; botões: ${buttons.join(" | ") || "nenhum"}`;
   }
 
+  const lastLine = (n) => text(n).split("\n").map((x) => x.trim()).filter(Boolean).pop() || "";
+  const outside = (n) => !n.closest("#clipgringa-flow-host");
+  const directComposer = () => !!$(".settings-trigger-button") && !!editor();
+
+  /** O Flow abre sozinho a tela de detalhe da imagem (“O que você quer mudar?”). Para gerar a próxima cena, volta ao projeto. */
+  async function leaveDetailView() {
+    const inDetail = () => /\/project\/[^/]+\/.+/.test(location.pathname)
+      || $$("button", document).filter(visible).some((b) => outside(b) && /^concluir$|^done$/i.test(lastLine(b)))
+      || /o que você quer mudar|what do you want to change/i.test(document.body.innerText || "");
+    if (!inDetail() || directComposer()) return false;
+    const back = $$("button, a", document).filter(visible).filter(outside).find((b) => {
+      const r = b.getBoundingClientRect();
+      return r.left < 220 && r.top < 140 && (/^arrow_back$/i.test(lastLine(b)) || /voltar|back/i.test(b.getAttribute("aria-label") || b.title || ""));
+    });
+    if (back) back.click(); else history.back();
+    await waitFor(() => !inDetail() || directComposer(), 6000);
+    await sleep(700);
+    return true;
+  }
+
+  /** Em algumas contas o Flow abre a caixa de baixo no modo “Agente”: cada pedido vira várias imagens e nada do que a extensão espera existe. Troca para a geração direta. */
+  async function leaveAgentMode() {
+    if (directComposer()) return false;
+    const chip = $$('button, [role="button"], [role="tab"], [role="radio"], mat-chip, [class*="chip"], [class*="mode"]', document)
+      .filter(visible).filter(outside).find((n) => /^agente$|^agent$/i.test(lastLine(n)));
+    if (!chip) return false;
+    await realClick(chip);
+    await sleep(900);
+    const items = () => $$("[role=menuitem], [role=menuitemradio], [role=option], .mat-mdc-menu-item, .mat-mdc-option", overlay()).filter(visible);
+    const choices = items().filter((i) => !/^agente$|^agent$/i.test(lastLine(i)) && !/agente|agent/i.test(text(i).split("\n")[0]));
+    const pick = choices.find((i) => /imagem|image|gerar|criar|create|direto|manual|vídeo|video/i.test(text(i))) || choices[0];
+    if (pick) { pick.click(); await sleep(900); }
+    await waitFor(directComposer, 4000);
+    return true;
+  }
+
   async function ensureDirectMode() {
     await closeAgentPanel();
-    let ok = await waitFor(() => settingsTrigger() && editor(), 6000);
+    await leaveDetailView();
+    if (!directComposer()) await leaveAgentMode();
+    let ok = await waitFor(directComposer, 6000);
     if (!ok) {
       await closeAgentPanel(); // segunda tentativa: o painel pode ter aberto depois
-      ok = await waitFor(() => settingsTrigger() && editor(), 4000);
+      await leaveDetailView();
+      await leaveAgentMode();
+      ok = await waitFor(directComposer, 4000);
     }
-    if (!ok) throw new Error(`Não achei a caixa de criação do Flow. Abra a página principal do projeto no Flow (feche o painel “Agente”). [${flowDiagnosis()}]`);
+    if (!ok) {
+      const chips = $$('button, [role="button"], mat-chip, [class*="chip"]', document).filter(visible).filter(outside).map(lastLine).filter(Boolean).slice(0, 12).join(" | ");
+      throw new Error(`Não achei a caixa de criação do Flow (a que tem os ajustes de imagem e vídeo). Se a caixa de baixo estiver no modo “Agente”, troque para gerar imagem/vídeo direto. [${flowDiagnosis()}; chips: ${chips}]`);
+    }
   }
 
   async function openSettings() {
@@ -830,7 +876,15 @@
 
   async function makeImage(job, label) {
     setPhase("imagem");
-    return withRetry(`${label} (imagem)`, async () => {
+    const reuse = sceneImages[job.key] && locateTile(sceneImages[job.key]);
+    if (reuse) { setNow(`${label}: reaproveitando a imagem que já foi criada.`); return reuse; }
+    const baseline = new Set(tilesNow().map((t) => t.src));
+    return withRetry(`${label} (imagem)`, async (attemptNo) => {
+      if (attemptNo > 0) {
+        // a tentativa anterior pode ter funcionado mesmo dando erro: usa a imagem nova em vez de gastar outra geração
+        const stray = tilesNow().find((t) => !baseline.has(t.src) && !claimedTiles.has(t.src));
+        if (stray) { setNow(`${label}: a imagem já apareceu no Flow, usando ela.`); return waitNewTile(baseline, "image", IMAGE_WAIT_MS); }
+      }
       setNow(`${label}: preparando o Flow para gerar a imagem…`);
       await configure("image");
       await attachReference();
@@ -839,7 +893,7 @@
       await pressGenerate();
       setNow(`${label}: gerando a imagem (cerca de 15 segundos)…`);
       return waitNewTile(before, "image", IMAGE_WAIT_MS, (p) => { if (p != null) { jobPct[job.key] = p; setNow(`${label}: gerando a imagem… ${p}%`); } });
-    }).then(async (image) => { jobPct[job.key] = 100; await keepImage(job, image); delete jobPct[job.key]; return image; });
+    }).then(async (image) => { jobPct[job.key] = 100; claimedTiles.add(image.src); sceneImages[job.key] = { src: image.src, tile: image.tile }; await keepImage(job, image); delete jobPct[job.key]; return image; });
   }
 
   // Guarda uma miniatura da imagem da cena (para o ClipGringa mostrar e deixar baixar). Nunca atrapalha a geração.
@@ -925,6 +979,11 @@
   // Manda animar uma cena e volta assim que o Flow começa (sem esperar o vídeo ficar pronto).
   async function submitVideo(job, image, label, attemptNo) {
     setPhase("vídeo");
+    if (!baselines.has("V" + job.key)) baselines.set("V" + job.key, new Set(tilesNow().map((t) => t.src)));
+    if (attemptNo > 0) {
+      const stray = tilesNow().find((t) => !baselines.get("V" + job.key).has(t.src) && !claimedTiles.has(t.src));
+      if (stray) { claimedTiles.add(stray.src); return { src: stray.src, tile: stray.tile, t0: Date.now() }; }
+    }
     setNow(`${label}: mandando animar (as outras cenas continuam em paralelo)…`);
     await configure("video");
     try { await chooseStartFrame(image.src, true); } catch (pickErr) {
@@ -937,6 +996,7 @@
     await pressGenerate();
     const appeared = await waitFor(() => { const now = tilesNow(); return now.length > count0 ? now.find((t) => !known.has(t.src)) || null : null; }, 30000, 700);
     if (!appeared) throw new Error("O Flow não começou a animar esta cena.");
+    claimedTiles.add(appeared.src);
     return { src: appeared.src, tile: appeared.tile, t0: Date.now() };
   }
 
@@ -946,8 +1006,13 @@
   }
 
   // Manda criar a imagem de uma cena e volta assim que o Flow começa (as outras imagens seguem em paralelo).
-  async function submitImage(job, label) {
+  async function submitImage(job, label, attemptNo) {
     setPhase("imagem");
+    if (!baselines.has("I" + job.key)) baselines.set("I" + job.key, new Set(tilesNow().map((t) => t.src)));
+    if (attemptNo > 0) {
+      const stray = tilesNow().find((t) => !baselines.get("I" + job.key).has(t.src) && !claimedTiles.has(t.src));
+      if (stray) { claimedTiles.add(stray.src); return { src: stray.src, tile: stray.tile, t0: Date.now() }; }
+    }
     setNow(`${label}: mandando criar a imagem (as outras seguem em paralelo)…`);
     await configure("image");
     await attachReference();
@@ -957,6 +1022,7 @@
     await pressGenerate();
     const appeared = await waitFor(() => { const now = tilesNow(); return now.length > count0 ? now.find((t) => !known.has(t.src)) || null : null; }, 30000, 500);
     if (!appeared) throw new Error("O Flow não começou a criar esta imagem.");
+    claimedTiles.add(appeared.src);
     return { src: appeared.src, tile: appeared.tile, t0: Date.now() };
   }
 
@@ -1014,11 +1080,12 @@
   async function runPipeline() {
     const jobs = state.jobs.filter((j) => !state.done[j.key]);
     const images = {};
-    // 1) imagens: várias ao mesmo tempo (cada uma leva cerca de 15 segundos no Flow)
+    for (const j of jobs) { const kept = sceneImages[j.key] && locateTile(sceneImages[j.key]); if (kept) images[j.key] = kept; }
+    // 1) imagens: várias ao mesmo tempo (cada uma leva cerca de 15 segundos no Flow). Cenas que já têm imagem não geram outra.
     await rollingStage({
-      jobs, parallel: IMAGE_PARALLEL, kind: "image", timeoutMs: IMAGE_WAIT_MS,
+      jobs: jobs.filter((j) => !images[j.key]), parallel: IMAGE_PARALLEL, kind: "image", timeoutMs: IMAGE_WAIT_MS,
       submit: (job, attemptNo) => submitImage(job, labelOf(job), attemptNo),
-      onDone: async (b, t) => { images[b.job.key] = t; jobPct[b.job.key] = 100; await keepImage(b.job, t); delete jobPct[b.job.key]; },
+      onDone: async (b, t) => { images[b.job.key] = t; sceneImages[b.job.key] = { src: t.src, tile: t.tile }; jobPct[b.job.key] = 100; await keepImage(b.job, t); delete jobPct[b.job.key]; },
     });
     if (stopFlag) return;
     // 2) vídeos: fila contínua de cenas animando ao mesmo tempo
@@ -1090,7 +1157,7 @@
       parsePackage(raw); // define o modelo pedido pelo pacote
       if (!state.jobs.length || raw !== (state.raw || "")) {
         const parsed = parsePackage(raw);
-        state = { jobs: parsed.jobs, done: {}, errors: {}, cloud: {}, raw };
+        state = { jobs: parsed.jobs, done: {}, errors: {}, cloud: {}, raw }; Object.keys(sceneImages).forEach((k) => delete sceneImages[k]); claimedTiles.clear(); baselines.clear();
         try { chrome.storage.local.remove(IMAGES_KEY); } catch (_e) { /* ignora */ }
         el("pkg").value = raw;
       }
@@ -1186,7 +1253,7 @@
       if (!got || !got.raw || Date.now() - got.at > 30 * 60 * 1000) { if (got) await chrome.storage.local.remove(PENDING_KEY); return; }
       // O pacote fica salvo na hora (sobrevive a recarregar a página); quem começa é o botão Começar.
       const parsed = parsePackage(got.raw);
-      state = { jobs: parsed.jobs, done: {}, errors: {}, cloud: {}, raw: got.raw.trim() };
+      state = { jobs: parsed.jobs, done: {}, errors: {}, cloud: {}, raw: got.raw.trim() }; Object.keys(sceneImages).forEach((k) => delete sceneImages[k]); claimedTiles.clear(); baselines.clear();
       uploadInfo = got.upload || null;
       el("pkg").value = got.raw;
       await persist();
