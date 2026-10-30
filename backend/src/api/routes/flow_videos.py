@@ -124,6 +124,60 @@ async def upload_video(request: Request, token: str = "", package: str = "", fil
     return {"id": video_id, "size": size}
 
 
+SHOPEE_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+
+
+@router.post("/save-from-urls")
+async def save_from_urls(request: Request, db: AsyncSession = Depends(get_db)):
+    """Guarda no Banco de imagens da pessoa as fotos e vídeos de um anúncio da Shopee (links do CDN da Shopee), sem passar pela pasta do Windows."""
+    import httpx
+
+    from .clone_plan import _is_shopee_cdn, _safe_get
+
+    user_id = await _user_id(request, db)
+    try:
+        data = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    package = _clean(str((data or {}).get("package") or "Shopee"), 120) or "Shopee"
+    urls = [str(u).strip()[:700] for u in ((data or {}).get("urls") or []) if isinstance(u, str)][:12]
+    saved: list[dict[str, str]] = []
+    folder = _root() / user_id
+    folder.mkdir(parents=True, exist_ok=True)
+    async with httpx.AsyncClient(timeout=45, headers={"User-Agent": SHOPEE_UA, "Referer": "https://shopee.com.br/"}) as http:
+        for url in urls:
+            if not _is_shopee_cdn(url):
+                continue
+            is_video = ".mp4" in url.lower().split("?")[0]
+            name = f"shopee-{hashlib.sha1(url.split('?')[0].encode()).hexdigest()[:10]}.{'mp4' if is_video else 'jpg'}"
+            exists = (await db.execute(text("SELECT id FROM flow_videos WHERE user_id = :u AND file = :f AND deleted_at IS NULL"), {"u": user_id, "f": name})).fetchone()
+            if exists:
+                saved.append({"id": str(exists.id), "file": name, "kind": "video" if is_video else "image", "existing": "1"})
+                continue
+            usage = (await db.execute(text("SELECT COUNT(*) AS n, COALESCE(SUM(size), 0) AS total FROM flow_videos WHERE user_id = :u AND deleted_at IS NULL"), {"u": user_id})).fetchone()
+            if usage and (usage.n >= MAX_USER_FILES or int(usage.total) >= MAX_USER_BYTES):
+                break
+            try:
+                body, kind = await _safe_get(http, url, MAX_VIDEO_BYTES if is_video else MAX_IMAGE_BYTES)
+            except Exception:
+                continue
+            if len(body) < 1024 or not (kind.startswith("video/") if is_video else kind.startswith("image/")):
+                continue
+            if not is_video:
+                ext = {"image/png": ".png", "image/webp": ".webp"}.get(kind.split(";")[0].strip(), ".jpg")
+                name = name.rsplit(".", 1)[0] + ext
+            video_id = str(uuid.uuid4())
+            path = folder / f"{video_id}{Path(name).suffix}"
+            path.write_bytes(body)
+            await db.execute(
+                text("INSERT INTO flow_videos (id, user_id, package, file, path, size) VALUES (:id, :u, :p, :f, :path, :size)"),
+                {"id": video_id, "u": user_id, "p": package, "f": name, "path": str(path), "size": len(body)},
+            )
+            saved.append({"id": video_id, "file": name, "kind": "video" if is_video else "image"})
+    await db.commit()
+    return {"saved": saved}
+
+
 @router.get("")
 @router.get("/")
 async def list_videos(request: Request, db: AsyncSession = Depends(get_db)):
