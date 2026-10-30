@@ -2,6 +2,7 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { AccountDetails } from "@/components/admin/account-details";
 import { AdminUserToggle } from "@/components/admin/admin-user-toggle";
 import { MemberAccessPanel } from "@/components/admin/member-access";
 import { AffiliateReviewActions } from "@/components/admin/affiliate-review-actions";
@@ -353,7 +354,8 @@ export default async function AdminPage({
                         {user.name || "Usuário sem nome"}
                         {user.is_admin && <Badge className="bg-foreground text-background">Admin</Badge>}
                       </p>
-                      <p className="text-xs text-muted-foreground">{user.email} · joined {user.createdAt.toLocaleDateString()}</p>
+                      <p className="text-xs text-muted-foreground">{user.email} · entrou em {user.createdAt.toLocaleDateString("pt-BR")}</p>
+                      <Link href={`/admin?user=${user.id}#ficha`} className="text-xs font-medium text-brand underline-offset-4 hover:underline">Ver ficha da conta</Link>
                     </td>
                     <td className={td}><Badge variant="outline" className="capitalize">{user.plan}</Badge></td>
                     <td className={td}>
@@ -399,6 +401,8 @@ export default async function AdminPage({
           )}
         </Panel>
       </div>
+
+      {selectedUser && <AccountDetails userId={selectedUser.id} />}
 
       <Panel title="Gerações recentes" description="Últimas atividades de todas as tarefas da plataforma.">
         <div className="overflow-x-auto">
