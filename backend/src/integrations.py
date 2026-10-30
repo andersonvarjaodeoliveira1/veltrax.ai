@@ -219,14 +219,14 @@ def claude_model(name: str = "claude-sonnet-5-5", api_key: str | None = None) ->
     import os
 
     from pydantic_ai.exceptions import ModelHTTPError
-    from pydantic_ai.models.anthropic import AnthropicModel, AnthropicModelSettings
+    from pydantic_ai.models.anthropic import AnthropicModel as _Base, AnthropicModelSettings
     from pydantic_ai.providers.anthropic import AnthropicProvider
 
     provider = AnthropicProvider(api_key=api_key) if api_key else "anthropic"
     first = os.getenv("CLAUDE_THINKING_TYPE", "between_tools").strip() or "between_tools"
     order = [first] + [t for t in CLAUDE_THINKING_TYPES if t != first]
 
-    class _ClaudeNoThinking(AnthropicModel):
+    class AnthropicModel(_Base):
         _idx = 0
 
         def _settings_for(self, kind: str):
@@ -247,7 +247,7 @@ def claude_model(name: str = "claude-sonnet-5-5", api_key: str | None = None) ->
                     raise
             raise last  # type: ignore[misc]
 
-    return _ClaudeNoThinking(name, provider=provider, settings=AnthropicModelSettings(anthropic_thinking={"type": order[0]}))
+    return AnthropicModel(name, provider=provider, settings=AnthropicModelSettings(anthropic_thinking={"type": order[0]}))
 
 
 def user_models(include_account: bool = True) -> list[Any]:
