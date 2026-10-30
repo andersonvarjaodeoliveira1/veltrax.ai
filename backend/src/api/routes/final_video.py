@@ -25,7 +25,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/multiplier/final", tags=["final-video"])
 
 MAX_PARTS = 24
-MAX_FINALS_PER_USER = 10
+MAX_FINALS_PER_USER = 20
+MAX_QUEUED_PER_USER = 10  # vários vídeos de uma vez (lote): ficam na fila e saem um por vez
 _running: dict[str, str] = {}  # job id -> user id
 
 
@@ -36,6 +37,9 @@ class FinalRequest(BaseModel):
     title: str = ""
     speed: float = 1.0
     captions: bool = True
+    silence: str = "off"
+    transition: str = "none"
+    denoise: bool = False
 
 
 def _root() -> Path:
@@ -91,8 +95,8 @@ async def _run(job_id: str, parts: list[Path], options: dict[str, Any]) -> None:
 @router.post("")
 async def create_final(body: FinalRequest, request: Request, db: AsyncSession = Depends(get_db)):
     user_id = await _user_id(request, db)
-    if user_id in _running.values():
-        raise HTTPException(status_code=409, detail="You already have a final video running. Wait for it to finish.")
+    if sum(1 for owner in _running.values() if owner == user_id) >= MAX_QUEUED_PER_USER:
+        raise HTTPException(status_code=409, detail="You already have too many final videos in the queue. Wait for them to finish.")
     total = (await db.execute(text("SELECT COUNT(*) FROM final_videos WHERE user_id = :u"), {"u": user_id})).scalar_one()
     if total >= MAX_FINALS_PER_USER:
         raise HTTPException(status_code=409, detail="Final video limit reached. Delete older ones first.")

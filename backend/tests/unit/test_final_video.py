@@ -40,3 +40,34 @@ def test_no_speech_still_exports_with_warning(tmp_path):
     out = tmp_path / "final.mp4"
     info = render_final([a], out, tmp_path, clean_options({}), lambda _p: [], lambda _s: None)
     assert out.exists() and "sem legenda" in info["warning"]
+
+
+from src.final_video import keep_ranges, remap_words
+
+
+def test_keep_ranges_shortens_long_pauses_and_trims_edges():
+    words = [{"text": "a", "start": 1.0, "end": 1.4}, {"text": "b", "start": 1.5, "end": 1.9}, {"text": "c", "start": 4.0, "end": 4.4}]
+    ranges = keep_ranges(words, 6.0, "light")
+    assert len(ranges) == 2 and ranges[0][0] < 1.0 and ranges[1][1] > 4.4
+    assert keep_ranges(words, 6.0, "off") == [(0.0, 6.0)]
+    new = remap_words(words, ranges)
+    assert len(new) == 3 and new[2]["start"] < 4.0 - 1.0  # a pausa sumiu: "c" chega mais cedo
+    assert all(w["end"] > w["start"] for w in new)
+
+
+def test_silence_transition_and_denoise_end_to_end(tmp_path):
+    a, b = tmp_path / "a.mp4", tmp_path / "b.mp4"
+    _clip(a, "blue", 3), _clip(b, "red", 3)
+    words = [{"text": "oi", "start": 0.8, "end": 1.2}, {"text": "tudo", "start": 1.3, "end": 1.7}, {"text": "bem", "start": 4.6, "end": 5.0}]
+    out = tmp_path / "final.mp4"
+    info = render_final([a, b], out, tmp_path, clean_options({"silence": "strong", "transition": "fade", "denoise": True, "title": "Teste"}), lambda _p: words, lambda _s: None)
+    assert out.exists()
+    assert info["duration"] < 5.6  # 6 s - 0,4 de transição, e as pausas saíram
+    assert info["duration"] > 1.5
+
+
+def test_options_new_fields_default_off():
+    o = clean_options({})
+    assert o["silence"] == "off" and o["transition"] == "none" and o["denoise"] is False
+    o = clean_options({"silence": "x", "transition": "star", "denoise": "yes"})
+    assert o["silence"] == "off" and o["transition"] == "none" and o["denoise"] is False

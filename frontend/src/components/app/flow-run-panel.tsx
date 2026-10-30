@@ -126,6 +126,14 @@ export function FlowRunPanel({ onRetake, onVariations }: { onRetake: (vbase: num
             </div>
           </div>
         )}
+        {(() => {
+          const ready = videos.map((vi) => {
+            const mine = flowProg.jobs.filter((j) => j.vi === vi).sort((a, b) => a.si - b.si);
+            const ok = mine.length > 0 && mine.every((j) => j.done && flowFiles[j.file]);
+            return ok ? { label: mine[0]?.vname ?? `Vídeo ${String(vi + 1).padStart(2, "0")}`, videoIds: mine.map((j) => flowFiles[j.file]) } : null;
+          }).filter((item): item is { label: string; videoIds: string[] } => item !== null);
+          return ready.length > 1 && !flowProg.running ? <FinalVideoMaker items={ready} /> : null;
+        })()}
         <div className="space-y-4">
           {videos.map((vi) => {
             const mine = flowProg.jobs.filter((j) => j.vi === vi).sort((a, b) => a.si - b.si);
@@ -134,7 +142,7 @@ export function FlowRunPanel({ onRetake, onVariations }: { onRetake: (vbase: num
               <div key={vi} className="space-y-2">
                 <p className="text-sm font-medium">{mine[0]?.vname ?? `Vídeo ${String(vi + 1).padStart(2, "0")}`} <span className="font-normal text-muted-foreground">· {doneN}/{mine.length} cenas</span></p>
                 {mine.length > 0 && doneN === mine.length && !flowProg.running && mine.every((j) => flowFiles[j.file]) && (
-                  <FinalVideoMaker videoIds={mine.map((j) => flowFiles[j.file])} defaultTitle="" />
+                  <FinalVideoMaker items={[{ label: mine[0]?.vname ?? `Vídeo ${String(vi + 1).padStart(2, "0")}`, videoIds: mine.map((j) => flowFiles[j.file]) }]} defaultTitle="" />
                 )}
                 <ul className="grid gap-2 sm:grid-cols-2">
                   {mine.map((job) => {
