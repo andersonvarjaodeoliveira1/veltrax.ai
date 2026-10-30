@@ -382,7 +382,7 @@
       }
       if (stopFlag) throw new Error("STOP");
       if (Date.now() > end) throw new Error("O Flow demorou demais para terminar.");
-      await sleep(1500);
+      await sleep(1000);
     }
   }
 
@@ -601,7 +601,7 @@
       <div class="row"><button class="b" id="go">Começar</button><button class="b o" id="stop" disabled>Parar</button><button class="b o" id="clear">Limpar</button></div>
       <details class="adv"><summary>Pacote (avançado)</summary>
         <textarea id="pkg" placeholder='Cole aqui o pacote do ClipGringa'></textarea>
-        <label class="chk"><input type="checkbox" id="fast" checked> Modo rápido BETA (várias cenas ao mesmo tempo)</label>
+        <label class="chk"><input type="checkbox" id="fast" checked> Modo rápido (várias imagens e vídeos ao mesmo tempo)</label>
         <label class="chk"><input type="checkbox" id="test"> Só a primeira cena (teste)</label>
       </details>
     </div>
@@ -877,7 +877,8 @@
   }
 
   /* ---------- modo rápido (BETA): o Flow anima várias cenas ao mesmo tempo ---------- */
-  const VIDEO_PARALLEL = 3;
+  const VIDEO_PARALLEL = 4;
+  const IMAGE_PARALLEL = 3;
   const tilesNow = () => firstTiles(40);
   const generatingNow = (info) => /\d+\s*%/.test(info) || /gerando|generating/i.test(info);
   const labelOf = (job) => `${job.vname} · ${job.sname}`;
@@ -913,9 +914,25 @@
     setError(`${labelOf(job)}: ${message}`);
   }
 
-  async function collectVideos(batch) {
-    const end = Date.now() + VIDEO_WAIT_MS;
-    const waiting = new Map(batch.map((b) => [b.job.key, { ...b, since: Date.now() }]));
+  // Manda criar a imagem de uma cena e volta assim que o Flow começa (as outras imagens seguem em paralelo).
+  async function submitImage(job, label) {
+    setPhase("imagem");
+    setNow(`${label}: mandando criar a imagem (as outras seguem em paralelo)…`);
+    await configure("image");
+    await attachReference();
+    await setPrompt(job.imagePrompt);
+    const known = new Set(tilesNow().map((t) => t.src));
+    const count0 = known.size;
+    await pressGenerate();
+    const appeared = await waitFor(() => { const now = tilesNow(); return now.length > count0 ? now.find((t) => !known.has(t.src)) || null : null; }, 30000, 500);
+    if (!appeared) throw new Error("O Flow não começou a criar esta imagem.");
+    return { src: appeared.src, tile: appeared.tile, t0: Date.now() };
+  }
+
+  /** Acompanha as cenas em andamento. Volta quando ao menos uma termina (`any`) ou quando todas terminam. Devolve as que continuam. */
+  async function collectActive(active, { kind, timeoutMs, onDone, any, peek }) {
+    const waiting = new Map(active.map((b) => [b.job.key, { ...b, since: Date.now() }]));
+    const total = waiting.size;
     while (waiting.size) {
       if (stopFlag) throw new Error("STOP");
       const pcts = [];
@@ -924,47 +941,62 @@
         if (!t) { if (Date.now() - b.since > 90000) { failJob(b.job, "não achei esta cena na grade do Flow"); waiting.delete(key); } continue; }
         b.since = Date.now();
         if (/falha|failed|erro|error/i.test(t.info.replace(/arrow_forward/g, ""))) { failJob(b.job, failReason(t.info)); waiting.delete(key); continue; }
-        const done = !generatingNow(t.info) && (/play_circle|videocam|movie/.test(t.info) || t.tile.querySelector("video"));
+        const done = !generatingNow(t.info) && (kind === "image" || /play_circle|videocam|movie/.test(t.info) || t.tile.querySelector("video"));
         if (done) {
           waiting.delete(key);
           jobAt = b.rec.t0;
-          try { await finishJob(b.job, t, labelOf(b.job)); } catch (e) { if (e.message === "STOP") throw e; failJob(b.job, e.message); }
+          try { await onDone(b, t); } catch (e) { if (e.message === "STOP") throw e; failJob(b.job, e.message); }
           await persist(); render();
-        } else { const pct = (t.info.match(/(\d+)\s*%/) || [])[1]; if (pct) jobPct[key] = Number(pct); pcts.push(`${labelOf(b.job)} ${pct ? pct + "%" : "na fila"}`); }
+        } else {
+          const pct = (t.info.match(/(\d+)\s*%/) || [])[1]; if (pct) jobPct[key] = Number(pct);
+          pcts.push(`${labelOf(b.job)} ${pct ? pct + "%" : "na fila"}`);
+          if (Date.now() - b.rec.t0 > timeoutMs) { failJob(b.job, "O Flow demorou demais para terminar."); waiting.delete(key); }
+        }
       }
-      if (pcts.length) setNow(`Animando ${pcts.length} cena(s) ao mesmo tempo no Flow: ${pcts.join(" · ")}`);
-      if (Date.now() > end) { for (const [, b] of waiting) failJob(b.job, "O Flow demorou demais para terminar."); return; }
-      await sleep(1500);
+      if (pcts.length) setNow(`${kind === "image" ? "Criando" : "Animando"} ${pcts.length} cena(s) ao mesmo tempo no Flow: ${pcts.join(" · ")}`);
+      if (peek || (any && waiting.size < total)) break;
+      await sleep(kind === "image" ? 800 : 1500);
+    }
+    return Array.from(waiting.values()).map(({ job, rec }) => ({ job, rec }));
+  }
+
+  // Fila contínua: assim que uma cena termina, a próxima já é enviada (sem esperar o grupo inteiro).
+  async function rollingStage({ jobs, parallel, kind, submit, timeoutMs, onDone }) {
+    let next = 0;
+    let active = [];
+    while ((next < jobs.length || active.length) && !stopFlag) {
+      while (next < jobs.length && active.length < parallel && !stopFlag) {
+        const job = jobs[next++];
+        state.current = job.key; render();
+        try {
+          const rec = await withRetry(`${labelOf(job)} (${kind === "image" ? "imagem" : "vídeo"})`, (attemptNo) => submit(job, attemptNo));
+          active.push({ job, rec });
+        } catch (e) { if (e.message === "STOP") { stopFlag = true; return; } failJob(job, e.message); await persist(); render(); }
+        // dá uma olhada no que já terminou entre um envio e outro
+        if (active.length) active = await collectActive(active, { kind, timeoutMs, onDone, any: true, peek: true }).catch((e) => { if (e.message === "STOP") throw e; return active; });
+      }
+      if (!active.length) continue;
+      try { active = await collectActive(active, { kind, timeoutMs, onDone, any: true }); } catch (e) { if (e.message === "STOP") { stopFlag = true; return; } throw e; }
     }
   }
 
   async function runPipeline() {
     const jobs = state.jobs.filter((j) => !state.done[j.key]);
     const images = {};
-    // 1) todas as imagens, uma depois da outra (rápido: cerca de 15 segundos cada)
-    for (const job of jobs) {
-      if (stopFlag) return;
-      state.current = job.key; jobAt = Date.now();
-      try { images[job.key] = await makeImage(job, labelOf(job)); } catch (e) {
-        if (e.message === "STOP") { stopFlag = true; return; }
-        failJob(job, e.message); await persist();
-      }
-      render();
-    }
-    // 2) as animações em grupos: manda 3 de uma vez e recolhe enquanto o Flow trabalha
+    // 1) imagens: várias ao mesmo tempo (cada uma leva cerca de 15 segundos no Flow)
+    await rollingStage({
+      jobs, parallel: IMAGE_PARALLEL, kind: "image", timeoutMs: IMAGE_WAIT_MS,
+      submit: (job, attemptNo) => submitImage(job, labelOf(job), attemptNo),
+      onDone: async (b, t) => { images[b.job.key] = t; jobPct[b.job.key] = 100; await keepImage(b.job, t); delete jobPct[b.job.key]; },
+    });
+    if (stopFlag) return;
+    // 2) vídeos: fila contínua de cenas animando ao mesmo tempo
     const ready = jobs.filter((j) => images[j.key]);
-    for (let i = 0; i < ready.length && !stopFlag; i += VIDEO_PARALLEL) {
-      const batch = [];
-      for (const job of ready.slice(i, i + VIDEO_PARALLEL)) {
-        if (stopFlag) break;
-        state.current = job.key; render();
-        try {
-          const rec = await withRetry(`${labelOf(job)} (vídeo)`, (attemptNo) => submitVideo(job, images[job.key], labelOf(job), attemptNo));
-          batch.push({ job, rec });
-        } catch (e) { if (e.message === "STOP") { stopFlag = true; return; } failJob(job, e.message); await persist(); }
-      }
-      try { await collectVideos(batch); } catch (e) { if (e.message === "STOP") { stopFlag = true; return; } throw e; }
-    }
+    await rollingStage({
+      jobs: ready, parallel: VIDEO_PARALLEL, kind: "video", timeoutMs: VIDEO_WAIT_MS,
+      submit: (job, attemptNo) => submitVideo(job, images[job.key], labelOf(job), attemptNo),
+      onDone: async (b, t) => { await finishJob(b.job, t, labelOf(b.job)); },
+    });
   }
 
   const FLOW_HOME = "https://labs.google/fx/pt/tools/flow";
