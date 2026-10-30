@@ -203,9 +203,11 @@
   }
 
   let cfgStep = "";
+  let cfgDone = ""; // último modo (imagem/vídeo) já ajustado: o Flow guarda os ajustes, então não precisa abrir tudo de novo a cada cena
   async function configure(kind) {
     const steps = async () => {
       cfgStep = "fechando o painel do Agente"; await ensureDirectMode();
+      if (cfgDone === kind) return;
       cfgStep = "abrindo os ajustes do Flow"; await openSettings();
       if (kind === "image") {
         cfgStep = "escolhendo imagem"; await pickRadio("image");
@@ -221,6 +223,7 @@
         cfgStep = `modelo ${flowModel}`; await ensureModel(flowModel);
       }
       cfgStep = "fechando os ajustes"; await closeSettings();
+      cfgDone = kind;
     };
     let timer = 0;
     try {
@@ -403,7 +406,7 @@
     if (alt.length) return alt;
     return null;
   };
-  async function chooseStartFrame(imageSrc) {
+  async function chooseStartFrame(imageSrc, strict) {
     const trigger = await waitFor(() => $$(".frame-trigger").find(visible), 6000);
     if (!trigger) throw new Error("Não achei o campo “Início” do Flow (modo Frames).");
     let items = null;
@@ -418,7 +421,15 @@
     }
     await sleep(600);
     const all = pickerItems() || [];
+    const idOf = (u) => String(u || "").split("?")[0].split("=")[0].split("/").pop();
     let target = all.find((i) => $$("img", i.parentElement || i).some((im) => baseSrc(im.src) === imageSrc));
+    if (!target) target = all.find((i) => $$("img", i.parentElement || i).some((im) => idOf(im.src) && idOf(im.src) === idOf(imageSrc)));
+    if (!target && strict && all.length > 1) {
+      // No modo rápido a imagem desta cena não é a primeira da lista: sem achar a certa, é melhor tentar de novo do que animar a imagem errada.
+      await closeSettings();
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", keyCode: 27, bubbles: true }));
+      throw new Error(`Início: não achei a imagem desta cena na lista do Flow (${all.length} imagens na lista).`);
+    }
     if (!target) target = all[0];
     target.click();
     await sleep(500);
@@ -757,6 +768,7 @@
       if (stopFlag) throw new Error("STOP");
       try { return await fn(attempt); } catch (e) {
         lastError = e;
+        cfgDone = ""; // qualquer falha: na próxima tentativa os ajustes são conferidos de novo
         if (e.message === "STOP") throw e;
         if (isLimited(e.message)) { await waitForLimit(label, e.message); attempt -= 1; continue; } // limite não gasta tentativas: espera e repete
         if (attempt < RETRIES) {
@@ -896,7 +908,7 @@
     setPhase("vídeo");
     setNow(`${label}: mandando animar (as outras cenas continuam em paralelo)…`);
     await configure("video");
-    try { await chooseStartFrame(image.src); } catch (pickErr) {
+    try { await chooseStartFrame(image.src, true); } catch (pickErr) {
       if (/vi:|Início|Incluir/.test(String(pickErr.message)) && attemptNo >= RETRIES) setNow(`${label}: não consegui escolher a imagem inicial, animando só pelo texto.`);
       else throw pickErr;
     }
