@@ -103,21 +103,43 @@
   const hasIcon = (b, icon) => text(b).split("\n").map((s) => s.trim()).includes(icon);
   const isOn = (b) => b.getAttribute("aria-checked") === "true" || b.getAttribute("aria-pressed") === "true" || b.classList.contains("mat-button-toggle-checked");
 
+  const settingsTrigger = () =>
+    $(".settings-trigger-button") || $("button[class*=settings-trigger]")
+    || $$("button", document).filter(visible).find((b) => /ajustes|configura|settings/i.test(b.getAttribute("aria-label") || b.title || ""));
+
   // O Flow pode abrir o painel do "Agente" (chat). Para gerar direto, esse painel precisa estar fechado.
-  async function ensureDirectMode() {
+  async function closeAgentPanel() {
     const panel = $(".agent-panel-wrapper");
-    if (panel && visible(panel)) {
-      const close = $$(".agent-panel-header button", document).find((b) => text(b) === "close");
-      if (close) { close.click(); await sleep(1200); }
+    if (!panel || !visible(panel)) return;
+    const header = $(".agent-panel-header", document) || panel;
+    const close = $$("button", header).filter(visible).find((b) => text(b) === "close" || /fechar|close|dismiss/i.test(b.getAttribute("aria-label") || b.title || ""));
+    if (close) { close.click(); await sleep(1200); return; }
+    // sem botão de fechar conhecido: tenta o Esc
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", keyCode: 27, bubbles: true }));
+    await sleep(900);
+  }
+
+  /** Resumo curto do que a aba do Flow mostra agora (vai junto do erro para dar para entender o que mudou). */
+  function flowDiagnosis() {
+    const panel = $(".agent-panel-wrapper");
+    const buttons = $$("button", document).filter(visible).map((b) => (b.getAttribute("aria-label") || b.title || text(b)).replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 10);
+    return `página ${location.pathname.slice(0, 48)}; Agente ${panel && visible(panel) ? "aberto" : "fechado"}; caixa de texto ${editor() ? "sim" : "não"}; ajustes ${settingsTrigger() ? "sim" : "não"}; botões: ${buttons.join(" | ") || "nenhum"}`;
+  }
+
+  async function ensureDirectMode() {
+    await closeAgentPanel();
+    let ok = await waitFor(() => settingsTrigger() && editor(), 6000);
+    if (!ok) {
+      await closeAgentPanel(); // segunda tentativa: o painel pode ter aberto depois
+      ok = await waitFor(() => settingsTrigger() && editor(), 4000);
     }
-    const ok = await waitFor(() => $(".settings-trigger-button") && editor(), 8000);
-    if (!ok) throw new Error("Não achei a caixa de criação do Flow. Abra a página principal do projeto no Flow.");
+    if (!ok) throw new Error(`Não achei a caixa de criação do Flow. Abra a página principal do projeto no Flow (feche o painel “Agente”). [${flowDiagnosis()}]`);
   }
 
   async function openSettings() {
     if (radios().some(visible)) return true;
-    const trigger = $(".settings-trigger-button") || $("button[class*=settings-trigger]");
-    if (!trigger) throw new Error("Não achei o botão de ajustes do Flow. Abra um projeto do Flow.");
+    const trigger = settingsTrigger();
+    if (!trigger) throw new Error(`Não achei o botão de ajustes do Flow. Abra um projeto do Flow. [${flowDiagnosis()}]`);
     trigger.click();
     const ok = await waitFor(() => radios().some(visible), 5000);
     if (!ok) throw new Error("Os ajustes do Flow não abriram.");

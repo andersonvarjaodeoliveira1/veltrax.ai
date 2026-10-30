@@ -6,15 +6,21 @@ import { AlertTriangle } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { accountReasonText, ACCOUNT_SITE_NAME, aiBillingUrl, type AiProblem } from "@/lib/ai-errors";
 import { ADMIN_WHATSAPP_URL } from "@/lib/token-balance";
+import { OPEN_ACCOUNT_AI_EVENT } from "@/lib/account-ai";
 
 const NAMES: Record<string, string> = {
   openai: "OpenAI (ChatGPT)", anthropic: "Anthropic (Claude)", gemini: "Google (Gemini)", openrouter: "OpenRouter", huggingface: "Hugging Face", ollama: "Ollama",
 };
 
-type Action = { label: string; href: string; external?: boolean };
+type Action = { label: string; href?: string; external?: boolean; event?: string };
 type Choice = { title: string; text: string; action: Action[] };
 type Copy = { title: string; text: string; choices: Choice[] };
 
+const CONNECT_ACCOUNT: Choice = {
+  title: "Usar a sua conta do ChatGPT, Gemini ou Claude",
+  text: "Se você assina um deles, não precisa de chave nem de saldo: eu uso a sua conta pela extensão. É o caminho mais simples.",
+  action: [{ label: "Conectar minha conta", event: OPEN_ACCOUNT_AI_EVENT }],
+};
 const GEMINI_KEY: Action = { label: "Pegar chave do Gemini", href: "https://aistudio.google.com/apikey", external: true };
 const MY_APIS: Action = { label: "Abrir Minhas APIs", href: "/minhas-apis" };
 const ADMIN: Action = { label: "Chamar o administrador", href: ADMIN_WHATSAPP_URL, external: true };
@@ -41,6 +47,7 @@ function copy(problem: AiProblem): Copy {
       title: name ? `O saldo da sua chave da ${name} acabou` : "O saldo da sua chave de IA acabou",
       text: "A chave está certa, mas não tem mais saldo para gerar. Escolha uma das opções abaixo e clique no botão dela.",
       choices: [
+        CONNECT_ACCOUNT,
         ...(billing && problem.provider !== "gemini" ? [{
           title: `Colocar saldo na ${name ?? "plataforma da IA"}`,
           text: `Abre o site de cobrança. Lá você adiciona crédito e depois volta aqui para gerar de novo.${problem.provider === "openai" ? " Atenção: a assinatura do ChatGPT (Plus/Pro) não vale para isso; a API é cobrada à parte." : ""}`,
@@ -59,6 +66,7 @@ function copy(problem: AiProblem): Copy {
     title: `A IA ${who} recusou a sua chave`,
     text: "A chave que você colou não foi aceita: pode estar errada, apagada ou com a cobrança pendente.",
     choices: [
+      CONNECT_ACCOUNT,
       { title: "Colar a chave de novo", text: "Copie a chave inteira no site da IA e cole outra vez em Minhas APIs.", action: [MY_APIS] },
       { title: "Conferir a cobrança", text: "No site da IA, veja se a conta está ativa e com o pagamento em dia.", action: aiBillingUrl(problem.provider) ? [{ label: "Abrir o site da IA", href: aiBillingUrl(problem.provider), external: true }] : [] },
       { title: "Pedir ajuda", text: "Se não resolver, fale com a gente.", action: [ADMIN] },
@@ -76,7 +84,8 @@ function copy(problem: AiProblem): Copy {
     title: "Seus tokens acabaram",
     text: "Os tokens da sua conta chegaram a zero, por isso a IA não pôde responder. Escolha uma das opções abaixo.",
     choices: [
-      { title: "Usar a sua conta de IA", text: "Gemini, ChatGPT ou Claude: conecte pela extensão ou com uma chave, sem gastar tokens.", action: [MY_APIS] },
+      CONNECT_ACCOUNT,
+      { title: "Usar uma chave de API", text: "Conecte uma chave em Minhas APIs e use sem gastar tokens.", action: [MY_APIS] },
       { title: "Pedir mais tokens", text: "O administrador pode liberar.", action: [ADMIN] },
     ],
   };
@@ -84,9 +93,14 @@ function copy(problem: AiProblem): Copy {
 
 function ActionButton({ action, onDone }: { action: Action; onDone: () => void }) {
   const cls = "inline-block rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-4 py-2 text-xs font-medium text-white";
+  if (action.event) {
+    const event = action.event;
+    return <button type="button" onClick={() => { onDone(); window.dispatchEvent(new Event(event)); }} className={cls}>{action.label}</button>;
+  }
+  const href = action.href ?? "#";
   return action.external
-    ? <a href={action.href} target="_blank" rel="noopener noreferrer" className={cls}>{action.label}</a>
-    : <Link href={action.href} onClick={onDone} className={cls}>{action.label}</Link>;
+    ? <a href={href} target="_blank" rel="noopener noreferrer" className={cls}>{action.label}</a>
+    : <Link href={href} onClick={onDone} className={cls}>{action.label}</Link>;
 }
 
 /** Janela de aviso para falhas da IA que dependem da conta da pessoa: sem créditos, chave recusada, limite ou tokens. */
