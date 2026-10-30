@@ -2,6 +2,7 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { RecentActivity } from "@/components/admin/recent-activity";
 import { AccountDetails } from "@/components/admin/account-details";
 import { AdminUserToggle } from "@/components/admin/admin-user-toggle";
 import { MemberAccessPanel } from "@/components/admin/member-access";
@@ -422,6 +423,8 @@ export default async function AdminPage({
           </table>
         </div>
       </Panel>
+
+      <RecentActivity />
 
       <Panel title="Configurações do sistema" description="Configure as chaves dos provedores e os modelos sem mexer em arquivos.">
         {runtimeSettings.error ? (
