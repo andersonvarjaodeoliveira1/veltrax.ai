@@ -54,6 +54,28 @@ def _youtube_cookie_file() -> Optional[str]:
         return None
 
 
+# O YouTube bloqueia IPs de servidor de formas diferentes conforme o "cliente" do player. Tentamos vários em
+# sequência (o padrão primeiro). YOUTUBE_PLAYER_CLIENTS="tv,mweb" troca a lista; YOUTUBE_PROXY usa um proxy.
+_DEFAULT_CLIENT_ROTATION: list[Optional[list[str]]] = [None, ["tv"], ["mweb"], ["web_safari"], ["android_vr"]]
+
+
+def _client_rotation() -> list[Optional[list[str]]]:
+    raw = os.getenv("YOUTUBE_PLAYER_CLIENTS", "").strip()
+    if raw:
+        return [None] + [[c.strip()] for c in raw.split(",") if c.strip()]
+    return list(_DEFAULT_CLIENT_ROTATION)
+
+
+def _apply_client(opts: Dict[str, Any], client: Optional[list[str]]) -> Dict[str, Any]:
+    out = dict(opts)
+    proxy = os.getenv("YOUTUBE_PROXY", "").strip()
+    if proxy:
+        out["proxy"] = proxy
+    if client:
+        out["extractor_args"] = {"youtube": {"player_client": client}}
+    return out
+
+
 class YouTubeDownloader:
     """Enhanced YouTube downloader with optimized settings."""
 
@@ -304,9 +326,20 @@ def _fetch_video_info_with_ytdlp(url: str) -> Dict[str, Any]:
     if not video_id:
         raise ValueError(f"Invalid YouTube URL: {url}")
 
-    ydl_opts = _build_info_options()
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=False)
+    base_opts = _build_info_options()
+    info = None
+    last_exc: Optional[Exception] = None
+    for client in _client_rotation():
+        try:
+            with yt_dlp.YoutubeDL(_apply_client(base_opts, client)) as ydl:
+                info = ydl.extract_info(url, download=False)
+            if info:
+                break
+        except Exception as exc:  # tenta o próximo cliente do player
+            last_exc = exc
+            logger.info("YouTube info failed with client %s: %s", client or "default", str(exc)[:160])
+    if not info:
+        raise last_exc or RuntimeError("YouTube metadata unavailable")
 
     return {
         "id": info.get("id"),
@@ -524,7 +557,7 @@ def download_youtube_video_with_apify(
 
 def _download_youtube_video_with_ytdlp(
     url: str,
-    max_retries: int = 3,
+    max_retries: int = 4,
     task_id: Optional[str] = None,
 ) -> Optional[Path]:
     """
@@ -559,7 +592,8 @@ def _download_youtube_video_with_ytdlp(
         try:
             logger.info("Download attempt %s/%s", attempt + 1, max_retries)
 
-            ydl_opts = downloader.get_optimal_download_options(video_id)
+            rotation = _client_rotation()
+            ydl_opts = _apply_client(downloader.get_optimal_download_options(video_id), rotation[attempt % len(rotation)])
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([url])
