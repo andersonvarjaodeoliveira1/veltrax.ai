@@ -1098,6 +1098,10 @@ export function CloneWizard() {
   const canNext = [p.scenes.length === p.sceneCount && copyReady, p.variations.length > 0, allApproved, p.ctaLocked, p.videos.length > 0, true, false][p.step - 1];
   const working = busy !== null || auto !== null;
   const runningTask = tasks.find((task) => task.state === "running");
+  // Ao terminar as escolhas e começar a criar, leva a tela até o andamento para a pessoa acompanhar.
+  const progressRef = useRef<HTMLDivElement>(null);
+  const creating = !!(auto || runningTask);
+  useEffect(() => { if (creating) progressRef.current?.scrollIntoView?.({ behavior: "smooth", block: "center" }); }, [creating]);
   const steps = ["Preparando tudo…", "Trabalhando nisso…", "Quase lá…"];
   const secs = runningTask ? Math.max(0, (now - runningTask.start) / 1000) : 0;
   // Uma só barra: sobe rápido no começo e desacelera, nunca chega a 100% antes de terminar.
@@ -1475,7 +1479,7 @@ export function CloneWizard() {
         )}
 
         {(auto || runningTask) && (
-          <div className="cg-orbit relative" style={{ "--cg-r": "20px" } as React.CSSProperties}>
+          <div ref={progressRef} data-testid="creation-progress" className="cg-orbit relative scroll-mt-24" style={{ "--cg-r": "20px" } as React.CSSProperties}>
           <div role="status" aria-live="polite" className="relative space-y-2 rounded-[18px] border border-[#A98BFF]/40 bg-[#141316] p-4 shadow-[0_12px_32px_-18px_#7B3FE4]">
             <div className="flex items-center justify-between gap-2 text-sm">
               <span className="font-medium">{auto ? auto.label : runningTask?.label}</span>
@@ -1840,7 +1844,7 @@ export function CloneWizard() {
         <section className="space-y-4 rounded-[18px] border border-border bg-card p-5">
           <p className="text-sm font-medium text-primary">Passo {p.step} de {STEPS.length}: <span className="font-normal text-foreground">{HINTS[p.step - 1]}</span></p>
           {(auto || runningTask) && (
-            <div className="cg-orbit sticky top-2 z-10" style={{ "--cg-r": "20px" } as React.CSSProperties}>
+            <div ref={progressRef} data-testid="creation-progress" className="cg-orbit sticky top-2 z-10" style={{ "--cg-r": "20px" } as React.CSSProperties}>
             <div role="status" aria-live="polite" className="relative space-y-2 rounded-[18px] border border-[#A98BFF]/40 bg-[#141316] p-4 shadow-[0_12px_32px_-18px_#7B3FE4]">
               <div className="flex items-center justify-between gap-2 text-sm">
                 <span className="font-medium">{auto ? auto.label : runningTask?.label}{!auto && batch ? ` (${Math.min(batch.done + 1, batch.total)} de ${batch.total})` : ""}</span>

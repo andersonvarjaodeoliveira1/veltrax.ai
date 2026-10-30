@@ -220,6 +220,22 @@ it("shows one progress bar with what is happening and a simple hint per step", a
   expect(screen.getByText(/Pode esperar aqui/)).toBeInTheDocument();
 });
 
+it("leva a tela até o andamento quando a criação começa", async () => {
+  mockAuto();
+  const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>;
+  vi.stubGlobal("fetch", vi.fn((url: string, init?: RequestInit) => (init?.method === "POST" ? new Promise<Response>(() => {}) : base(url, init))));
+  const scroll = vi.fn();
+  Element.prototype.scrollIntoView = scroll;
+  const user = userEvent.setup();
+  window.localStorage.setItem("gv-clonagem-v2", JSON.stringify({ sceneCount: 3, step: 1, reference: "Você sabe por que o seu vídeo não viraliza? Eu explico agora.", count: 1 }));
+  render(<CloneWizard />);
+  const start = await screen.findByRole("button", { name: "Criar meus vídeos automaticamente" });
+  scroll.mockClear();
+  await user.click(start);
+  await screen.findByTestId("creation-progress");
+  await waitFor(() => expect(scroll.mock.contexts.some((el) => (el as HTMLElement).dataset?.testid === "creation-progress")).toBe(true));
+}, 15000);
+
 it("lets the member pick count, keyword and CTA by clicking", async () => {
   const calls = mockApi();
   const user = userEvent.setup();
