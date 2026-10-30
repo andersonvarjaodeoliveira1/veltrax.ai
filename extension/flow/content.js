@@ -95,17 +95,34 @@
   }
 
   /* ---------- Flow: caixa de prompt e ajustes ---------- */
-  const promptBox = () => $(".base-prompt-box") || $(".ProseMirror")?.closest("div");
-  const editor = () => $(".base-prompt-box .ProseMirror") || $(".ProseMirror");
+  // Outras versões do Flow usam outro tipo de campo de texto: procura qualquer campo editável visível e largo, o mais baixo da tela.
+  const genericEditor = () => {
+    const cands = $$('[contenteditable="true"], [contenteditable=""], [role="textbox"], textarea', document)
+      .filter((n) => visible(n) && !n.closest("#clipgringa-flow-host") && n.getBoundingClientRect().width > 120 && !/search|pesquis|busca/i.test(`${n.getAttribute("aria-label") || ""} ${n.getAttribute("placeholder") || ""}`));
+    if (!cands.length) return null;
+    return cands.sort((x, y) => y.getBoundingClientRect().bottom - x.getBoundingClientRect().bottom)[0];
+  };
+  const promptBox = () => $(".base-prompt-box") || $(".ProseMirror")?.closest("div") || genericEditor()?.parentElement || null;
+  const editor = () => $(".base-prompt-box .ProseMirror") || $(".ProseMirror") || genericEditor();
   const overlay = () => $(".cdk-overlay-container") || document.body;
 
   function radios() { return $$("button[role=radio]", overlay()); }
   const hasIcon = (b, icon) => text(b).split("\n").map((s) => s.trim()).includes(icon);
   const isOn = (b) => b.getAttribute("aria-checked") === "true" || b.getAttribute("aria-pressed") === "true" || b.classList.contains("mat-button-toggle-checked");
 
-  const settingsTrigger = () =>
-    $(".settings-trigger-button") || $("button[class*=settings-trigger]")
-    || $$("button", document).filter(visible).find((b) => /ajustes|configura|settings/i.test(b.getAttribute("aria-label") || b.title || ""));
+  const settingsTrigger = () => {
+    const exact = $(".settings-trigger-button") || $("button[class*=settings-trigger]");
+    if (exact) return exact;
+    const label = (b) => `${b.getAttribute("aria-label") || ""} ${b.title || ""} ${text(b)}`;
+    const re = /ajustes|configura|settings|tune/i;
+    // o botão de ajustes da caixa de criação fica junto da caixa de texto (o "Configurações" solto da página não serve)
+    let node = $(".ProseMirror") || genericEditor();
+    for (let i = 0; node && i < 8; i += 1, node = node.parentElement) {
+      const hit = $$("button", node).filter(visible).find((b) => re.test(label(b)));
+      if (hit) return hit;
+    }
+    return null;
+  };
 
   // O Flow pode abrir o painel do "Agente" (chat). Para gerar direto, esse painel precisa estar fechado.
   async function closeAgentPanel() {
@@ -122,8 +139,10 @@
   /** Resumo curto do que a aba do Flow mostra agora (vai junto do erro para dar para entender o que mudou). */
   function flowDiagnosis() {
     const panel = $(".agent-panel-wrapper");
-    const buttons = $$("button", document).filter(visible).map((b) => (b.getAttribute("aria-label") || b.title || text(b)).replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 10);
-    return `página ${location.pathname.slice(0, 48)}; Agente ${panel && visible(panel) ? "aberto" : "fechado"}; caixa de texto ${editor() ? "sim" : "não"}; ajustes ${settingsTrigger() ? "sim" : "não"}; botões: ${buttons.join(" | ") || "nenhum"}`;
+    const buttons = $$("button", document).filter(visible).map((b) => (b.getAttribute("aria-label") || b.title || text(b)).replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 30);
+    const fields = $$('[contenteditable], [role="textbox"], textarea, input[type=text]', document).filter(visible).filter((n) => !n.closest("#clipgringa-flow-host")).slice(0, 5)
+      .map((n) => `${n.tagName.toLowerCase()}.${String(n.className || "").split(" ")[0]}[${(n.getAttribute("aria-label") || n.getAttribute("placeholder") || "").slice(0, 24)}]`);
+    return `página ${location.pathname.slice(0, 48)}; Agente ${panel && visible(panel) ? "aberto" : "fechado"}; caixa de texto ${editor() ? "sim" : "não"}; ajustes ${settingsTrigger() ? "sim" : "não"}; janela ${innerWidth}x${innerHeight}; campos: ${fields.join(" ") || "nenhum"}; botões: ${buttons.join(" | ") || "nenhum"}`;
   }
 
   async function ensureDirectMode() {
