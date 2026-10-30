@@ -206,13 +206,48 @@ def current_keys() -> dict[str, str]:
     return _current_keys.get()
 
 
+CLAUDE_THINKING_TYPES = ("between_tools", "disabled")
+
+
 def claude_model(name: str = "claude-sonnet-5-5", api_key: str | None = None) -> Any:
-    """Claude sem thinking: a API recusa `tool_choice` forçado (saída estruturada) com o thinking ligado (400)."""
+    """Claude sem thinking "de verdade": a API recusa `tool_choice` forçado (saída estruturada) com o thinking ligado (400).
+
+    Alguns modelos recusam `thinking: disabled` e exigem `between_tools` (relato dos testes). Começa por
+    `CLAUDE_THINKING_TYPE` (padrão between_tools) e, se a API recusar o thinking com 400, tenta o outro valor uma vez
+    e lembra do que funcionou.
+    """
+    import os
+
+    from pydantic_ai.exceptions import ModelHTTPError
     from pydantic_ai.models.anthropic import AnthropicModel, AnthropicModelSettings
     from pydantic_ai.providers.anthropic import AnthropicProvider
 
     provider = AnthropicProvider(api_key=api_key) if api_key else "anthropic"
-    return AnthropicModel(name, provider=provider, settings=AnthropicModelSettings(anthropic_thinking={"type": "disabled"}))
+    first = os.getenv("CLAUDE_THINKING_TYPE", "between_tools").strip() or "between_tools"
+    order = [first] + [t for t in CLAUDE_THINKING_TYPES if t != first]
+
+    class _ClaudeNoThinking(AnthropicModel):
+        _idx = 0
+
+        def _settings_for(self, kind: str):
+            return AnthropicModelSettings(anthropic_thinking={"type": kind})
+
+        async def request(self, messages, model_settings, model_request_parameters):  # type: ignore[override]
+            last: Exception | None = None
+            for i in range(self._idx, len(order)):
+                merged = {**(model_settings or {}), "anthropic_thinking": {"type": order[i]}}
+                try:
+                    out = await super().request(messages, merged, model_request_parameters)
+                    self._idx = i
+                    return out
+                except ModelHTTPError as e:
+                    if e.status_code == 400 and "thinking" in str(e.body).lower() and i + 1 < len(order):
+                        last = e
+                        continue
+                    raise
+            raise last  # type: ignore[misc]
+
+    return _ClaudeNoThinking(name, provider=provider, settings=AnthropicModelSettings(anthropic_thinking={"type": order[0]}))
 
 
 def user_models(include_account: bool = True) -> list[Any]:
