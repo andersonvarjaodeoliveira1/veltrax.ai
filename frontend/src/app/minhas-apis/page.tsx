@@ -7,6 +7,7 @@ import { Check, KeyRound, Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/app/page-header";
 import { useFlowConnection } from "@/hooks/use-flow-connection";
+import { AccountAiCheck } from "@/components/app/account-ai-check";
 import { ACCOUNT_AI_EVENT, ACCOUNT_SITES, OPEN_ACCOUNT_AI_EVENT, isAccountSite, readChoice, writeChoice, type AccountChoice } from "@/lib/account-ai";
 
 type Integration = { provider: string; label: string; help: string; connected: boolean; hint: string; updated_at: string | null };
@@ -58,6 +59,7 @@ function AiSourceCard({ items }: { items: Integration[] | null }) {
         <span className="block text-xs text-muted-foreground">{detail} A ordem é: sua chave de API, depois a sua conta, depois os créditos do plano. A cada geração eu aviso por onde saiu.</span>
       </span>
       <button type="button" onClick={() => window.dispatchEvent(new Event(OPEN_ACCOUNT_AI_EVENT))} className="rounded-full border border-[#7B3FE4]/60 px-4 py-2 text-xs font-medium text-[#A98BFF]">{account ? "Trocar a conta" : "Conectar minha conta de IA"}</button>
+      {choice && isAccountSite(choice.site) && <AccountAiCheck site={choice.site} />}
       {account && <button type="button" onClick={() => { writeChoice(null); void fetch("/api/multiplier/ai-relay/off", { method: "POST" }).catch(() => undefined); }} className="rounded-full border border-border px-4 py-2 text-xs font-medium">Desconectar</button>}
     </section>
   );
