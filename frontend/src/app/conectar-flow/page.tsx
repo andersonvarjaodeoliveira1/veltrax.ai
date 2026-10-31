@@ -7,6 +7,7 @@ import { useFlowConnection } from "@/hooks/use-flow-connection";
 import { FLOW_CHOICES, defaultFlowCategory, saveFlowCategory, visibleFlowChoices } from "@/lib/flow-models";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/app/page-header";
+import { ConnectAll } from "@/components/app/connect-all";
 
 const FLOW_URL = "https://labs.google/fx/pt/tools/flow";
 // Link compartilhado do app "ClipGringa — Gerar Vídeos" dentro do Flow. Só aparece depois de criado e configurado.
@@ -44,6 +45,8 @@ export default function ConnectFlowPage() {
   return (
     <div className="mx-auto w-full max-w-3xl space-y-6 p-4 sm:p-8">
       <PageHeader icon={Link2} title="Conectar ao Flow" description={<>Os vídeos são gerados na <b>sua</b> conta do Flow. Faça os passos abaixo uma vez e deixe a conta conectada neste navegador.</>} />
+
+      <ConnectAll />
 
       <section data-testid="flow-status" aria-live="polite" className={cn("flex flex-wrap items-center gap-3 rounded-[18px] border p-4 text-sm",
         flowState === "connected" ? "border-[#5BD69A]/40 bg-[#5BD69A]/10" : flowState === "unknown" ? "border-border bg-card" : "border-[#F5B454]/40 bg-[#F5B454]/10")}>
