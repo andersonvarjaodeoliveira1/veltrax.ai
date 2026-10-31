@@ -39,6 +39,32 @@ export function LinkVideo({ onFile, onPhotos, photoLabel, disabled }: { onFile: 
   const [fromBank, setFromBank] = useState(false);
   const isShopee = !!normalizeShopeeUrl(link);
 
+  // Fotos/vídeos que a pessoa guardou pelo botão "Guardar no ClipGringa" da página da Shopee (extensão): aparecem aqui e vão para o Banco de imagens.
+  useEffect(() => {
+    let last = 0;
+    const onMsg = (event: MessageEvent) => {
+      if (event.source !== window || event.data?.source !== "clipgringa-flow" || event.data?.type !== "shopee-inbox") return;
+      const data = event.data.data ?? {};
+      const at = Number(data.at || 0);
+      if (at && at === last) return;
+      last = at;
+      const images: string[] = Array.isArray(data.images) ? data.images.filter((u: unknown) => typeof u === "string" && u.startsWith("https://")).slice(0, 9) : [];
+      const vids: { url: string; poster: string }[] = Array.isArray(data.videos) ? data.videos.filter((v: { url?: unknown }) => typeof v?.url === "string").slice(0, 6) : [];
+      if (!images.length && !vids.length) return;
+      const name = String(data.title ?? "");
+      setError(""); setFromBank(false); setApplied("");
+      setTitle(name); setVideos(vids); setPhotos(images); setSel(images.slice(0, 3));
+      setPhotoNote("Recebi as fotos que você guardou na Shopee. Já ficam no seu Banco de imagens.");
+      void saveToBank(images, vids, name);
+      window.postMessage({ source: "clipgringa-page", type: "shopee-inbox-ack" }, window.location.origin);
+      if (!vids.length && images.length && onPhotos) void applyPhotos(images.slice(0, 3));
+    };
+    window.addEventListener("message", onMsg);
+    window.postMessage({ source: "clipgringa-page", type: "shopee-inbox?" }, window.location.origin);
+    return () => window.removeEventListener("message", onMsg);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function toFile(response: Response) {
     const blob = await response.blob();
     const ext = blob.type.includes("webm") ? "webm" : blob.type.includes("quicktime") ? "mov" : "mp4";
@@ -132,10 +158,11 @@ export function LinkVideo({ onFile, onPhotos, photoLabel, disabled }: { onFile: 
       // A Shopee bloqueia o servidor, então cair no download pelo servidor só esconde o motivo real. Diz o que houve de verdade.
       setBusy(false);
       if (read.error === "login") setError("A Shopee pediu login ou uma verificação no seu navegador. Entre na Shopee (shopee.com.br) nesse mesmo Chrome e tente de novo.");
-      else if (read.error === "no-extension") setError("Não encontrei a extensão ClipGringa · Flow neste Chrome. Aperte Ctrl+F5 nesta página; se continuar, confira em chrome://extensions se ela está ligada (versão 1.20.0) e recarregue-a.");
+      else if (read.error === "no-extension") setError("Não encontrei a extensão ClipGringa · Flow neste Chrome. Aperte Ctrl+F5 nesta página; se continuar, confira em chrome://extensions se ela está ligada (versão 1.21.0) e recarregue-a.");
       else if (read.error === "notfound") setError("Esse anúncio da Shopee não existe mais ou saiu do ar. Confira o link e tente com outro produto.");
       else if (read.error === "empty") setError("Abri o anúncio, mas não achei vídeo nem fotos do vendedor. Confira se o link é de um produto e tente de novo.");
-      else setError("A Shopee demorou ou bloqueou a leitura do anúncio. Tente de novo; se repetir, baixe a foto ou o vídeo e suba o arquivo.");
+      else if (read.error === "timeout") setError("A Shopee demorou demais para abrir o anúncio (mais de 1 minuto). Abra o produto na Shopee neste mesmo Chrome, espere carregar e cole o link de novo: eu leio a aba que você já abriu.");
+      else setError("Não consegui ler o anúncio da Shopee. Abra o produto na Shopee neste mesmo Chrome, espere carregar e cole o link de novo. Se repetir, baixe a foto ou o vídeo e suba o arquivo.");
       return;
     }
     try {

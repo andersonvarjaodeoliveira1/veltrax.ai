@@ -27,6 +27,25 @@ describe("shopee-bridge", () => {
     spy.mockRestore();
   });
 
+  it("mantém o motivo 'anúncio não existe' em vez de virar erro genérico", async () => {
+    const posted: { id: string }[] = [];
+    const spy = vi.spyOn(window, "postMessage").mockImplementation(((data: { id: string }) => { posted.push(data); }) as never);
+    const promise = readShopeeViaExtension("https://shopee.com.br/x");
+    fromExtension({ type: "shopee-ack", id: posted[0].id });
+    fromExtension({ type: "shopee-result", id: posted[0].id, data: { ok: false, error: "notfound" } });
+    expect(await promise).toEqual({ ok: false, error: "notfound" });
+    spy.mockRestore();
+  });
+
+  it("separa 'demorou demais' de outros erros", async () => {
+    const posted: { id: string }[] = [];
+    const spy = vi.spyOn(window, "postMessage").mockImplementation(((data: { id: string }) => { posted.push(data); }) as never);
+    const promise = readShopeeViaExtension("https://shopee.com.br/x", 50);
+    fromExtension({ type: "shopee-ack", id: posted[0].id });
+    expect(await promise).toEqual({ ok: false, error: "timeout" });
+    spy.mockRestore();
+  });
+
   it("avisa que a extensão não está instalada quando ninguém responde", async () => {
     const spy = vi.spyOn(window, "postMessage").mockImplementation((() => {}) as never);
     expect(await readShopeeViaExtension("https://shopee.com.br/x")).toEqual({ ok: false, error: "no-extension" });

@@ -1431,7 +1431,7 @@ export function CloneWizard() {
       if (policyBlocked) return;
       markSent();
       void copy("flow-send", flowPackage());
-      void pushPackage(flowPackage()).then((ok) => { if (!ok) { setError("A extensão não confirmou o recebimento do pacote. Aperte Ctrl+F5 nesta página (e confira se a extensão está ligada e na versão 1.20.0) e clique em Enviar para o Flow de novo."); window.open(FLOW_HOME_URL, "_blank", "noopener"); } });
+      void pushPackage(flowPackage()).then((ok) => { if (!ok) { setError("A extensão não confirmou o recebimento do pacote. Aperte Ctrl+F5 nesta página (e confira se a extensão está ligada e na versão 1.21.0) e clique em Enviar para o Flow de novo."); window.open(FLOW_HOME_URL, "_blank", "noopener"); } });
     };
     const assembling_ = Object.values(built).some((b) => b.state === "running");
     return (
@@ -1496,7 +1496,7 @@ export function CloneWizard() {
           </div>
         )}
 
-        {!ready && (refFile || p.reference.trim()) && <ReferenceSummary file={refFile} transcript={p.reference} reading={busy === "upload"} noSpeech={speech === "nospeech"} />}
+        {!ready && (refFile || p.reference.trim()) && <ReferenceSummary file={refFile} transcript={p.reference} reading={busy === "upload"} noSpeech={speech === "nospeech"} photos={productPhotos} />}
         {!ready && refFile && p.avatarMode !== "own" && <PresenterChoice detected={refGender.gender} reading={refGender.reading} value={p.presenter ?? ""} onChange={(value) => patch({ presenter: value })} />}
 
         {!ready && !working && askProduct && (
@@ -1595,7 +1595,10 @@ export function CloneWizard() {
                     </button>
                   </div>
                   {!questHold && !hasReference && !refFile && <LinkVideo onFile={chooseVideo} onPhotos={(files, title) => choosePhotos(files, title)} photoLabel="Criar o vídeo com essas fotos" />}
-                  {questHold && <p role="status" className="rounded-[14px] border border-[#5BD69A]/40 bg-[#5BD69A]/10 p-3 text-sm">✓ {questPhoto ? "Foto escolhida" : "Vídeo escolhido"}{questName ? `: ${questName}` : ""}. {readDone ? "Já li. Responda as perguntas e eu sigo." : "Lendo a fala enquanto você responde…"}</p>}
+                  {questHold && <p role="status" className="flex flex-wrap items-center gap-3 rounded-[14px] border border-[#5BD69A]/40 bg-[#5BD69A]/10 p-3 text-sm">{questPhoto && productPhotos.slice(0, 3).map((photo, index) => (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img key={photo.url} src={photo.url} alt={`Foto escolhida ${index + 1}`} className="size-12 rounded-[10px] object-cover" />
+                  ))}<span>✓ {questPhoto ? "Foto escolhida" : "Vídeo escolhido"}{questName ? `: ${questName}` : ""}. {readDone ? "Já li. Responda as perguntas e eu sigo." : "Lendo a fala enquanto você responde…"}</span></p>}
                   {questHold && readDone && !questDone && (
                     <div data-testid="next-step" className="flex flex-wrap items-center gap-3 rounded-[14px] border border-[#7B3FE4]/50 bg-[#7B3FE4]/10 p-3 text-sm">
                       <span className="min-w-0 flex-1"><b>Próximo passo:</b> o prompt e o resumo do criativo já estão prontos. Agora escolha a quantidade de vídeos, as cenas e o resto nas perguntas logo abaixo.</span>
@@ -1652,7 +1655,7 @@ export function CloneWizard() {
 
         {ready && (redirectIn !== null || redirectBlocked) && (
           <section role="status" className="space-y-2 rounded-[18px] border border-[#7B3FE4]/60 bg-[#7B3FE4]/15 p-4" data-testid="flow-redirect">
-            <p className="text-sm font-semibold">{redirectBlocked ? "A extensão não respondeu. Recarregue esta página (F5) e confira se a extensão 1.20.0 está ligada; ou abra o Flow pelo botão abaixo." : `Abrindo o Flow e enviando tudo em ${redirectIn}s…`}</p>
+            <p className="text-sm font-semibold">{redirectBlocked ? "A extensão não respondeu. Recarregue esta página (F5) e confira se a extensão 1.21.0 está ligada; ou abra o Flow pelo botão abaixo." : `Abrindo o Flow e enviando tudo em ${redirectIn}s…`}</p>
             <div className="h-1.5 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A98BFF] transition-all duration-1000" style={{ width: `${redirectBlocked ? 100 : ((1 - (redirectIn ?? 1)) / 1) * 100}%` }} /></div>
             <p className="text-xs text-muted-foreground">Tudo pronto. A extensão recebe o pacote, abre um projeto novo e gera as imagens e os vídeos sozinha. Você não precisa copiar nem colar nada.</p>
             <div className="flex gap-2">
@@ -1882,7 +1885,7 @@ export function CloneWizard() {
                 {busy === "upload" ? "Transcrevendo o vídeo…" : "Escolher vídeo"}
               </Button>
               <LinkVideo onFile={(file) => void readReference(file)} disabled={working} />
-              {(refFile || p.reference.trim()) && <ReferenceSummary file={refFile} transcript={p.reference} reading={busy === "upload"} noSpeech={speech === "nospeech"} />}
+              {(refFile || p.reference.trim()) && <ReferenceSummary file={refFile} transcript={p.reference} reading={busy === "upload"} noSpeech={speech === "nospeech"} photos={productPhotos} />}
               {refFile && p.avatarMode !== "own" && <PresenterChoice detected={refGender.gender} reading={refGender.reading} value={p.presenter ?? ""} onChange={(value) => patch({ presenter: value })} />}
               <Field label="Transcrição do vídeo (ou descreva o que acontece)" hint="Preenchida sozinha ao escolher o vídeo. Você pode editar ou colar o texto direto.">
                 <textarea value={p.reference} onChange={(event) => patch({ reference: event.target.value })} rows={5} maxLength={4000} className={inputClass} />

@@ -27,6 +27,14 @@ SITES = ("gemini", "chatgpt", "claude")
 SITE_LABEL = {"gemini": "Gemini", "chatgpt": "ChatGPT", "claude": "Claude"}
 READY_TTL = 45.0       # segundos sem sinal da página até considerar a conta desligada
 ASK_TIMEOUT = 110.0    # tempo máximo de espera por uma resposta
+ASK_TIMEOUT_IMAGES = 150.0  # com imagens a conta da pessoa leva mais (a extensão anexa as fotos antes de enviar)
+RELAY_RUN_TIMEOUT = 220.0   # limite de uma geração inteira pela conta (o agente pode pedir de novo se o JSON vier torto)
+API_RUN_TIMEOUT = 120.0
+
+
+def run_timeout(model: Any) -> float:
+    """Quanto esperar por uma geração inteira: a conta da pessoa roda num navegador e é mais lenta que uma API."""
+    return RELAY_RUN_TIMEOUT if getattr(model, "is_account_relay", False) else API_RUN_TIMEOUT
 
 
 class RelayError(Exception):
@@ -139,7 +147,9 @@ def submit_result(user_id: str, job_id: str, text: str = "", error: str = "") ->
     return True
 
 
-async def ask(user_id: str, system: str, prompt: str, timeout: float = ASK_TIMEOUT, images: list[dict[str, str]] | None = None) -> str:
+async def ask(user_id: str, system: str, prompt: str, timeout: float | None = None, images: list[dict[str, str]] | None = None) -> str:
+    if timeout is None:
+        timeout = ASK_TIMEOUT_IMAGES if images else ASK_TIMEOUT
     slot = _slot(user_id)
     site = slot.site or "gemini"
     job = _Job(id=uuid.uuid4().hex, system=system, prompt=prompt, future=asyncio.get_running_loop().create_future(), images=images or [])

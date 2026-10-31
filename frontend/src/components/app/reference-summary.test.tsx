@@ -19,6 +19,12 @@ describe("ReferenceSummary", () => {
     expect(await screen.findByText("Copiado")).toBeInTheDocument();
   });
 
+  it("mostra a foto do produto escolhida (por exemplo, da Shopee) no resumo", () => {
+    render(<ReferenceSummary file={null} transcript="Vídeo curto de avatar" photos={[{ url: "blob:foto-1", name: "air-fryer.jpg" }]} />);
+    expect(screen.getByTestId("summary-photos")).toHaveTextContent("Foto do produto");
+    expect(screen.getByAltText("Foto 1 do produto")).toHaveAttribute("src", "blob:foto-1");
+  });
+
   it("avisa que ainda está lendo só enquanto a leitura roda", () => {
     render(<ReferenceSummary file={new File(["x"], "a.mp4", { type: "video/mp4" })} transcript="" reading />);
     expect(screen.getByText(/Ainda lendo o que é dito/)).toBeInTheDocument();

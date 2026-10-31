@@ -330,6 +330,12 @@ async def _fallback_models() -> list[Any]:
     return out
 
 
+def _run_timeout(model: Any) -> float:
+    from ...ai_relay import run_timeout
+
+    return run_timeout(model)
+
+
 async def _run(system: str, output_type: type[BaseModel], prompt: str, model: Any = None) -> Any:
     from pydantic_ai import Agent
 
@@ -355,7 +361,7 @@ async def _run(system: str, output_type: type[BaseModel], prompt: str, model: An
     for index, candidate in enumerate(candidates):
         agent = Agent(candidate, output_type=output_type, system_prompt=system, output_retries=2)
         try:
-            result = await asyncio.wait_for(agent.run(prompt), timeout=120)
+            result = await asyncio.wait_for(agent.run(prompt), timeout=_run_timeout(candidate))
             from ...usage import record_usage
 
             await record_usage(output_type.__name__, candidate, result.usage(), candidate in own)
@@ -364,6 +370,10 @@ async def _run(system: str, output_type: type[BaseModel], prompt: str, model: An
             set_ai_path(path_of_model(candidate) if candidate in own else "plan")
             return result.output
         except asyncio.TimeoutError:
+            # Demorou: tenta o próximo modelo da lista (se houver) em vez de desistir de vez.
+            if index + 1 < len(candidates):
+                logger.warning("clone plan: %s timed out, trying the next model", candidate)
+                continue
             raise HTTPException(status_code=504, detail="AI took too long. Try again.")
         except HTTPException:
             raise
@@ -1221,7 +1231,7 @@ async def _run_parts(system: str, output_type: type[BaseModel], parts: list[Any]
     for index, candidate in enumerate(candidates):
         agent = Agent(candidate, output_type=output_type, system_prompt=system, output_retries=2)
         try:
-            result = await asyncio.wait_for(agent.run(parts), timeout=120)
+            result = await asyncio.wait_for(agent.run(parts), timeout=_run_timeout(candidate))
             from ...usage import record_usage
 
             await record_usage(output_type.__name__, candidate, result.usage(), candidate in own)
@@ -1230,6 +1240,10 @@ async def _run_parts(system: str, output_type: type[BaseModel], parts: list[Any]
             set_ai_path(path_of_model(candidate) if candidate in own else "plan")
             return result.output
         except asyncio.TimeoutError:
+            # Demorou: tenta o próximo modelo da lista (se houver) em vez de desistir de vez.
+            if index + 1 < len(candidates):
+                logger.warning("clone plan: %s timed out, trying the next model", candidate)
+                continue
             raise HTTPException(status_code=504, detail="AI took too long. Try again.")
         except HTTPException:
             raise

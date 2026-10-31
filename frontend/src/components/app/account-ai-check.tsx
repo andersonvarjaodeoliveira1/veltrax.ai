@@ -43,7 +43,7 @@ export function AccountAiCheck({ site }: { site: AccountSite }) {
     try {
       set("ext", "run");
       const hello = await extensionHasAi();
-      if (!hello) { set("ext", "fail", "Não detectei a extensão. Instale ou atualize em Conectar Flow (versão 1.20.0) e recarregue esta página."); return; }
+      if (!hello) { set("ext", "fail", "Não detectei a extensão. Instale ou atualize em Conectar Flow (versão 1.21.0) e recarregue esta página."); return; }
       set("ext", "ok", `Versão ${hello.version || "?"}`);
 
       set("tab", "run");

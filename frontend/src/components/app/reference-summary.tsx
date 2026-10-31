@@ -17,7 +17,7 @@ function once(target: HTMLVideoElement, event: string, ms: number) {
 }
 
 /** Resumo visual (quadros com o tempo de cada um) e a copy (transcrição) do criativo que a pessoa anexou. */
-export function ReferenceSummary({ file, transcript, reading = false, noSpeech = false }: { file: File | null; transcript: string; reading?: boolean; noSpeech?: boolean }) {
+export function ReferenceSummary({ file, transcript, reading = false, noSpeech = false, photos = [] }: { file: File | null; transcript: string; reading?: boolean; noSpeech?: boolean; photos?: { url: string; name: string }[] }) {
   const [frames, setFrames] = useState<Frame[]>([]);
   const [meta, setMeta] = useState<Meta | null>(null);
   const [state, setState] = useState<"idle" | "working" | "done" | "failed">("idle");
@@ -93,6 +93,19 @@ export function ReferenceSummary({ file, transcript, reading = false, noSpeech =
 
   return (
     <section aria-label="Resumo do criativo" className="space-y-4 rounded-[18px] border border-border bg-card p-5" data-testid="reference-summary">
+      {photos.length > 0 && (
+        <div data-testid="summary-photos" className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{photos.length === 1 ? "Foto do produto" : "Fotos do produto"}</p>
+          <ul className="flex flex-wrap gap-2">
+            {photos.slice(0, 6).map((photo, index) => (
+              <li key={photo.url} className="size-20 overflow-hidden rounded-[12px] border border-border bg-background">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={photo.url} alt={`Foto ${index + 1} do produto`} className="size-full object-cover" />
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="flex items-center gap-2 font-medium"><Film className="size-4 text-[#A98BFF]" /> Resumo do criativo</p>
         {meta && <p className="text-xs text-muted-foreground">Duração: <b className="text-foreground">{clock(meta.duration)}</b> · Resolução: <b className="text-foreground">{meta.width}x{meta.height}</b></p>}

@@ -63,6 +63,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       .catch((e) => sendResponse({ ok: false, error: String((e && e.message) || e) }));
     return true;
   }
+  if (message && message.type === "clipgringa-shopee-save") {
+    const images = Array.isArray(message.images) ? message.images.filter((u) => typeof u === "string" && /^https:\/\//.test(u)).slice(0, 9) : [];
+    const videos = Array.isArray(message.videos) ? message.videos.filter((v) => v && typeof v.url === "string" && /^https:\/\//.test(v.url)).slice(0, 6).map((v) => ({ url: v.url, poster: typeof v.poster === "string" ? v.poster : "" })) : [];
+    chrome.storage.local.set({ "clipgringa-shopee-inbox-v1": { at: Date.now(), title: String(message.title || "").slice(0, 120), images, videos } })
+      .then(() => sendResponse({ ok: images.length + videos.length > 0 }))
+      .catch(() => sendResponse({ ok: false }));
+    return true;
+  }
   if (message && message.type === "clipgringa-shopee") {
     readShopee(String(message.url || ""))
       .then((r) => sendResponse(r))
@@ -184,37 +192,70 @@ chrome.runtime.onInstalled.addListener(async () => {
 
 // Abre o anúncio da Shopee numa aba em segundo plano (no navegador da própria pessoa, com a sessão dela),
 // lê os vídeos e as fotos do anúncio e fecha a aba. Só devolve endereços.
-async function readShopee(url) {
-  if (!/^https:\/\/(?:[\w-]+\.)*(?:shopee\.com\.br|shopee\.com|shp\.ee|shope\.ee)\//i.test(url)) return { ok: false, error: "invalid" };
-  const tab = await chrome.tabs.create({ url, active: false });
+// Chave do produto (loja.item) para achar o mesmo anúncio já aberto no Chrome da pessoa.
+function shopeeItemKey(u) {
+  const m = /-i\.(\d+)\.(\d+)/.exec(String(u || "")) || /\/product\/(\d+)\/(\d+)/.exec(String(u || ""));
+  return m ? m[1] + "." + m[2] : "";
+}
+
+async function findOpenShopeeTab(url) {
+  const key = shopeeItemKey(url);
+  if (!key) return null;
+  try {
+    const tabs = await chrome.tabs.query({ url: ["https://*.shopee.com.br/*", "https://shopee.com.br/*", "https://*.shopee.com/*", "https://shopee.com/*"] });
+    return tabs.find((t) => shopeeItemKey(t.url) === key) || null;
+  } catch (_e) { return null; }
+}
+
+// Lê o anúncio numa aba que já existe (rounds tentativas de ~1,2 s).
+async function scrapeShopeeTab(tabId, rounds) {
+  let best = null;
+  for (let i = 0; i < rounds; i += 1) {
+    await new Promise((r) => setTimeout(r, 1200));
+    const current = await chrome.tabs.get(tabId).catch(() => null);
+    if (!current) break;
+    if (/\/buyer\/login|\/verify\/|captcha/i.test(current.url || "")) return { ok: false, error: "login" };
+    // aba em segundo plano não carrega fotos "preguiçosas": rola a página para a Shopee mostrar tudo do topo do anúncio
+    if (i === 1 || i === 4) { try { await chrome.scripting.executeScript({ target: { tabId }, func: () => { window.scrollTo(0, 500); window.dispatchEvent(new Event("scroll")); } }); } catch (_e) { /* sem permissão */ } }
+    let out = null;
+    try { out = (await chrome.scripting.executeScript({ target: { tabId }, func: clipgringaScrapeShopee }))[0].result; } catch (_e) { out = null; }
+    if (out) best = out;
+    if (out && out.missing) return { ok: false, error: "notfound" };
+    if (best && (best.videos.length || best.images.length >= 3) && i >= 2) break;
+  }
+  if (!best || (!best.videos.length && !best.images.length)) return { ok: false, error: "empty" };
+  return { ok: true, title: best.title, videos: best.videos, images: best.images };
+}
+
+// Abre o anúncio numa aba nova (escondida ou à vista), lê e fecha.
+async function readShopeeInNewTab(url, active) {
+  const tab = await chrome.tabs.create({ url, active });
   try {
     await new Promise((resolve) => {
       const done = () => { chrome.tabs.onUpdated.removeListener(listener); resolve(); };
       const listener = (id, info) => { if (id === tab.id && info.status === "complete") done(); };
       chrome.tabs.onUpdated.addListener(listener);
-      setTimeout(done, 20000);
+      setTimeout(done, 15000);
     });
-    let best = null;
-    let missing = false;
-    for (let i = 0; i < 12; i += 1) {
-      await new Promise((r) => setTimeout(r, 1200));
-      const current = await chrome.tabs.get(tab.id).catch(() => null);
-      if (!current) break;
-      if (/\/buyer\/login|\/verify\/|captcha/i.test(current.url || "")) return { ok: false, error: "login" };
-      // aba em segundo plano não carrega fotos "preguiçosas": rola a página para a Shopee mostrar tudo do topo do anúncio
-      if (i === 1 || i === 4) { try { await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => { window.scrollTo(0, 500); window.dispatchEvent(new Event("scroll")); } }); } catch (_e) { /* sem permissão */ } }
-      let out = null;
-      try { out = (await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: clipgringaScrapeShopee }))[0].result; } catch (_e) { out = null; }
-      if (out) best = out;
-      if (out && out.missing) { missing = true; break; }
-      if (best && (best.videos.length || best.images.length >= 3) && i >= 2) break;
-    }
-    if (missing) return { ok: false, error: "notfound" };
-    if (!best || (!best.videos.length && !best.images.length)) return { ok: false, error: "empty" };
-    return { ok: true, title: best.title, videos: best.videos, images: best.images };
+    return await scrapeShopeeTab(tab.id, 10);
   } finally {
     try { await chrome.tabs.remove(tab.id); } catch (_e) { /* já fechada */ }
   }
+}
+
+async function readShopee(url) {
+  if (!/^https:\/\/(?:[\w-]+\.)*(?:shopee\.com\.br|shopee\.com|shp\.ee|shope\.ee)\//i.test(url)) return { ok: false, error: "invalid" };
+  // 1) o anúncio já está aberto no Chrome da pessoa (logado e carregado): lê ali mesmo.
+  const open = await findOpenShopeeTab(url);
+  if (open) {
+    const r = await scrapeShopeeTab(open.id, 5);
+    if (r.ok) return r;
+  }
+  // 2) aba escondida; 3) se falhar por demora/vazio, repete com a aba à vista (a Shopee carrega melhor).
+  const first = await readShopeeInNewTab(url, false);
+  if (first.ok || first.error === "login" || first.error === "notfound") return first;
+  const second = await readShopeeInNewTab(url, true);
+  return second.ok ? second : { ok: false, error: second.error === "empty" ? "empty" : first.error };
 }
 
 

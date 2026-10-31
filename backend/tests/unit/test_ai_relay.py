@@ -151,3 +151,30 @@ async def _after_set(uid, fn):
 
     set_usage_user(uid)
     return await fn(None, uid)
+
+
+def test_account_runs_get_a_longer_timeout_than_apis():
+    from types import SimpleNamespace
+
+    assert ai_relay.run_timeout(SimpleNamespace(is_account_relay=True)) == ai_relay.RELAY_RUN_TIMEOUT
+    assert ai_relay.run_timeout(object()) == ai_relay.API_RUN_TIMEOUT
+    assert ai_relay.RELAY_RUN_TIMEOUT > ai_relay.ASK_TIMEOUT_IMAGES > ai_relay.ASK_TIMEOUT
+
+
+async def test_ask_with_images_waits_longer_than_text(monkeypatch):
+    waits = []
+    real = asyncio.wait_for
+
+    async def spy(awaitable, timeout):
+        waits.append(timeout)
+        raise asyncio.TimeoutError
+
+    monkeypatch.setattr(asyncio, "wait_for", spy)
+    ai_relay.heartbeat("u-img", "gemini")
+    for images in (None, [{"mime": "image/png", "data": "AAAA"}]):
+        try:
+            await ai_relay.ask("u-img", "", "oi", images=images)
+        except ai_relay.RelayError:
+            pass
+    monkeypatch.setattr(asyncio, "wait_for", real)
+    assert waits == [ai_relay.ASK_TIMEOUT, ai_relay.ASK_TIMEOUT_IMAGES]

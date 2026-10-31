@@ -122,3 +122,20 @@ describe("LinkVideo · Banco de imagens", () => {
     expect(await screen.findByText(/Foto 2 guardada no seu Banco de imagens/i)).toBeTruthy();
   });
 });
+
+describe("LinkVideo · fotos guardadas pelo botão da extensão na Shopee", () => {
+  it("mostra as fotos recebidas, guarda no Banco e confirma o recebimento", async () => {
+    const calls: { url: string; body: string }[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => { calls.push({ url, body: String(init?.body) }); return new Response(JSON.stringify({ saved: [{ kind: "image" }, { kind: "image" }] }), { status: 200 }); }));
+    const posted: { type?: string }[] = [];
+    const spy = vi.spyOn(window, "postMessage").mockImplementation(((data: { type?: string }) => { posted.push(data); }) as never);
+    render(<LinkVideo onFile={vi.fn()} />);
+    expect(posted.some((m) => m.type === "shopee-inbox?")).toBe(true);
+    const images = ["https://down-br.img.susercontent.com/file/aaaaaaaaaaaaaaaaaaaaaaaa", "https://down-br.img.susercontent.com/file/bbbbbbbbbbbbbbbbbbbbbbbb"];
+    window.dispatchEvent(new MessageEvent("message", { source: window, data: { source: "clipgringa-flow", type: "shopee-inbox", data: { at: 1, title: "Air Fryer", images, videos: [] } } }));
+    expect(await screen.findByTestId("shopee-photos")).toHaveTextContent("Air Fryer");
+    await vi.waitFor(() => expect(calls.some((c) => c.url.includes("save-from-urls"))).toBe(true));
+    expect(posted.some((m) => m.type === "shopee-inbox-ack")).toBe(true);
+    spy.mockRestore();
+  });
+});
