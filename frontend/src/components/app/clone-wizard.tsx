@@ -17,6 +17,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import { FLOW_CHOICES, FLOW_MODELS, defaultFlowCategory, effectiveFlowId, saveFlowCategory, visibleFlowChoices } from "@/lib/flow-models";
 import { ReferenceSummary } from "@/components/app/reference-summary";
+import { ManualOptions, variationHint, type EntryMode, type VariationMode } from "@/components/app/manual-options";
 import { PresenterChoice, useReferenceGender, type Presenter } from "@/components/app/presenter-choice";
 import { useSession } from "@/lib/auth-client";
 import { ADMIN_WHATSAPP_URL } from "@/lib/token-balance";
@@ -40,6 +41,7 @@ type Project = {
   reference: string;
   notes: string;
   changes: string;
+  variationMode?: VariationMode;
   ownCopy?: string;
   copySource?: "video" | "own" | "describe";
   product: string;
@@ -283,7 +285,7 @@ async function callStage(stage: Stage, proj: Project): Promise<{ items?: unknown
       own_copy: proj.copySource === "own" && (proj.ownCopy ?? "").trim().length >= 20,
       copy_brief: proj.copySource === "describe" && (proj.ownCopy ?? "").trim().length >= 20,
       notes: proj.notes,
-      changes: proj.changes ?? "",
+      changes: [proj.changes ?? "", variationHint(proj.variationMode)].filter(Boolean).join(" | ").slice(0, 900),
       product: proj.product,
       product_info: proj.productInfo,
       product_look: proj.productLook,
@@ -1244,6 +1246,7 @@ export function CloneWizard() {
   const [questHold, setQuestHold] = useState(false);
   const [policyOk, setPolicyOk] = useState("");
   const [questDone, setQuestDone] = useState(false);
+  const [entryMode, setEntryMode] = useState<EntryMode>("auto");
   const [readDone, setReadDone] = useState(false);
   const [questName, setQuestName] = useState("");
   const [questPhoto, setQuestPhoto] = useState(false);
@@ -1604,6 +1607,21 @@ export function CloneWizard() {
                       <span className="min-w-0 flex-1"><b>Próximo passo:</b> o prompt e o resumo do criativo já estão prontos. Agora escolha a quantidade de vídeos, as cenas e o resto nas perguntas logo abaixo.</span>
                       <button type="button" onClick={() => chatRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" })} className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-4 py-2 text-xs font-medium text-white">Ir para as perguntas ↓</button>
                     </div>
+                  )}
+                  {(questHold || hasReference || !!refFile) && (
+                    <ManualOptions mode={entryMode} onMode={(m) => { setEntryMode(m); if (m === "manual") patch({ variationMode: p.variationMode ?? "roulette" }); else patch({ variationMode: undefined }); }}
+                      values={{ copyMode: p.copyMode, variationMode: p.variationMode ?? "roulette", keepPerson: p.avatarMode === "own", presenter: p.presenter ?? "", count: p.count, language: p.language }}
+                      languages={LANGUAGES.map((l) => ({ value: l.value, text: l.text }))}
+                      onChange={(c) => {
+                        if (c.language) { chooseLanguage(c.language); return; }
+                        if (c.count) { patch({ count: c.count }); return; }
+                        patch({
+                          ...(c.copyMode ? { copyMode: c.copyMode } : {}),
+                          ...(c.variationMode ? { variationMode: c.variationMode } : {}),
+                          ...(c.keepPerson !== undefined ? { avatarMode: c.keepPerson ? "own" as const : "random" as const } : {}),
+                          ...(c.presenter ? { presenter: c.presenter } : {}),
+                        });
+                      }} />
                   )}
                   {(questHold || hasReference || !!refFile) ? (
                   <div ref={chatRef} className="scroll-mt-4">
