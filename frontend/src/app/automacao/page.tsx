@@ -25,7 +25,6 @@ type TabKey = "criar" | "copys" | "flow" | "prontos" | "clonagem" | "ajustes" | 
 const STORAGE_KEY = "gv-automacao-v1";
 const TONES = ["Direto e amigável", "Emocional", "Urgente", "Divertido"];
 // Clonagem é o caminho principal; as demais abas ficam como apoio (modo manual).
-const MAIN_TAB = { key: "clonagem" as const, label: "Clonar um vídeo", hint: "suba o vídeo e o resto é automático" };
 const RESULT_TABS: { key: TabKey; label: string }[] = [
   { key: "videos", label: "Vídeos criados" },
   { key: "imagens", label: "Banco de imagens" },
@@ -72,8 +71,9 @@ function captionOf(item: Creative) {
 export default function AutomationPage() {
   const [ready, setReady] = useState(false);
   const [tab, setTab] = useState<TabKey>("clonagem");
-  const [manualOpen, setManualOpen] = useState(false);
   const manualTab = TABS.some((item) => item.key === tab);
+  const libraryTab = tab === "videos" || tab === "imagens";
+  const section = tab === "clonagem" ? "auto" : libraryTab ? "library" : "manual";
   useEffect(() => {
     const aba = new URLSearchParams(window.location.search).get("aba");
     if (aba === "videos" || aba === "imagens") setTab(aba);
@@ -238,45 +238,48 @@ export default function AutomationPage() {
         </p>
       </div>
 
-      <nav aria-label="Etapas" className="space-y-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex flex-wrap items-center gap-1 rounded-full border border-white/10 bg-white/[0.03] p-1 backdrop-blur">
-            <button type="button" onClick={() => setTab(MAIN_TAB.key)} aria-current={tab === MAIN_TAB.key}
-              className={cn("rounded-full px-4 py-1.5 text-xs font-medium transition-colors",
-                tab === MAIN_TAB.key ? "bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white shadow-[0_6px_20px_-8px_#7B3FE4]" : "text-muted-foreground hover:text-foreground")}>
-              {MAIN_TAB.label} <span className="ml-1 rounded-full bg-white/20 px-1.5 py-0.5 text-[9px] font-semibold">BETA</span>
-            </button>
-            {RESULT_TABS.map((item) => (
-              <button key={item.key} type="button" onClick={() => setTab(item.key)} aria-current={tab === item.key}
-                className={cn("rounded-full px-4 py-1.5 text-xs font-medium transition-colors",
-                  tab === item.key ? "bg-white/10 text-foreground" : "text-muted-foreground hover:text-foreground")}>
-                {item.label}
-              </button>
-            ))}
-          </div>
-          <button type="button" onClick={() => setManualOpen((open) => !open)} aria-expanded={manualOpen || manualTab}
-            className="rounded-full px-3 py-1.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground">
-            Modo manual {manualOpen || manualTab ? "▴" : "▾"}
+      <div className="grid gap-4 md:grid-cols-[13rem_minmax(0,1fr)]">
+      <nav aria-label="Vídeo orgânico" className="flex gap-2 overflow-x-auto md:flex-col md:overflow-visible">
+        {([
+          ["auto", "Vídeo automático", "Suba o vídeo e o resto é automático", () => setTab("clonagem")],
+          ["manual", "Vídeo manual", "Você controla cada etapa", () => setTab(manualTab ? tab : "criar")],
+          ["library", "Biblioteca", "Seus vídeos e imagens criados", () => setTab(libraryTab ? tab : "videos")],
+        ] as const).map(([id, label, hint, go]) => (
+          <button key={id} type="button" onClick={go} aria-current={section === id ? "page" : undefined} title={hint}
+            className={cn("shrink-0 rounded-[14px] border px-4 py-2.5 text-left text-sm transition-colors md:w-full",
+              section === id ? "border-[#7B3FE4] bg-[#7B3FE4]/20 text-foreground" : "border-white/10 text-muted-foreground hover:text-foreground")}>
+            <span className="flex items-center gap-2 font-medium">{label}{id === "auto" && <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[9px] font-semibold">BETA</span>}</span>
+            <span className="hidden text-xs opacity-80 md:block">{hint}</span>
           </button>
-        </div>
-        {(manualOpen || manualTab) && (
-          <div className="flex flex-wrap items-center gap-1 rounded-[14px] border border-white/10 bg-white/[0.02] p-1.5">
-            {TABS.map((item) => {
-              const count = item.key === "criar" || item.key === "ajustes" ? 0 : counts[item.key as "copys" | "flow" | "prontos"];
-              return (
-                <button key={item.key} type="button" onClick={() => setTab(item.key)} aria-current={tab === item.key} title={item.hint}
-                  className={cn("rounded-[10px] px-3 py-1.5 text-xs transition-colors",
-                    tab === item.key ? "bg-white/10 text-foreground" : "text-muted-foreground hover:text-foreground")}>
-                  <span className="flex items-center gap-1.5 font-medium">
-                    {item.label}
-                    {count > 0 && <span className="rounded-full bg-[#7B3FE4]/40 px-1.5 text-[10px] tabular-nums">{count}</span>}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        )}
+        ))}
       </nav>
+      <div className="min-w-0 space-y-4">
+      {section === "manual" && (
+        <div role="tablist" aria-label="Etapas do vídeo manual" className="flex flex-wrap items-center gap-1 rounded-[14px] border border-white/10 bg-white/[0.02] p-1.5">
+          {TABS.map((item) => {
+            const count = item.key === "criar" || item.key === "ajustes" ? 0 : counts[item.key as "copys" | "flow" | "prontos"];
+            return (
+              <button key={item.key} type="button" onClick={() => setTab(item.key)} aria-current={tab === item.key} title={item.hint}
+                className={cn("rounded-[10px] px-3 py-1.5 text-xs transition-colors", tab === item.key ? "bg-white/10 text-foreground" : "text-muted-foreground hover:text-foreground")}>
+                <span className="flex items-center gap-1.5 font-medium">
+                  {item.label}
+                  {count > 0 && <span className="rounded-full bg-[#7B3FE4]/40 px-1.5 text-[10px] tabular-nums">{count}</span>}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {section === "library" && (
+        <div role="tablist" aria-label="Biblioteca" className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.03] p-1">
+          {RESULT_TABS.map((item) => (
+            <button key={item.key} type="button" onClick={() => setTab(item.key)} aria-current={tab === item.key}
+              className={cn("rounded-full px-4 py-1.5 text-xs font-medium transition-colors", tab === item.key ? "bg-white/10 text-foreground" : "text-muted-foreground hover:text-foreground")}>
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {tab !== "clonagem" && tab !== "videos" && tab !== "imagens" && (
       <Alert>
@@ -504,6 +507,8 @@ export default function AutomationPage() {
           <p className="text-xs text-muted-foreground">Seus nichos, ajustes e criativos ficam guardados só neste navegador durante o teste.</p>
         </section>
       )}
+      </div>
+      </div>
     </div>
   );
 }
