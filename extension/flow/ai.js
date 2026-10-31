@@ -130,22 +130,31 @@
       } catch (_e) { /* imagem inválida: ignora */ }
     });
     if (!files.length) return 0;
+    const attached = () => document.querySelectorAll('img[src^="blob:"], [data-testid*="attachment"], [class*="attachment"], uploader-file-preview, [class*="file-preview"], [class*="file-chip"]').length;
+    const waitAttached = async (ms) => { for (let i = 0; i < ms / 300 && !attached(); i += 1) await sleep(300); return attached() > 0; };
+    const mk = () => { const d = new DataTransfer(); files.forEach((f) => d.items.add(f)); return d; };
     composer.focus();
-    const data = new DataTransfer();
-    files.forEach((f) => data.items.add(f));
-    composer.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
-    // plano B: arrastar para dentro do campo
-    await sleep(1500);
-    const attached = () => document.querySelectorAll('img[src^="blob:"], [data-testid*="attachment"], [class*="attachment"], uploader-file-preview, [class*="file-preview"]').length;
-    if (!attached()) {
-      const drop = new DataTransfer();
-      files.forEach((f) => drop.items.add(f));
-      ["dragenter", "dragover", "drop"].forEach((type) => composer.dispatchEvent(new DragEvent(type, { dataTransfer: drop, bubbles: true, cancelable: true })));
-      await sleep(1500);
+    // 1) colar no campo (como colar prints)
+    composer.dispatchEvent(new ClipboardEvent("paste", { clipboardData: mk(), bubbles: true, cancelable: true }));
+    let ok = await waitAttached(2500);
+    // 2) campo de arquivo que o site já tem na página (ChatGPT e Claude têm sempre; o Gemini às vezes)
+    if (!ok) {
+      const input = Array.from(document.querySelectorAll('input[type="file"]')).find((i) => !i.disabled && (!i.accept || /image|\*/.test(i.accept)));
+      if (input) {
+        try { input.files = mk().files; input.dispatchEvent(new Event("input", { bubbles: true })); input.dispatchEvent(new Event("change", { bubbles: true })); } catch (_e) { /* o site não deixou */ }
+        ok = await waitAttached(3000);
+      }
     }
-    // espera o envio dos arquivos terminar (o botão de enviar só habilita depois)
-    for (let i = 0; i < 40 && !attached(); i += 1) await sleep(500);
-    await sleep(1200);
+    // 3) arrastar para dentro do campo, da área do chat e da página
+    if (!ok) {
+      const targets = [composer, composer.closest("rich-textarea, .text-input-field, form, [class*=input-area]"), document.querySelector("main, chat-window, .chat-container"), document.body].filter(Boolean);
+      for (const target of targets) {
+        const drop = mk();
+        ["dragenter", "dragover", "drop"].forEach((type) => target.dispatchEvent(new DragEvent(type, { dataTransfer: drop, bubbles: true, cancelable: true })));
+        if (await waitAttached(2000)) { ok = true; break; }
+      }
+    }
+    if (ok) await sleep(1500); // deixa o envio dos arquivos terminar (o botão de enviar só habilita depois)
     return attached() ? files.length : 0;
   }
 
@@ -158,7 +167,8 @@
     const before = replyCount();
     if (images && images.length) {
       const n = await attachImages(composer, images);
-      if (!n) return { ok: false, error: "failed:o site não aceitou as imagens" };
+      // O site não aceitou os quadros do vídeo: segue só com o texto (a transcrição) em vez de falhar tudo.
+      if (!n) prompt = "(Observação: não consegui anexar os quadros do vídeo; baseie-se apenas no texto abaixo.)\n\n" + prompt;
     }
     setText(composer, prompt);
     await sleep(500);
