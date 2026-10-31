@@ -220,6 +220,20 @@ def set_ai_path(path: str) -> None:
         holder["path"] = path
 
 
+def set_ai_why(code: str) -> None:
+    """Registra por que a conta da pessoa não respondeu (timeout, login, nopage, blocked, images ou failed)."""
+    holder = _path_holder.get()
+    if holder is not None:
+        holder["why"] = code
+
+
+def why_of(error: "RelayError") -> str:
+    """Motivo curto e só em ASCII (vai em cabeçalho HTTP) para a tela explicar o que aconteceu."""
+    if error.code == "failed" and "imagens" in (error.detail or "").lower():
+        return "images"
+    return error.code if error.code in {"timeout", "login", "nopage", "blocked", "failed"} else "failed"
+
+
 def path_of_model(model: Any) -> str:
     if getattr(model, "is_account_relay", False):
         return f"account:{getattr(model, 'site', 'gemini')}"
@@ -286,7 +300,11 @@ def account_model(user_id: str | None) -> Any | None:
                 elif isinstance(part, RetryPromptPart):
                     notes = [str(part.content)[:400]]
         tool = info.output_tools[0] if info.output_tools else None
-        text = await ask(user_id, "", build_chat_prompt(system, prompt, tool.parameters_json_schema if tool else None, notes), images=images)
+        try:
+            text = await ask(user_id, "", build_chat_prompt(system, prompt, tool.parameters_json_schema if tool else None, notes), images=images)
+        except RelayError as exc:
+            set_ai_why(why_of(exc))
+            raise
         if tool is None:
             from pydantic_ai.messages import TextPart
 

@@ -140,6 +140,8 @@ def create_app(
         response.headers[TRACE_HEADER] = trace_id
         if ai_path.get("path"):
             response.headers["x-ai-path"] = ai_path["path"]
+        if ai_path.get("why"):
+            response.headers["x-ai-why"] = ai_path["why"]
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "no-referrer"

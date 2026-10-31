@@ -11,6 +11,7 @@ export const DEFAULT_FORWARDED_HEADERS = [
   "last-modified",
   "x-trace-id",
   "x-ai-path",
+  "x-ai-why",
 ] as const;
 
 export function getBackendApiBaseUrl() {

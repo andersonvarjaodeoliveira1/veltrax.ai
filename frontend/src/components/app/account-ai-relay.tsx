@@ -4,6 +4,19 @@ import { useEffect } from "react";
 import { toast } from "sonner";
 import { ACCOUNT_AI_EVENT, ACCOUNT_SITES, aiPathLabel, askAccount, extensionHasAi, isAccountSite, readChoice } from "@/lib/account-ai";
 
+/** Motivo (vindo do servidor em x-ai-why) em português simples, com o que fazer. */
+export function whyText(why: string, name: string): string | null {
+  switch (why) {
+    case "login": return `Motivo: você está sem login no ${name}. Entre nele no Chrome, com a mesma conta.`;
+    case "images": return `Motivo: o ${name} não aceitou as imagens do vídeo. Os textos continuam funcionando.`;
+    case "timeout": return `Motivo: o ${name} demorou demais para responder.`;
+    case "blocked": return `Motivo: o ${name} pediu uma verificação (captcha). Abra o ${name} e resolva.`;
+    case "nopage": return `Motivo: a extensão não conseguiu abrir o ${name}. Confira se ela está ligada e atualizada.`;
+    case "failed": return `Motivo: o ${name} deu um erro ao responder.`;
+    default: return null;
+  }
+}
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
@@ -23,6 +36,8 @@ export function AccountAiRelay() {
         const response = await original(...args);
         try {
           const path = response.headers.get("x-ai-path");
+          const why = response.headers.get("x-ai-why") ?? "";
+          if (path) (window as unknown as { __gvAiWhy?: string }).__gvAiWhy = why;
           if (path) window.dispatchEvent(new CustomEvent("gv-ai-path", { detail: path }));
         } catch { /* sem cabeçalho */ }
         return response;
@@ -35,8 +50,9 @@ export function AccountAiRelay() {
       const choice = readChoice();
       if (choice && isAccountSite(choice.site) && !path.startsWith("account:")) {
         const name = ACCOUNT_SITES[choice.site].label;
+        const why = (window as unknown as { __gvAiWhy?: string }).__gvAiWhy ?? "";
         toast.warning(`Sua conta do ${name} não respondeu agora: ${info.kind === "api" ? "usei a sua chave de API" : "usei os créditos do plano"}.`, {
-          id: "ai-path", duration: 7000, description: "Deixe o ClipGringa aberto no Chrome, com a extensão ligada e logado no " + name + ".",
+          id: "ai-path", duration: 9000, description: whyText(why, name) ?? "Deixe o ClipGringa aberto no Chrome, com a extensão ligada e logado no " + name + ".",
         });
         return;
       }

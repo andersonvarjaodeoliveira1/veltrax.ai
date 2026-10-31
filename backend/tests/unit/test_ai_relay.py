@@ -178,3 +178,16 @@ async def test_ask_with_images_waits_longer_than_text(monkeypatch):
             pass
     monkeypatch.setattr(asyncio, "wait_for", real)
     assert waits == [ai_relay.ASK_TIMEOUT, ai_relay.ASK_TIMEOUT_IMAGES]
+
+
+def test_why_of_maps_relay_errors_to_short_ascii_codes():
+    assert ai_relay.why_of(ai_relay.RelayError("gemini", "failed", "failed:o site não aceitou as imagens")) == "images"
+    assert ai_relay.why_of(ai_relay.RelayError("gemini", "login")) == "login"
+    assert ai_relay.why_of(ai_relay.RelayError("gemini", "timeout")) == "timeout"
+    assert ai_relay.why_of(ai_relay.RelayError("gemini", "weird")) == "failed"
+
+
+def test_set_ai_why_is_recorded_in_the_path_holder():
+    holder = ai_relay.start_path_tracking()
+    ai_relay.set_ai_why("login")
+    assert holder["why"] == "login"

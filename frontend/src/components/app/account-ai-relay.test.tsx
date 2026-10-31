@@ -6,7 +6,7 @@ import { writeChoice } from "@/lib/account-ai";
 const toast = vi.hoisted(() => ({ message: vi.fn(), warning: vi.fn() }));
 vi.mock("sonner", () => ({ toast }));
 
-import { AccountAiRelay } from "./account-ai-relay";
+import { AccountAiRelay, whyText } from "./account-ai-relay";
 
 let ext: ReturnType<typeof fakeAiExtension>;
 beforeEach(() => { window.localStorage.clear(); toast.message.mockClear(); toast.warning.mockClear(); });
@@ -76,4 +76,13 @@ it("alerta quando escolheu a conta mas o texto saiu pelo plano", async () => {
   render(<AccountAiRelay />);
   act(() => { window.dispatchEvent(new CustomEvent("gv-ai-path", { detail: "plan" })); });
   expect(toast.warning).toHaveBeenCalledWith(expect.stringContaining("conta do Claude não respondeu"), expect.anything());
+});
+
+it("explains why the account did not answer, in plain Portuguese", () => {
+  expect(whyText("login", "Gemini")).toMatch(/sem login no Gemini/);
+  expect(whyText("images", "Gemini")).toMatch(/não aceitou as imagens/);
+  expect(whyText("timeout", "Gemini")).toMatch(/demorou demais/);
+  expect(whyText("blocked", "Gemini")).toMatch(/captcha/);
+  expect(whyText("nopage", "Gemini")).toMatch(/não conseguiu abrir/);
+  expect(whyText("", "Gemini")).toBeNull();
 });
