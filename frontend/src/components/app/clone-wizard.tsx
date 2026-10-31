@@ -1616,12 +1616,13 @@ export function CloneWizard() {
                   )}
                   {(questHold || hasReference || !!refFile) && (
                     <ManualOptions mode={entryMode} onMode={(m) => { setEntryMode(m); if (m === "manual") patch({ variationMode: p.variationMode ?? "roulette" }); else patch({ variationMode: undefined }); }}
-                      values={{ copyMode: p.copyMode, variationMode: p.variationMode ?? "roulette", keepPerson: p.avatarMode === "own", presenter: p.presenter ?? "", count: p.count, scenes: p.sceneCount, language: p.language }}
+                      values={{ copyMode: p.copyMode, variationMode: p.variationMode ?? "roulette", keepPerson: p.avatarMode === "own", presenter: p.presenter ?? "", count: p.count, scenes: p.sceneCount, language: p.language, keyword: p.keyword }}
                       languages={LANGUAGES.map((l) => ({ value: l.value, text: l.text }))}
                       onChange={(c) => {
                         if (c.language) { chooseLanguage(c.language); return; }
                         if (c.count) { patch({ count: c.count }); return; }
                         if (c.scenes) { patch({ sceneCount: c.scenes }); return; }
+                        if (c.keyword !== undefined) { patch({ keyword: c.keyword }); return; }
                         patch({
                           ...(c.copyMode ? { copyMode: c.copyMode } : {}),
                           ...(c.variationMode ? { variationMode: c.variationMode } : {}),
