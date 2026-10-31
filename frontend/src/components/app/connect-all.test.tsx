@@ -28,7 +28,6 @@ describe("ConnectAll", () => {
     flow.state = "connected"; probe.value = "login";
     render(<ConnectAll />);
     fireEvent.click(await screen.findByRole("button", { name: /Conectar Flow e Gemini/ }));
-    await act(async () => { await vi.advanceTimersByTimeAsync(500); });
     expect(open).toHaveBeenCalledTimes(2);
     expect(all[0].location.href).toContain("labs.google");
     probe.value = "ready";

@@ -46,7 +46,7 @@ export function ConnectAll() {
     writeChoice("gemini");
     opened.current = [];
     openTab(FLOW_URL);
-    window.setTimeout(() => openTab(ACCOUNT_SITES.gemini.url), 400);
+    openTab(ACCOUNT_SITES.gemini.url);
   };
 
   const announced = useRef(false);
@@ -61,7 +61,7 @@ export function ConnectAll() {
   }, [flowOk, geminiOk, started]);
 
   const rows = [
-    { id: "ext", label: "Extensão", ok: extOk, wait: state === "unknown", text: extOk ? "Instalada" : "Instale no passo 2 abaixo" },
+    { id: "ext", label: "Extensão", ok: extOk, wait: state === "unknown", text: extOk ? "Instalada" : "Não encontrei no Chrome. Baixe, extraia e carregue (passo 2 abaixo)" },
     { id: "flow", label: "Flow", ok: flowOk, wait: false, text: flowOk ? `Conta conectada${account.plan ? ` · plano ${account.plan}` : ""}${account.credits !== null ? ` · ${account.credits} créditos` : ""}` : "Entre com sua conta Google" },
     { id: "gem", label: "IA grátis (Gemini)", ok: geminiOk, wait: gemini === "checking" && extOk, text: geminiOk ? "Pronta, sem custo" : gemini === "login" || gemini === "guest" ? "Entre na mesma conta Google" : "Abra o Gemini e entre" },
   ];
@@ -79,6 +79,7 @@ export function ConnectAll() {
           </li>
         ))}
       </ul>
+      {!extOk && state !== "unknown" && <a href="/extensao/clipgringa-flow.zip" download className="inline-block rounded-full border border-border px-3 py-1.5 text-xs hover:text-foreground">Baixar a extensão (1.21.1)</a>}
       {all
         ? <p role="status" className="rounded-[12px] border border-[#5BD69A]/40 bg-[#5BD69A]/10 p-2.5 text-sm text-[#5BD69A]">Já conectado ✓ Pode criar seus vídeos{opened.current.length ? ". Vamos fechar as abas do Flow e do Gemini." : "."}</p>
         : <button type="button" onClick={start} className="inline-flex items-center gap-2 rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-4 py-2 text-sm font-medium text-white"><ExternalLink className="size-4" />{started ? "Abrir de novo Flow e Gemini" : "Conectar Flow e Gemini"}</button>}
