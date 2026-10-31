@@ -278,6 +278,7 @@ button[class*="to-[#7B3FE4]"]:active::before { animation-delay: 0.12s; border-co
 .gt-btn3d { box-shadow: 0 4px 0 #4B1FA8; transition: transform 0.08s ease, box-shadow 0.08s ease; }
 .gt-btn3d:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 5px 0 #4B1FA8; }
 .gt-btn3d:active:not(:disabled) { transform: translateY(4px); box-shadow: 0 0 0 #4B1FA8; }
+@keyframes gt-slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(300%); } }
 @keyframes gt-pop { 0% { opacity: 0; transform: scale(0.8) translateY(8px); } 60% { opacity: 1; transform: scale(1.06); } 100% { opacity: 1; transform: scale(1); } }
 .gt-pop { animation: gt-pop 0.45s cubic-bezier(0.16, 1, 0.3, 1) both; }
 @keyframes gt-confetti { 0% { opacity: 1; transform: translateY(-10px) rotate(0deg); } 100% { opacity: 0; transform: translateY(260px) rotate(540deg); } }

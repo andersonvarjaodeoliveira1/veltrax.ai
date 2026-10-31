@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Download, Loader2, PackageSearch, Paperclip } from "lucide-react";
 import { expandShopeeLink, normalizeShopeeUrl, readShopeeViaExtension } from "@/lib/shopee-bridge";
 
@@ -9,6 +9,27 @@ type Found = { name: string; image: string };
 async function toFile(item: Found, index: number): Promise<File> {
   const blob = await (await fetch(item.image)).blob();
   return new File([blob], `produto-${index + 1}.jpg`, { type: "image/jpeg" });
+}
+
+const SEARCH_STEPS = ["Abrindo o anúncio na sua conta…", "Lendo a galeria do vendedor…", "Separando as fotos do produto…", "Quase pronto…"];
+
+/** Animação enquanto busca: etapas que avançam com o tempo e fotos "fantasma" piscando no lugar da galeria. */
+function SearchingAnimation() {
+  const [step, setStep] = useState(0);
+  useEffect(() => {
+    const timer = window.setInterval(() => setStep((n) => Math.min(SEARCH_STEPS.length - 1, n + 1)), 5000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return (
+    <div data-testid="shopee-searching" role="status" aria-live="polite" className="space-y-3 rounded-[14px] border border-[#7B3FE4]/40 bg-[#7B3FE4]/10 p-3">
+      <p className="flex items-center gap-2 text-sm font-medium"><Loader2 className="size-4 animate-spin text-[#A98BFF]" />{SEARCH_STEPS[step]}</p>
+      <div className="h-1.5 overflow-hidden rounded-full bg-border"><div className="h-full w-1/3 rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#5BD69A] motion-safe:animate-[gt-slide_1.4s_ease-in-out_infinite]" /></div>
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-5" aria-hidden>
+        {[0, 1, 2, 3, 4].map((i) => <div key={i} style={{ animationDelay: `${i * 150}ms` }} className="aspect-[3/4] rounded-[12px] bg-white/10 motion-safe:animate-pulse" />)}
+      </div>
+      <p className="text-xs text-muted-foreground">Isso leva de 10 a 40 segundos. Não feche esta página.</p>
+    </div>
+  );
 }
 
 /** Importa as fotos de um produto da Shopee (link ou arquivos/.zip) para usar nos vídeos. */
@@ -74,6 +95,7 @@ export function ShopeeImport({ onUse, disabled }: { onUse: (files: File[], title
           <Paperclip className="size-4" /> Anexar imagens ou .zip
         </button>
       </form>
+      {busy && <SearchingAnimation />}
       {error && <p role="alert" className="text-xs text-[#F0466B]">{error}</p>}
       {found.length > 0 && (
         <div className="space-y-3">

@@ -46,6 +46,18 @@ describe("ShopeeImport", () => {
     expect(screen.getByLabelText("Baixar foto 1")).toHaveAttribute("download", "produto-1.jpg");
   });
 
+  it("mostra a animação de busca enquanto procura e some quando termina", async () => {
+    let release: (value: Response) => void = () => {};
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>((resolve) => { release = resolve; })));
+    render(<ShopeeImport onUse={() => {}} />);
+    expect(screen.queryByTestId("shopee-searching")).not.toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText("Link do produto da Shopee"), "https://exemplo.com/produto");
+    await userEvent.click(screen.getByRole("button", { name: /Buscar imagens/ }));
+    expect(await screen.findByTestId("shopee-searching")).toHaveTextContent(/Abrindo o anúncio/);
+    release(new Response(JSON.stringify({ title: "X", images: [{ name: "a", image: img }] }), { status: 200 }));
+    await waitFor(() => expect(screen.queryByTestId("shopee-searching")).not.toBeInTheDocument());
+  });
+
   it("avisa sobre fotos de avaliações antes de qualquer busca", () => {
     render(<ShopeeImport onUse={() => {}} />);
     expect(screen.getByText(/avaliações de clientes/)).toBeInTheDocument();
