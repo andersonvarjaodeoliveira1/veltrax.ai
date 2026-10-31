@@ -6,6 +6,7 @@ vi.mock("@/hooks/use-flow-connection", () => ({ useFlowConnection: () => ({ stat
 const probe = vi.hoisted(() => ({ value: "ready" as string }));
 vi.mock("@/lib/account-ai", async (orig) => ({ ...(await orig<typeof import("@/lib/account-ai")>()), probeSite: vi.fn(async () => probe.value) }));
 import { ConnectAll } from "./connect-all";
+import { probeSite } from "@/lib/account-ai";
 
 describe("ConnectAll", () => {
   beforeEach(() => { window.localStorage.clear(); });
@@ -36,5 +37,11 @@ describe("ConnectAll", () => {
     expect(all[0].close).toHaveBeenCalled();
     expect(all[1].close).toHaveBeenCalled();
     open.mockRestore(); vi.useRealTimers();
+  });
+  it("checks Gemini on its own once Flow is connected", async () => {
+    flow.state = "connected"; probe.value = "login";
+    vi.mocked(probeSite).mockClear();
+    render(<ConnectAll />);
+    await waitFor(() => expect(vi.mocked(probeSite)).toHaveBeenCalledWith("gemini", true));
   });
 });

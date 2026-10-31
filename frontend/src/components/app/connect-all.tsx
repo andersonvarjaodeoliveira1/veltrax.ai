@@ -27,6 +27,32 @@ export function ConnectAll() {
     return () => window.clearInterval(timer);
   }, [check, started]);
 
+  // Com o Flow conectado, o Gemini (mesma conta Google) é conferido sozinho, uma vez, numa aba própria que a extensão abre e fecha.
+  const autoProbed = useRef(false);
+  useEffect(() => {
+    if (state !== "connected" || gemini === "ready" || autoProbed.current) return;
+    autoProbed.current = true;
+    void probeSite("gemini", true).then((result) => setGemini(result));
+  }, [state, gemini]);
+
+  // Extensão recém-instalada só aparece depois de recarregar a página: ao voltar para esta aba, recarrega sozinho (no máximo a cada 20 s).
+  const [downloaded, setDownloaded] = useState(false);
+  useEffect(() => {
+    if (state !== "no-extension" || !downloaded) return;
+    const onBack = () => {
+      if (document.visibilityState !== "visible") return;
+      try {
+        const last = Number(window.sessionStorage.getItem("gv-connect-reload") || 0);
+        if (Date.now() - last < 20_000) return;
+        window.sessionStorage.setItem("gv-connect-reload", String(Date.now()));
+      } catch { /* sem storage: recarrega mesmo assim */ }
+      window.location.reload();
+    };
+    document.addEventListener("visibilitychange", onBack);
+    window.addEventListener("focus", onBack);
+    return () => { document.removeEventListener("visibilitychange", onBack); window.removeEventListener("focus", onBack); };
+  }, [state, downloaded]);
+
   const extOk = state !== "no-extension" && state !== "unknown";
   const outdated = extOk && Boolean(account.version) && isNewerVersion(EXT_VERSION, account.version || "0");
   const flowOk = state === "connected";
@@ -96,11 +122,11 @@ export function ConnectAll() {
 
       {(!extOk || outdated) && state !== "unknown" && (
         <div data-testid="step-extension" className="space-y-2 rounded-[14px] border border-border bg-background/40 p-3">
-          <a href="/extensao/clipgringa-flow.zip" download className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-sm hover:text-foreground"><Download className="size-4" /> Baixar a extensão ({EXT_VERSION})</a>
+          <a href="/extensao/clipgringa-flow.zip" download onClick={() => setDownloaded(true)} className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-sm hover:text-foreground"><Download className="size-4" /> Baixar a extensão ({EXT_VERSION})</a>
           <ol className="list-decimal space-y-1 pl-5 text-xs text-muted-foreground">
             <li>Clique com o botão direito no arquivo baixado e escolha “Extrair tudo”.</li>
             <li>No Chrome, abra <span className="font-mono">chrome://extensions</span> e ligue o “Modo do desenvolvedor”.</li>
-            <li>Clique em “Carregar sem compactação” e escolha a pasta extraída (a que tem o <span className="font-mono">manifest.json</span>). Depois volte aqui e aperte Ctrl+F5.</li>
+            <li>Clique em “Carregar sem compactação” e escolha a pasta extraída (a que tem o <span className="font-mono">manifest.json</span>). Depois volte para esta aba: ela atualiza sozinha.</li>
           </ol>
         </div>
       )}
