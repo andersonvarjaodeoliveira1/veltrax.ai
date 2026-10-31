@@ -13,7 +13,16 @@
   const VIDEO_WAIT_MS = 25 * 60 * 1000;
   const RETRIES = 3;
 
-  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  // Dorme em fatias curtas e, se o membro clicou em Parar, aborta na hora (em vez de esperar a etapa acabar).
+  const sleep = async (ms) => {
+    const end = Date.now() + ms;
+    for (;;) {
+      if (typeof running !== "undefined" && running && typeof stopFlag !== "undefined" && stopFlag) throw new Error("STOP");
+      const left = end - Date.now();
+      if (left <= 0) return;
+      await new Promise((r) => setTimeout(r, Math.min(left, 200)));
+    }
+  };
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
   const visible = (el) => !!el && el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0;
@@ -399,7 +408,10 @@
       if (!src || out.some((t) => t.src === src)) continue;
       let node = img;
       for (let i = 0; i < 8 && node.parentElement; i += 1) {
-        node = node.parentElement;
+        const up = node.parentElement;
+        // nunca sobe até um bloco grande (a página inteira, várias imagens): o texto dele não é do cartão desta cena
+        if ((up.innerText || "").length > 400 || up.querySelectorAll("img").length > 3) break;
+        node = up;
         if (/%|play_circle|image\n|videocam/.test(node.innerText || "") || node.classList.contains("container")) break;
       }
       out.push({ src, img, tile: node, info: node.innerText || "" });
@@ -419,6 +431,13 @@
     return "O Flow marcou esta geração como falha." + (t ? " (" + t.slice(0, 140) + ")" : "");
   }
 
+  /** Só é falha quando o texto do próprio cartão diz isso (o rodapé "O Flow pode cometer erros" e textos da página não contam). */
+  function isFailed(info) {
+    const t = String(info || "").replace(/arrow_forward/g, " ").replace(/cometer erros|can make mistakes/gi, " ");
+    if (t.length > 400) return false;
+    return /falha|failed|n[ãa]o foi poss[ií]vel|something went wrong|algo deu errado|\berro\b|\berror\b/i.test(t);
+  }
+
   const tileKeys = () => new Set(firstTiles(12).map((t) => t.src));
 
   function pageError() {
@@ -434,7 +453,7 @@
       const fresh = tiles.find((t) => !before.has(t.src));
       if (fresh) {
         const generating = /\d+\s*%/.test(fresh.info) || /gerando|generating/i.test(fresh.info);
-        const failed = /falha|failed|erro|error/i.test(fresh.info.replace(/arrow_forward/g, ""));
+        const failed = isFailed(fresh.info);
         if (failed) throw new Error(failReason(fresh.info));
         if (!generating && (kind === "image" || /play_circle|videocam|movie/.test(fresh.info) || fresh.tile.querySelector("video"))) {
           if (onTick) onTick(100);
@@ -677,7 +696,7 @@
       <div class="row"><button class="b" id="go">Começar</button><button class="b o" id="stop" disabled>Parar</button><button class="b o" id="clear">Limpar</button></div>
       <details class="adv"><summary>Pacote (avançado)</summary>
         <textarea id="pkg" placeholder='Cole aqui o pacote do ClipGringa'></textarea>
-        <label class="chk"><input type="checkbox" id="fast" checked> Modo rápido (várias imagens e vídeos ao mesmo tempo)</label>
+        <label class="chk"><input type="checkbox" id="fast" checked> Uma cena de cada vez (cria 1 imagem e anima essa imagem)</label>
         <label class="chk"><input type="checkbox" id="test"> Só a primeira cena (teste)</label>
       </details>
     </div>
@@ -962,8 +981,8 @@
   }
 
   /* ---------- modo rápido (BETA): o Flow anima várias cenas ao mesmo tempo ---------- */
-  const VIDEO_PARALLEL = 4;
-  const IMAGE_PARALLEL = 3;
+  const VIDEO_PARALLEL = 1;
+  const IMAGE_PARALLEL = 1;
   const tilesNow = () => firstTiles(40);
   const generatingNow = (info) => /\d+\s*%/.test(info) || /gerando|generating/i.test(info);
   const labelOf = (job) => `${job.vname} · ${job.sname}`;
@@ -984,7 +1003,7 @@
       const stray = tilesNow().find((t) => !baselines.get("V" + job.key).has(t.src) && !claimedTiles.has(t.src));
       if (stray) { claimedTiles.add(stray.src); return { src: stray.src, tile: stray.tile, t0: Date.now() }; }
     }
-    setNow(`${label}: mandando animar (as outras cenas continuam em paralelo)…`);
+    setNow(`${label}: mandando animar a imagem…`);
     await configure("video");
     try { await chooseStartFrame(image.src, true); } catch (pickErr) {
       if (/vi:|Início|Incluir/.test(String(pickErr.message)) && attemptNo >= RETRIES) setNow(`${label}: não consegui escolher a imagem inicial, animando só pelo texto.`);
@@ -1013,7 +1032,7 @@
       const stray = tilesNow().find((t) => !baselines.get("I" + job.key).has(t.src) && !claimedTiles.has(t.src));
       if (stray) { claimedTiles.add(stray.src); return { src: stray.src, tile: stray.tile, t0: Date.now() }; }
     }
-    setNow(`${label}: mandando criar a imagem (as outras seguem em paralelo)…`);
+    setNow(`${label}: mandando criar a imagem…`);
     await configure("image");
     await attachReference();
     await setPrompt(job.imagePrompt);
@@ -1037,7 +1056,7 @@
         const t = locateTile(b.rec);
         if (!t) { if (Date.now() - b.since > 90000) { failJob(b.job, "não achei esta cena na grade do Flow"); waiting.delete(key); } continue; }
         b.since = Date.now();
-        if (/falha|failed|erro|error/i.test(t.info.replace(/arrow_forward/g, ""))) { failJob(b.job, failReason(t.info)); waiting.delete(key); continue; }
+        if (isFailed(t.info)) { failJob(b.job, failReason(t.info)); waiting.delete(key); continue; }
         const done = !generatingNow(t.info) && (kind === "image" || /play_circle|videocam|movie/.test(t.info) || t.tile.querySelector("video"));
         if (done) {
           waiting.delete(key);
@@ -1080,21 +1099,26 @@
   async function runPipeline() {
     const jobs = state.jobs.filter((j) => !state.done[j.key]);
     const images = {};
-    for (const j of jobs) { const kept = sceneImages[j.key] && locateTile(sceneImages[j.key]); if (kept) images[j.key] = kept; }
-    // 1) imagens: várias ao mesmo tempo (cada uma leva cerca de 15 segundos no Flow). Cenas que já têm imagem não geram outra.
-    await rollingStage({
-      jobs: jobs.filter((j) => !images[j.key]), parallel: IMAGE_PARALLEL, kind: "image", timeoutMs: IMAGE_WAIT_MS,
-      submit: (job, attemptNo) => submitImage(job, labelOf(job), attemptNo),
-      onDone: async (b, t) => { images[b.job.key] = t; sceneImages[b.job.key] = { src: t.src, tile: t.tile }; jobPct[b.job.key] = 100; await keepImage(b.job, t); delete jobPct[b.job.key]; },
-    });
-    if (stopFlag) return;
-    // 2) vídeos: fila contínua de cenas animando ao mesmo tempo
-    const ready = jobs.filter((j) => images[j.key]);
-    await rollingStage({
-      jobs: ready, parallel: VIDEO_PARALLEL, kind: "video", timeoutMs: VIDEO_WAIT_MS,
-      submit: (job, attemptNo) => submitVideo(job, images[job.key], labelOf(job), attemptNo),
-      onDone: async (b, t) => { await finishJob(b.job, t, labelOf(b.job)); },
-    });
+    // Uma cena de cada vez: cria 1 imagem, anima essa imagem e só então passa para a próxima.
+    for (const job of jobs) {
+      if (stopFlag) return;
+      const kept = sceneImages[job.key] && locateTile(sceneImages[job.key]);
+      if (kept) images[job.key] = kept;
+      else {
+        await rollingStage({
+          jobs: [job], parallel: 1, kind: "image", timeoutMs: IMAGE_WAIT_MS,
+          submit: (j, attemptNo) => submitImage(j, labelOf(j), attemptNo),
+          onDone: async (b, t) => { images[b.job.key] = t; sceneImages[b.job.key] = { src: t.src, tile: t.tile }; jobPct[b.job.key] = 100; await keepImage(b.job, t); delete jobPct[b.job.key]; },
+        });
+      }
+      if (stopFlag) return;
+      if (!images[job.key]) continue; // a imagem falhou: segue para a próxima cena (a segunda rodada tenta de novo)
+      await rollingStage({
+        jobs: [job], parallel: 1, kind: "video", timeoutMs: VIDEO_WAIT_MS,
+        submit: (j, attemptNo) => submitVideo(j, images[j.key], labelOf(j), attemptNo),
+        onDone: async (b, t) => { await finishJob(b.job, t, labelOf(b.job)); },
+      });
+    }
   }
 
   const FLOW_HOME = "https://labs.google/fx/pt/tools/flow";
@@ -1212,7 +1236,7 @@
     window.clearTimeout(pasteTimer);
     pasteTimer = window.setTimeout(() => { try { parsePackage(el("pkg").value); if (!running) start(); } catch (_e) { /* ainda não é um pacote válido */ } }, 800);
   });
-  el("stop").addEventListener("click", () => { stopFlag = true; autoRun = false; setNow("Parando assim que a etapa atual terminar…"); });
+  el("stop").addEventListener("click", () => { stopFlag = true; autoRun = false; setNow("Cancelando tudo…"); });
   el("clear").addEventListener("click", async () => {
     if (running) return;
     state = { jobs: [], done: {}, errors: {}, cloud: {} };
