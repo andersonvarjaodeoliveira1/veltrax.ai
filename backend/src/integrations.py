@@ -256,12 +256,20 @@ def claude_model(name: str = "claude-sonnet-5-5", api_key: str | None = None) ->
 
 
 def user_models(include_account: bool = True) -> list[Any]:
-    """Modelos de texto do próprio usuário: primeiro as chaves de API dele, depois a conta de IA ligada pela extensão.
+    """Modelos de texto do próprio usuário: primeiro a conta de IA ligada pela extensão (quando está respondendo), depois as chaves de API dele.
 
     Os dois têm prioridade sobre os do servidor. `include_account=False` para pedidos com imagem (a conta só recebe texto).
     """
     keys = current_keys()
     out: list[Any] = []
+    if include_account:
+        # Quem ligou a conta (Gemini, ChatGPT ou Claude) quer usar ela primeiro: as chaves de API ficam de reserva.
+        from .ai_relay import account_model
+        from .usage import _usage_user
+
+        account = account_model(_usage_user.get())
+        if account is not None:
+            out.append(account)
     gem = keys.get("gemini") or keys.get("flow")
     if gem:
         from pydantic_ai.models.google import GoogleModel
@@ -290,13 +298,6 @@ def user_models(include_account: bool = True) -> list[Any]:
             from pydantic_ai.models.ollama import OllamaModel
             from pydantic_ai.providers.ollama import OllamaProvider
             out.append(OllamaModel(cfg["model"], provider=OllamaProvider(base_url=cfg["url"] + "/v1", api_key=cfg["key"] or None)))
-    if include_account:
-        from .ai_relay import account_model
-        from .usage import _usage_user
-
-        account = account_model(_usage_user.get())
-        if account is not None:
-            out.append(account)
     return out
 
 

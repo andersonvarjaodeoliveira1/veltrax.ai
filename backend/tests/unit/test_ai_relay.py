@@ -101,7 +101,7 @@ def test_path_labels():
     assert ai_relay.path_of_model(object()) == "plan"
 
 
-def test_user_models_puts_the_api_before_the_account():
+def test_user_models_puts_the_connected_account_before_the_api():
     from src import integrations
     from src.usage import set_usage_user
 
@@ -114,8 +114,8 @@ def test_user_models_puts_the_api_before_the_account():
     assert integrations.user_models(include_account=False) == []
     integrations._current_keys.set({"openai": "sk-test-key-1234567890"})
     both = integrations.user_models()
-    assert [getattr(m, "is_account_relay", False) for m in both] == [False, True]
-    assert ai_relay.path_of_model(both[0]) == "api:chatgpt"
+    assert [getattr(m, "is_account_relay", False) for m in both] == [True, False]
+    assert ai_relay.path_of_model(both[1]) == "api:chatgpt"
     integrations._current_keys.set({})
 
 
