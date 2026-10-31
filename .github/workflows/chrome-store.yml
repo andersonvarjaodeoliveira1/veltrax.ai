@@ -1,0 +1,38 @@
+name: Chrome Web Store
+
+# Envia a extensão do Flow para a Chrome Web Store quando extension/flow muda na branch clipgringa.
+# Precisa dos segredos CWS_CLIENT_ID, CWS_CLIENT_SECRET, CWS_REFRESH_TOKEN e CWS_EXTENSION_ID; sem eles o job só avisa e termina.
+on:
+  push:
+    branches: [clipgringa]
+    paths: ["extension/flow/**"]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+      CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+      REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+      EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check secrets
+        id: gate
+        run: |
+          if [ -z "$CLIENT_ID" ] || [ -z "$CLIENT_SECRET" ] || [ -z "$REFRESH_TOKEN" ] || [ -z "$EXTENSION_ID" ]; then
+            echo "Segredos da Chrome Web Store não configurados: nada enviado."; echo "ok=false" >> "$GITHUB_OUTPUT"
+          else echo "ok=true" >> "$GITHUB_OUTPUT"; fi
+      - name: Build zip
+        if: steps.gate.outputs.ok == 'true'
+        run: bash scripts/build-extension-zip.sh
+      - name: Upload and publish
+        if: steps.gate.outputs.ok == 'true'
+        run: |
+          set -euo pipefail
+          token=$(curl -sS https://oauth2.googleapis.com/token -d client_id="$CLIENT_ID" -d client_secret="$CLIENT_SECRET" -d refresh_token="$REFRESH_TOKEN" -d grant_type=refresh_token | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')
+          up=$(curl -sS -X PUT -H "Authorization: Bearer $token" -H "x-goog-api-version: 2" -T frontend/public/extensao/clipgringa-flow.zip "https://www.googleapis.com/upload/chromewebstore/v1.1/items/$EXTENSION_ID")
+          echo "$up"
+          echo "$up" | grep -q '"uploadState": *"SUCCESS"' || { echo "Upload falhou"; exit 1; }
+          curl -sS -X POST -H "Authorization: Bearer $token" -H "x-goog-api-version: 2" -H "Content-Length: 0" "https://www.googleapis.com/chromewebstore/v1.1/items/$EXTENSION_ID/publish"
