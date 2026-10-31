@@ -1274,7 +1274,7 @@ export function CloneWizard() {
   const [questDone, setQuestDone] = useState(false);
   const [entryMode, setEntryMode] = useState<EntryMode>("auto");
   // Depois de escolher o vídeo, os passos aparecem um de cada vez: 0 conferir o vídeo · 1 modo e quantidades · 2 perguntas.
-  const [entryPanel, setEntryPanel] = useState(0);
+  const [entryPanel, setEntryPanel] = useState(2);
   const [lastRun, setLastRun] = useState<{ ms: number; videos: number } | null>(null);
   const [readDone, setReadDone] = useState(false);
   const [questName, setQuestName] = useState("");
@@ -1543,8 +1543,8 @@ export function CloneWizard() {
           </div>
         )}
 
-        {!ready && showPanel(0) && (refFile || p.reference.trim()) && <ReferenceSummary file={refFile} transcript={p.reference} reading={busy === "upload"} noSpeech={speech === "nospeech"} photos={productPhotos} />}
-        {!ready && showPanel(0) && refFile && p.avatarMode !== "own" && <PresenterChoice detected={refGender.gender} reading={refGender.reading} value={p.presenter ?? ""} onChange={(value) => patch({ presenter: value })} />}
+        {!ready && (showPanel(0) || showPanel(2)) && (refFile || p.reference.trim()) && <ReferenceSummary file={refFile} transcript={p.reference} reading={busy === "upload"} noSpeech={speech === "nospeech"} photos={productPhotos} />}
+        {!ready && (showPanel(0) || showPanel(2)) && refFile && p.avatarMode !== "own" && <PresenterChoice detected={refGender.gender} reading={refGender.reading} value={p.presenter ?? ""} onChange={(value) => patch({ presenter: value })} />}
 
         {!ready && !working && askProduct && (
           <section aria-label="Produto" className="space-y-4 rounded-[18px] border border-[#A98BFF]/40 bg-card p-5">
@@ -1650,15 +1650,9 @@ export function CloneWizard() {
                   ))}<span>✓ {questPhoto ? "Foto escolhida" : "Vídeo escolhido"}{questName ? `: ${questName}` : ""}. {readDone ? "Já li. Responda as perguntas e eu sigo." : "Lendo a fala enquanto você responde…"}</span><button type="button" onClick={() => fileRef.current?.click()} className="ml-auto rounded-full border border-border px-3 py-1 text-xs hover:text-foreground">Trocar</button></p>}
                   {stepped && (
                     <p data-testid="step-header" aria-live="polite" className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#A98BFF]">
-                      Passo {entryPanel + 1} de 3 · {["Conferir o vídeo", "Escolher o modo e as quantidades", "Responder as perguntas"][entryPanel]}
-                      <span aria-hidden className="ml-auto flex gap-1">{[0, 1, 2].map((i) => <span key={i} className={cn("h-1 w-6 rounded-full", i <= entryPanel ? "bg-[#7B3FE4]" : "bg-white/15")} />)}</span>
+                      Etapa 2 de 4 · {entryPanel === 1 ? "Ajustar modo e quantidades" : "Responder as perguntas"}
+                      <span aria-hidden className="ml-auto flex gap-1">{[0, 1, 2, 3].map((i) => <span key={i} className={cn("h-1 w-6 rounded-full", i <= 1 ? "bg-[#7B3FE4]" : "bg-white/15")} />)}</span>
                     </p>
-                  )}
-                  {stepped && showPanel(0) && (
-                    <div data-testid="next-step" className="flex flex-wrap items-center gap-3 rounded-[14px] border border-[#7B3FE4]/50 bg-[#7B3FE4]/10 p-3 text-sm">
-                      <span className="min-w-0 flex-1">{readDone ? <><b>Confira o resumo e quem apresenta</b> (logo acima). Estando certo, é só continuar.</> : "Estou lendo o vídeo. Quando terminar, você pode continuar."}</span>
-                      <button type="button" onClick={() => goPanel(1)} className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-4 py-2 text-xs font-medium text-white">Continuar →</button>
-                    </div>
                   )}
                   {showPanel(1) && (questHold || hasReference || !!refFile) && (
                     <ManualOptions mode={entryMode} onMode={(m) => { setEntryMode(m); if (m === "manual") patch({ variationMode: p.variationMode ?? "roulette" }); else patch({ variationMode: undefined }); }}
@@ -1680,11 +1674,11 @@ export function CloneWizard() {
                   {showPanel(1) && (questHold || hasReference || !!refFile) && <RunPlanCard videos={p.count} scenes={p.sceneCount} takes={p.takes ?? 1} lastRun={lastRun} />}
                   {stepped && entryPanel === 1 && (
                     <div data-testid="panel-nav" className="flex flex-wrap items-center justify-between gap-2">
-                      <button type="button" onClick={() => goPanel(0)} className="rounded-full border border-border px-4 py-2 text-xs hover:text-foreground">← Voltar</button>
-                      <button type="button" onClick={() => goPanel(2)} className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-5 py-2 text-sm font-medium text-white">Continuar para as perguntas →</button>
+                      <button type="button" onClick={() => goPanel(2)} className="rounded-full border border-border px-4 py-2 text-xs hover:text-foreground">← Voltar</button>
+                      <button type="button" onClick={() => goPanel(2)} className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-5 py-2 text-sm font-medium text-white">Pronto, ir para as perguntas →</button>
                     </div>
                   )}
-                  {showPanel(2) && stepped && <button type="button" onClick={() => goPanel(1)} className="text-xs text-muted-foreground underline">← Voltar</button>}
+                  {showPanel(2) && stepped && <button type="button" onClick={() => goPanel(1)} className="text-xs text-muted-foreground underline">Ajustar modo, quantidades e complementos</button>}
                   {!showPanel(2) ? null : (questHold || hasReference || !!refFile) ? (
                   <div ref={chatRef} className="scroll-mt-4">
                   <QuestChat
