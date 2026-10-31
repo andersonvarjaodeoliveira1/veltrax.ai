@@ -17,6 +17,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import { FLOW_CHOICES, FLOW_MODELS, defaultFlowCategory, effectiveFlowId, saveFlowCategory, visibleFlowChoices } from "@/lib/flow-models";
 import { ReferenceSummary } from "@/components/app/reference-summary";
+import { RunPlanCard } from "@/components/app/run-plan";
 import { ManualOptions, variationHint, type EntryMode, type VariationMode } from "@/components/app/manual-options";
 import { PresenterChoice, useReferenceGender, type Presenter } from "@/components/app/presenter-choice";
 import { useSession } from "@/lib/auth-client";
@@ -920,6 +921,7 @@ export function CloneWizard() {
     if (!proj.keyword.trim() && textOnly) { proj = { ...proj, keyword: "QUERO" }; projRef.current = proj; setP(proj); }
     if (!proj.keyword.trim()) { setError("Escolha a palavra-chave da CTA antes de começar."); return; }
     const taskId = startTask(textOnly ? "Preparando seus vídeos" : "Criando seus vídeos automaticamente");
+    const runStart = Date.now();
     let doneW = 0;
     const missing = (cur: Project) => {
       const n = cur.variations.length || cur.count;
@@ -1015,6 +1017,7 @@ export function CloneWizard() {
         mark(`Montando o vídeo ${vi + 1} de ${n}`, projRef.current, AUTO_WEIGHT.final);
       }
       endTask(taskId, "done");
+      setLastRun({ ms: Date.now() - runStart, videos: projRef.current.variations.length || projRef.current.count });
     } catch (err) {
       const stopped = err instanceof Error && err.message === "STOP";
       setCanResume(true);
@@ -1247,6 +1250,7 @@ export function CloneWizard() {
   const [policyOk, setPolicyOk] = useState("");
   const [questDone, setQuestDone] = useState(false);
   const [entryMode, setEntryMode] = useState<EntryMode>("auto");
+  const [lastRun, setLastRun] = useState<{ ms: number; videos: number } | null>(null);
   const [readDone, setReadDone] = useState(false);
   const [questName, setQuestName] = useState("");
   const [questPhoto, setQuestPhoto] = useState(false);
@@ -1626,6 +1630,7 @@ export function CloneWizard() {
                         });
                       }} />
                   )}
+                  {(questHold || hasReference || !!refFile) && <RunPlanCard videos={p.count} scenes={p.sceneCount} takes={p.takes ?? 1} lastRun={lastRun} />}
                   {(questHold || hasReference || !!refFile) ? (
                   <div ref={chatRef} className="scroll-mt-4">
                   <QuestChat
