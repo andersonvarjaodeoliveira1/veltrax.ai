@@ -457,6 +457,8 @@ it("simple mode: product name, one sentence and photos reach the prompts", async
   await user.type(screen.getByLabelText("Em uma frase: o que ele faz?"), "hidrata a pele");
   await user.upload(screen.getByLabelText("Fotos do produto"), new File(["x"], "creme.png", { type: "image/png" }));
   expect(await screen.findByText(/Produto reconhecido/)).toBeInTheDocument();
+  expect(screen.getByTestId("product-next")).toHaveTextContent(/Foto pronta/);
+  expect(screen.getByRole("button", { name: /Avançar/ })).toBeInTheDocument();
   expect((photoForm as unknown as FormData).getAll("images")).toHaveLength(1);
 
   await user.upload(screen.getByLabelText("Escolher o vídeo ou imagem para clonar ou criar"), new File(["x"], "ref.mp4", { type: "video/mp4" }));

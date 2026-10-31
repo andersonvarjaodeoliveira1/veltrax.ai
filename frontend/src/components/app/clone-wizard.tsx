@@ -1255,6 +1255,7 @@ export function CloneWizard() {
   const [questName, setQuestName] = useState("");
   const [questPhoto, setQuestPhoto] = useState(false);
   const chatRef = useRef<HTMLDivElement>(null);
+  const topRef = useRef<HTMLDivElement>(null);
   // Sobe o vídeo, mostra o prompt e o resumo do criativo; só então desce sozinho até as perguntas (cenas, quantidade de vídeos...).
   useEffect(() => {
     if (!questHold || !readDone || questDone) return;
@@ -1385,6 +1386,15 @@ export function CloneWizard() {
                   {lookState === "done" && <p className="text-xs text-[#5BD69A]">Produto reconhecido: o ClipGringa vai mostrá-lo igual nas cenas.</p>}
                   {lookState === "failed" && <p className="text-xs text-[#F5B454]">Não consegui ler as fotos agora. Os vídeos saem normalmente, só sem a descrição do produto.</p>}
                 </Group>
+                {productPhotos.length > 0 && lookState !== "reading" && (
+                  <div data-testid="product-next" className="flex flex-wrap items-center gap-3 rounded-[14px] border border-[#7B3FE4]/50 bg-[#7B3FE4]/10 p-3">
+                    <span className="min-w-0 flex-1 text-sm"><b>Foto pronta.</b> {chatRef.current ? "Agora responda as perguntas para eu preparar tudo." : "Agora escolha o vídeo ou a imagem que quer clonar."}</span>
+                    <Button type="button" size="sm" className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white"
+                      onClick={() => { const target = chatRef.current ?? topRef.current; target?.scrollIntoView?.({ behavior: "smooth", block: "start" }); }}>
+                      Avançar <ArrowUp className="size-4 rotate-90" />
+                    </Button>
+                  </div>
+                )}
                 {(p.product || p.productInfo || p.productLook) && (
                   <button type="button" className="text-xs underline text-muted-foreground" onClick={() => { productPhotos.forEach((photo) => URL.revokeObjectURL(photo.url)); setProductPhotos([]); setLookState("idle"); patch({ product: "", productInfo: "", productLook: "", videos: [], ctaLocked: false }); }}>
                     Não falar do produto
@@ -1592,7 +1602,7 @@ export function CloneWizard() {
                     </div>
                   );
                 })()}
-                <div className="gt-pop space-y-3">
+                <div ref={topRef} className="gt-pop scroll-mt-4 space-y-3">
                   <div className="cg-orbit relative w-full" style={{ "--cg-r": "22px" } as React.CSSProperties}>
                     <button type="button" onClick={() => fileRef.current?.click()}
                       className="relative flex w-full items-center gap-4 rounded-[22px] border border-transparent bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-6 py-6 text-left text-white shadow-[0_14px_36px_-14px_#7B3FE4] transition-transform hover:-translate-y-0.5">
