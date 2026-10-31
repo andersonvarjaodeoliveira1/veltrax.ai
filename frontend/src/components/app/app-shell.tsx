@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { TestBanner } from "@/components/app/test-banner";
 import { AccountAiRelay } from "@/components/app/account-ai-relay";
 import { ExtensionUpdateNotice } from "@/components/app/extension-update-notice";
+import { ConnectionStatus } from "@/components/app/connection-status";
 import { AccountAiSetup } from "@/components/app/account-ai-setup";
 import { SetupTutorial } from "@/components/app/setup-tutorial";
 import { FlowResumePrompt } from "@/components/app/flow-resume-prompt";
@@ -204,6 +205,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {user ? <AiProblemDialog /> : null}
         {user ? <AccountAiRelay /> : null}
         {user ? <ExtensionUpdateNotice /> : null}
+        {user && !admin ? <ConnectionStatus /> : null}
         {user ? <SetupTutorial enabled={!admin} /> : null}
         {user ? <AccountAiSetup enabled={!admin} /> : null}
         {user ? <FlowResumePrompt enabled={!admin} /> : null}
