@@ -41,6 +41,18 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     });
     return true;
   }
+  if (message && message.type === "clipgringa-open-app") {
+    // Leva a pessoa ao ClipGringa (Vídeo orgânico) para subir o projeto: reaproveita a aba aberta ou abre uma nova.
+    const path = typeof message.path === "string" && message.path.startsWith("/") ? message.path : "/automacao";
+    chrome.tabs.query({ url: "https://clipgringa.gringatools.com/*" }, (tabs) => {
+      if (tabs && tabs.length) {
+        chrome.tabs.update(tabs[0].id, { active: true, url: `https://clipgringa.gringatools.com${path}` });
+        chrome.windows.update(tabs[0].windowId, { focused: true });
+        sendResponse({ ok: true, reused: true });
+      } else chrome.tabs.create({ url: `https://clipgringa.gringatools.com${path}` }, () => sendResponse({ ok: true }));
+    });
+    return true;
+  }
   if (message && message.type === "clipgringa-upload-part") {
     // Recebe o arquivo em pedaços e só envia ao ClipGringa quando o último chegar.
     const id = String(message.id || "");

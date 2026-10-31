@@ -1153,7 +1153,11 @@
       }
       if (found) { raw = found.text; if (found.upload) uploadInfo = found.upload; el("pkg").value = raw; }
       if (!raw && badReason) throw new Error(`O pacote que chegou está com problema (${badReason}) Volte ao ClipGringa, gere de novo e clique em “Enviar para o Flow”.`);
-      if (!raw) throw new Error("Não achei o pacote. Volte à aba do ClipGringa (Clonar vídeo), deixe chegar em “Tudo pronto” e clique em “Enviar para o Flow”. Se você acabou de atualizar a extensão, aperte Ctrl+F5 nessa aba do ClipGringa primeiro.");
+      if (!raw) {
+        // Nenhum projeto chegou: leva a pessoa ao Vídeo orgânico do ClipGringa para subir o vídeo ou a foto do produto.
+        try { chrome.runtime.sendMessage({ type: "clipgringa-open-app", path: "/automacao" }, () => { void chrome.runtime.lastError; }); } catch (_e) { /* sem resposta */ }
+        throw new Error("Ainda não tem nenhum projeto aqui. Abri o ClipGringa em “Vídeo orgânico”: suba o vídeo ou a foto do produto, espere chegar em “Tudo pronto” e clique em “Enviar para o Flow”. Depois volte a esta aba e clique em Começar.");
+      }
       parsePackage(raw); // define o modelo pedido pelo pacote
       if (!state.jobs.length || raw !== (state.raw || "")) {
         const parsed = parsePackage(raw);

@@ -8,12 +8,22 @@ import { isNewerVersion } from "@/components/app/extension-update-notice";
 import { cn } from "@/lib/utils";
 
 const FLOW_URL = "https://labs.google/fx/pt/tools/flow";
-const EXT_VERSION = "1.21.1";
+const EXT_VERSION = "1.21.2";
+const GEMINI_OK_KEY = "gv-gemini-ok-v1";
+const GEMINI_OK_DAYS = 30;
+const rememberedGemini = () => { try { const at = Number(window.localStorage.getItem(GEMINI_OK_KEY) || 0); return at > 0 && Date.now() - at < GEMINI_OK_DAYS * 86400_000; } catch { return false; } };
 
 /** O passo a passo único: extensão, Flow e Gemini (mesma conta Google). Cada passo anima quando conclui e a barra mostra o avanço. */
 export function ConnectAll() {
   const { state, account } = useFlowConnection(true, false);
   const [gemini, setGemini] = useState<SiteState | "checking">("checking");
+  // Depois de logar uma vez, o Gemini fica verde mesmo com a aba fechada: só volta a pendente se a extensão vir que a conta saiu.
+  const [remembered, setRemembered] = useState(false);
+  useEffect(() => { setRemembered(rememberedGemini()); }, []);
+  useEffect(() => {
+    if (gemini === "ready") { try { window.localStorage.setItem(GEMINI_OK_KEY, String(Date.now())); } catch { /* sem storage */ } setRemembered(true); }
+    else if (gemini === "login" || gemini === "guest") { try { window.localStorage.removeItem(GEMINI_OK_KEY); } catch { /* sem storage */ } setRemembered(false); }
+  }, [gemini]);
   const [started, setStarted] = useState(false);
 
   const check = useCallback(async () => {
@@ -30,10 +40,10 @@ export function ConnectAll() {
   // Com o Flow conectado, o Gemini (mesma conta Google) é conferido sozinho, uma vez, numa aba própria que a extensão abre e fecha.
   const autoProbed = useRef(false);
   useEffect(() => {
-    if (state !== "connected" || gemini === "ready" || autoProbed.current) return;
+    if (state !== "connected" || gemini === "ready" || remembered || autoProbed.current) return;
     autoProbed.current = true;
     void probeSite("gemini", true).then((result) => setGemini(result));
-  }, [state, gemini]);
+  }, [state, gemini, remembered]);
 
   // Extensão recém-instalada só aparece depois de recarregar a página: ao voltar para esta aba, recarrega sozinho (no máximo a cada 20 s).
   const [downloaded, setDownloaded] = useState(false);
@@ -56,7 +66,7 @@ export function ConnectAll() {
   const extOk = state !== "no-extension" && state !== "unknown";
   const outdated = extOk && Boolean(account.version) && isNewerVersion(EXT_VERSION, account.version || "0");
   const flowOk = state === "connected";
-  const geminiOk = gemini === "ready";
+  const geminiOk = gemini === "ready" || (remembered && gemini !== "login" && gemini !== "guest");
 
   useEffect(() => {
     if (geminiOk) { const c = readChoice(); if (!c || c.site === "none") writeChoice("gemini"); }

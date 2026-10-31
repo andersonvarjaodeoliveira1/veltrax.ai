@@ -44,4 +44,17 @@ describe("ConnectAll", () => {
     render(<ConnectAll />);
     await waitFor(() => expect(vi.mocked(probeSite)).toHaveBeenCalledWith("gemini", true));
   });
+  it("keeps Gemini green after its tab is closed (remembered login)", async () => {
+    window.localStorage.setItem("gv-gemini-ok-v1", String(Date.now()));
+    flow.state = "connected"; probe.value = "notab";
+    render(<ConnectAll />);
+    expect(await screen.findByText(/Já conectado ✓ Pode criar seus vídeos/, {}, { timeout: 4000 })).toBeTruthy();
+  });
+  it("turns Gemini pending again when the extension sees the account logged out", async () => {
+    window.localStorage.setItem("gv-gemini-ok-v1", String(Date.now()));
+    flow.state = "connected"; probe.value = "login";
+    render(<ConnectAll />);
+    await waitFor(() => expect(screen.getByTestId("connect-step-gem")).toHaveAttribute("data-state", "active"));
+    expect(window.localStorage.getItem("gv-gemini-ok-v1")).toBeNull();
+  });
 });

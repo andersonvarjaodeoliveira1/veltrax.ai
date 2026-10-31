@@ -70,7 +70,7 @@ export function LinkVideo({ onFile, disabled }: { onFile: (file: File) => void; 
       // A Shopee bloqueia o servidor, então cair no download pelo servidor só esconde o motivo real. Diz o que houve de verdade.
       setBusy(false);
       if (read.error === "login") setError("A Shopee pediu login ou uma verificação no seu navegador. Entre na Shopee (shopee.com.br) nesse mesmo Chrome e tente de novo.");
-      else if (read.error === "no-extension") setError("Não encontrei a extensão ClipGringa · Flow neste Chrome. Aperte Ctrl+F5 nesta página; se continuar, confira em chrome://extensions se ela está ligada (versão 1.21.1) e recarregue-a.");
+      else if (read.error === "no-extension") setError("Não encontrei a extensão ClipGringa · Flow neste Chrome. Aperte Ctrl+F5 nesta página; se continuar, confira em chrome://extensions se ela está ligada (versão 1.21.2) e recarregue-a.");
       else if (read.error === "notfound") setError("Esse anúncio da Shopee não existe mais ou saiu do ar. Confira o link e tente com outro produto.");
       else if (read.error === "empty") setError("Abri o anúncio, mas não achei vídeo nem fotos do vendedor. Confira se o link é de um produto e tente de novo.");
       else if (read.error === "timeout") setError("A Shopee demorou demais para abrir o anúncio (mais de 1 minuto). Abra o produto na Shopee neste mesmo Chrome, espere carregar e cole o link de novo: eu leio a aba que você já abriu.");
