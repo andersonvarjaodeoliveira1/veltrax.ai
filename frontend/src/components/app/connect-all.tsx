@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, ExternalLink, Loader2, Zap } from "lucide-react";
 import { useFlowConnection } from "@/hooks/use-flow-connection";
 import { ACCOUNT_SITES, probeSite, writeChoice, readChoice, type SiteState } from "@/lib/account-ai";
@@ -9,7 +9,7 @@ const FLOW_URL = "https://labs.google/fx/pt/tools/flow";
 
 /** Um botão só: abre o Flow e o Gemini (mesma conta Google), escolhe o Gemini como IA grátis e mostra quando cada parte conectou. */
 export function ConnectAll() {
-  const { state } = useFlowConnection(true, false);
+  const { state, account } = useFlowConnection(true, false);
   const [gemini, setGemini] = useState<SiteState | "checking">("checking");
   const [started, setStarted] = useState(false);
 
@@ -32,16 +32,37 @@ export function ConnectAll() {
     if (geminiOk) { const c = readChoice(); if (!c || c.site === "none") writeChoice("gemini"); }
   }, [geminiOk]);
 
+  // As abas abertas por este botão: fechamos só elas quando tudo conecta (nunca as que a pessoa abriu sozinha).
+  const opened = useRef<Window[]>([]);
+  const openTab = (url: string) => {
+    const tab = window.open("about:blank", "_blank");
+    if (!tab) return;
+    try { tab.opener = null; } catch { /* sem acesso */ }
+    tab.location.href = url;
+    opened.current.push(tab);
+  };
   const start = () => {
     setStarted(true);
     writeChoice("gemini");
-    window.open(FLOW_URL, "_blank", "noopener,noreferrer");
-    window.setTimeout(() => window.open(ACCOUNT_SITES.gemini.url, "_blank", "noopener,noreferrer"), 400);
+    opened.current = [];
+    openTab(FLOW_URL);
+    window.setTimeout(() => openTab(ACCOUNT_SITES.gemini.url), 400);
   };
+
+  const announced = useRef(false);
+  useEffect(() => {
+    if (!(flowOk && geminiOk && started) || announced.current) return;
+    announced.current = true;
+    const timer = window.setTimeout(() => {
+      for (const tab of opened.current) { try { tab.close(); } catch { /* já fechada */ } }
+      opened.current = [];
+    }, 2500);
+    return () => window.clearTimeout(timer);
+  }, [flowOk, geminiOk, started]);
 
   const rows = [
     { id: "ext", label: "Extensão", ok: extOk, wait: state === "unknown", text: extOk ? "Instalada" : "Instale no passo 2 abaixo" },
-    { id: "flow", label: "Flow", ok: flowOk, wait: false, text: flowOk ? "Conta conectada" : "Entre com sua conta Google" },
+    { id: "flow", label: "Flow", ok: flowOk, wait: false, text: flowOk ? `Conta conectada${account.plan ? ` · plano ${account.plan}` : ""}${account.credits !== null ? ` · ${account.credits} créditos` : ""}` : "Entre com sua conta Google" },
     { id: "gem", label: "IA grátis (Gemini)", ok: geminiOk, wait: gemini === "checking" && extOk, text: geminiOk ? "Pronta, sem custo" : gemini === "login" || gemini === "guest" ? "Entre na mesma conta Google" : "Abra o Gemini e entre" },
   ];
   const all = rows.every((r) => r.ok);
@@ -59,7 +80,7 @@ export function ConnectAll() {
         ))}
       </ul>
       {all
-        ? <p role="status" className="rounded-[12px] border border-[#5BD69A]/40 bg-[#5BD69A]/10 p-2.5 text-sm text-[#5BD69A]">Tudo conectado. Pode criar seus vídeos.</p>
+        ? <p role="status" className="rounded-[12px] border border-[#5BD69A]/40 bg-[#5BD69A]/10 p-2.5 text-sm text-[#5BD69A]">Já conectado ✓ Pode criar seus vídeos{opened.current.length ? ". Vamos fechar as abas do Flow e do Gemini." : "."}</p>
         : <button type="button" onClick={start} className="inline-flex items-center gap-2 rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-4 py-2 text-sm font-medium text-white"><ExternalLink className="size-4" />{started ? "Abrir de novo Flow e Gemini" : "Conectar Flow e Gemini"}</button>}
     </section>
   );

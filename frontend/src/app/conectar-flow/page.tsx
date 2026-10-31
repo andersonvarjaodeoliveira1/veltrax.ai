@@ -48,7 +48,7 @@ export default function ConnectFlowPage() {
 
       <ConnectAll />
 
-      <section data-testid="flow-status" aria-live="polite" className={cn("flex flex-wrap items-center gap-3 rounded-[18px] border p-4 text-sm",
+      <section hidden={flowState === "connected"} data-testid="flow-status" aria-live="polite" className={cn("flex flex-wrap items-center gap-3 rounded-[18px] border p-4 text-sm",
         flowState === "connected" ? "border-[#5BD69A]/40 bg-[#5BD69A]/10" : flowState === "unknown" ? "border-border bg-card" : "border-[#F5B454]/40 bg-[#F5B454]/10")}>
         <span className={cn("size-2.5 rounded-full", flowState === "connected" ? "bg-[#5BD69A]" : flowState === "unknown" ? "bg-muted-foreground" : "bg-[#F5B454]")} />
         <div className="min-w-0 flex-1">
@@ -87,7 +87,7 @@ export default function ConnectFlowPage() {
         </div>
       </section>
 
-      <section className="space-y-3 rounded-[18px] border border-border bg-card p-5" data-testid="step-flow">
+      <section hidden={flowState === "connected"} className="space-y-3 rounded-[18px] border border-border bg-card p-5" data-testid="step-flow">
         <p className="flex items-center gap-2 font-medium">
           <span className="grid size-6 place-items-center rounded-full bg-[#7B3FE4]/25 text-xs">{done.flow ? <Check className="size-3.5 text-[#5BD69A]" /> : "1"}</span>
           Entre no Flow com a sua conta Google
