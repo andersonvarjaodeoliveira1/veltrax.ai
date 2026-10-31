@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { toast } from "sonner";
-import { ACCOUNT_AI_EVENT, ACCOUNT_SITES, aiPathLabel, askAccount, extensionHasAi, isAccountSite, readChoice } from "@/lib/account-ai";
+import { ACCOUNT_AI_EVENT, ACCOUNT_SITES, aiPathLabel, askAccount, extensionHasAi, isAccountSite, probeSite, readChoice, type AccountSite } from "@/lib/account-ai";
 
 /** Motivo (vindo do servidor em x-ai-why) em português simples, com o que fazer. */
 export function whyText(why: string, name: string): string | null {
@@ -15,6 +15,18 @@ export function whyText(why: string, name: string): string | null {
     case "failed": return `Motivo: o ${name} deu um erro ao responder.`;
     default: return null;
   }
+}
+
+/** Quando o servidor não diz o motivo, olha deste lado: extensão ausente/antiga, sem aba ou sem login. */
+export async function diagnoseLocal(site: AccountSite, name: string): Promise<string> {
+  const ext = await extensionHasAi(1500);
+  if (!ext) return `Motivo: não achei a extensão ClipGringa · Flow atualizada neste Chrome. Instale a versão mais nova (menu “Conectar ao Flow”) e recarregue a página com Ctrl+F5.`;
+  const state = await probeSite(site, false).catch(() => "nopage" as const);
+  if (state === "notab") return `Motivo: o ${name} não está aberto. Clique em “Conectar ao Flow” para abrir e entrar.`;
+  if (state === "login" || state === "guest") return `Motivo: você está sem login no ${name}. Entre nele neste Chrome, com a mesma conta.`;
+  if (state === "blocked") return `Motivo: o ${name} pediu uma verificação (captcha). Abra o ${name} e resolva.`;
+  if (state === "nopage") return `Motivo: a extensão não conseguiu falar com o ${name}. Recarregue a aba do ${name} e tente de novo.`;
+  return `Motivo: a extensão e o ${name} estão ligados, mas a página do ClipGringa não estava respondendo. Recarregue com Ctrl+F5 e tente de novo.`;
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -51,9 +63,13 @@ export function AccountAiRelay() {
       if (choice && isAccountSite(choice.site) && !path.startsWith("account:")) {
         const name = ACCOUNT_SITES[choice.site].label;
         const why = (window as unknown as { __gvAiWhy?: string }).__gvAiWhy ?? "";
-        toast.warning(`Sua conta do ${name} não respondeu agora: ${info.kind === "api" ? "usei a sua chave de API" : "usei os créditos do plano"}.`, {
-          id: "ai-path", duration: 9000, description: whyText(why, name) ?? "Deixe o ClipGringa aberto no Chrome, com a extensão ligada e logado no " + name + ".",
-        });
+        const head = `Sua conta do ${name} não respondeu agora: ${info.kind === "api" ? "usei a sua chave de API" : "usei os créditos do plano"}.`;
+        const known = whyText(why, name);
+        if (known) toast.warning(head, { id: "ai-path", duration: 9000, description: known });
+        else {
+          toast.warning(head, { id: "ai-path", duration: 9000, description: "Verificando o motivo…" });
+          void diagnoseLocal(choice.site, name).then((text) => toast.warning(head, { id: "ai-path", duration: 12000, description: text }));
+        }
         return;
       }
       toast.message(info.text, { id: "ai-path", duration: 3500 });

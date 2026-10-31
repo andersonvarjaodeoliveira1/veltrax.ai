@@ -649,7 +649,7 @@ export function CloneWizard() {
       form.append("video", file);
       const response = await fetch("/api/multiplier/captions/draft", { method: "POST", body: form });
       const data = await response.json().catch(() => null);
-      if (!response.ok || !Array.isArray(data?.lines)) throw new Error(ptError(data?.detail, "Não foi possível ler o vídeo. Tente de novo."));
+      if (!response.ok || !Array.isArray(data?.lines)) throw new Error(ptError(data?.detail, `Não foi possível ler o vídeo (erro ${response.status}${response.status === 413 ? ": arquivo grande demais" : response.status === 429 ? ": muitos envios, espere um pouco" : ""}). Tente de novo.`));
       const heard = (data.lines as { text: string }[]).map((line) => line.text).join(" ").trim();
       rememberTranscript(fingerprint, heard);
       patch({ reference: heard, scenes: [], mix: NO_MIX, variations: [], images: [], videos: [], approved: {} });
