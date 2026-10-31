@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, ClipboardCopy, Download, Loader2, Sparkles, Trash2, Upload, X } from "lucide-react";
+import { Check, ClipboardCopy, Download, Info, Library, Loader2, Sparkles, SlidersHorizontal, Trash2, Upload, Wand2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
@@ -239,32 +239,40 @@ export default function AutomationPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-[13rem_minmax(0,1fr)]">
-      <nav aria-label="Vídeo orgânico" className="flex gap-2 overflow-x-auto md:flex-col md:overflow-visible">
+      <nav aria-label="Vídeo orgânico" className="flex gap-2 overflow-x-auto pb-1 md:flex-col md:overflow-visible md:pb-0">
+        <p aria-hidden className="hidden px-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-[#A98BFF] md:block">Modos de criar</p>
         {([
-          ["auto", "Vídeo automático", "Suba o vídeo e o resto é automático", () => setTab("clonagem")],
-          ["manual", "Vídeo manual", "Você controla cada etapa", () => setTab(manualTab ? tab : "criar")],
-          ["library", "Biblioteca", "Seus vídeos e imagens criados", () => setTab(libraryTab ? tab : "videos")],
-        ] as const).map(([id, label, hint, go]) => (
+          ["auto", "Vídeo automático", "Suba o vídeo e o resto é automático", Wand2, () => setTab("clonagem")],
+          ["manual", "Vídeo manual", "Você controla cada etapa", SlidersHorizontal, () => setTab(manualTab ? tab : "criar")],
+          ["library", "Biblioteca", "Seus vídeos e imagens criados", Library, () => setTab(libraryTab ? tab : "videos")],
+        ] as const).map(([id, label, hint, Icon, go]) => (
           <button key={id} type="button" onClick={go} aria-current={section === id ? "page" : undefined} title={hint}
-            className={cn("shrink-0 rounded-[14px] border px-4 py-2.5 text-left text-sm transition-colors md:w-full",
-              section === id ? "border-[#7B3FE4] bg-[#7B3FE4]/20 text-foreground" : "border-white/10 text-muted-foreground hover:text-foreground")}>
-            <span className="flex items-center gap-2 font-medium">{label}{id === "auto" && <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[9px] font-semibold">BETA</span>}</span>
-            <span className="hidden text-xs opacity-80 md:block">{hint}</span>
+            className={cn("group relative shrink-0 overflow-hidden rounded-[16px] border px-4 py-3 text-left text-sm transition-all duration-300 md:w-full",
+              section === id
+                ? "border-[#7B3FE4]/70 bg-gradient-to-br from-[#7B3FE4]/30 via-[#7B3FE4]/10 to-transparent text-foreground shadow-[0_10px_34px_-14px_#7B3FE4]"
+                : "border-white/10 bg-white/[0.02] text-muted-foreground hover:-translate-y-0.5 hover:border-[#A98BFF]/40 hover:text-foreground")}>
+            <span aria-hidden className={cn("absolute inset-y-3 left-0 w-0.5 rounded-full bg-gradient-to-b from-[#A98BFF] to-[#7B3FE4] transition-opacity", section === id ? "opacity-100" : "opacity-0")} />
+            <span className="flex items-center gap-2.5 font-medium">
+              <span className={cn("grid size-8 shrink-0 place-items-center rounded-[10px] transition-colors", section === id ? "bg-[#7B3FE4]/40 text-white" : "bg-white/5 text-[#A98BFF] group-hover:bg-[#7B3FE4]/20")}><Icon className="size-4" /></span>
+              {label}{id === "auto" && <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[9px] font-semibold">BETA</span>}
+            </span>
+            <span className="mt-1 hidden pl-[2.625rem] text-xs opacity-80 md:block">{hint}</span>
           </button>
         ))}
       </nav>
       <div className="min-w-0 space-y-4">
       {section === "manual" && (
-        <div role="tablist" aria-label="Etapas do vídeo manual" className="flex flex-wrap items-center gap-1 rounded-[14px] border border-white/10 bg-white/[0.02] p-1.5">
-          {TABS.map((item) => {
+        <div role="tablist" aria-label="Etapas do vídeo manual" className="flex flex-wrap items-center gap-1 rounded-full border border-white/10 bg-white/[0.03] p-1.5 backdrop-blur">
+          {TABS.map((item, index) => {
             const count = item.key === "criar" || item.key === "ajustes" ? 0 : counts[item.key as "copys" | "flow" | "prontos"];
+            const active = tab === item.key;
             return (
-              <button key={item.key} type="button" onClick={() => setTab(item.key)} aria-current={tab === item.key} title={item.hint}
-                className={cn("rounded-[10px] px-3 py-1.5 text-xs transition-colors", tab === item.key ? "bg-white/10 text-foreground" : "text-muted-foreground hover:text-foreground")}>
-                <span className="flex items-center gap-1.5 font-medium">
-                  {item.label}
-                  {count > 0 && <span className="rounded-full bg-[#7B3FE4]/40 px-1.5 text-[10px] tabular-nums">{count}</span>}
-                </span>
+              <button key={item.key} type="button" onClick={() => setTab(item.key)} aria-current={active} title={item.hint}
+                className={cn("flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs transition-all duration-300",
+                  active ? "bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white shadow-[0_6px_20px_-8px_#7B3FE4]" : "text-muted-foreground hover:bg-white/5 hover:text-foreground")}>
+                <span aria-hidden className={cn("grid size-4 place-items-center rounded-full text-[9px] font-semibold tabular-nums", active ? "bg-white/25" : "bg-white/10")}>{index + 1}</span>
+                <span className="font-medium">{item.label}</span>
+                {count > 0 && <span className="rounded-full bg-white/25 px-1.5 text-[10px] tabular-nums">{count}</span>}
               </button>
             );
           })}
@@ -282,11 +290,13 @@ export default function AutomationPage() {
       )}
 
       {tab !== "clonagem" && tab !== "videos" && tab !== "imagens" && (
-      <Alert>
-        <AlertDescription>
-          Os textos e os prompts de vídeo são gerados pela IA. O vídeo é gerado por você no Flow, em lower priority, e enviado aqui. Para criar variações, baixe o vídeo e envie na aba Variações do Multiplicador. Os vídeos ficam só nesta página: se você atualizar, envie de novo.
-        </AlertDescription>
-      </Alert>
+      <details data-testid="how-it-works" className="group rounded-[16px] border border-[#7B3FE4]/30 bg-gradient-to-br from-[#7B3FE4]/10 to-transparent px-4 py-3 text-sm">
+        <summary className="flex cursor-pointer list-none items-center gap-2 font-medium [&::-webkit-details-marker]:hidden">
+          <Info className="size-4 text-[#A98BFF]" /> Como o vídeo manual funciona
+          <span aria-hidden className="ml-auto text-xs text-muted-foreground transition-transform group-open:rotate-180">▾</span>
+        </summary>
+        <p className="mt-2 text-muted-foreground">Os textos e os prompts de vídeo são gerados pela IA. O vídeo é gerado por você no Flow, em lower priority, e enviado aqui. Para criar variações, baixe o vídeo e envie na aba Variações do Multiplicador. Os vídeos ficam só nesta página: se você atualizar, envie de novo.</p>
+      </details>
       )}
 
       {error && (
@@ -296,36 +306,38 @@ export default function AutomationPage() {
       )}
 
       {tab === "criar" && (
-        <section className="space-y-4 rounded-[18px] border border-border bg-card p-5">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="space-y-1 text-sm">
+        <section className="relative space-y-5 overflow-hidden rounded-[22px] border border-[#7B3FE4]/30 bg-gradient-to-br from-card via-card to-[#7B3FE4]/10 p-6 shadow-[0_24px_60px_-34px_#7B3FE4]">
+          <span aria-hidden className="pointer-events-none absolute -right-16 -top-16 size-48 rounded-full bg-[#7B3FE4]/20 blur-3xl" />
+          <p className="relative text-[10px] font-semibold uppercase tracking-[0.22em] text-[#A98BFF]">1 · Descreva o criativo</p>
+          <div className="relative grid gap-4 sm:grid-cols-2">
+            <label className="space-y-1.5 text-sm">
               <span className="text-muted-foreground">Nicho</span>
-              <select value={niche} onChange={(event) => setNiche(event.target.value)} className="w-full rounded-lg border border-border bg-background px-3 py-2">
+              <select value={niche} onChange={(event) => setNiche(event.target.value)} className="w-full rounded-[14px] border border-white/10 bg-background/70 px-4 py-2.5 transition-colors hover:border-[#A98BFF]/50">
                 {niches.map((item) => <option key={item}>{item}</option>)}
               </select>
             </label>
-            <label className="space-y-1 text-sm">
+            <label className="space-y-1.5 text-sm">
               <span className="text-muted-foreground">Tom</span>
-              <select value={tone} onChange={(event) => setTone(event.target.value)} className="w-full rounded-lg border border-border bg-background px-3 py-2">
+              <select value={tone} onChange={(event) => setTone(event.target.value)} className="w-full rounded-[14px] border border-white/10 bg-background/70 px-4 py-2.5 transition-colors hover:border-[#A98BFF]/50">
                 {TONES.map((item) => <option key={item}>{item}</option>)}
               </select>
             </label>
           </div>
-          <label className="block space-y-1 text-sm">
-            <span className="text-muted-foreground">Sobre o que são os criativos?</span>
+          <label className="relative block space-y-1.5 text-sm">
+            <span className="flex items-center justify-between text-muted-foreground">Sobre o que são os criativos?<span className="text-[11px] tabular-nums">{product.length}/1500</span></span>
             <textarea value={product} maxLength={1500} rows={4} onChange={(event) => setProduct(event.target.value)}
               placeholder="Ex.: escova alisadora elétrica que seca e alisa em 10 minutos, leve e fácil de usar"
-              className="w-full rounded-lg border border-border bg-background px-3 py-2" />
+              className="w-full rounded-[16px] border border-white/10 bg-background/70 px-4 py-3 transition-colors hover:border-[#A98BFF]/50" />
           </label>
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="relative flex flex-wrap items-center gap-3">
             <span className="text-sm text-muted-foreground">Quantidade</span>
             {[1, 2, 3, 4, 5, 6].map((value) => (
               <button key={value} type="button" onClick={() => setQuantity(value)}
-                className={cn("rounded-full border px-3 py-1 text-sm", quantity === value ? "border-transparent bg-primary text-primary-foreground" : "border-border text-muted-foreground")}>
+                className={cn("size-9 rounded-full border text-sm tabular-nums transition-all duration-200", quantity === value ? "scale-110 border-transparent bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white shadow-[0_6px_18px_-6px_#7B3FE4]" : "border-white/10 text-muted-foreground hover:border-[#A98BFF]/50 hover:text-foreground")}>
                 {value}
               </button>
             ))}
-            <Button className="ml-auto" disabled={busy || product.trim().length < 10} onClick={generate}>
+            <Button className="ml-auto rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-5 text-white shadow-[0_10px_28px_-12px_#7B3FE4]" disabled={busy || product.trim().length < 10} onClick={generate}>
               {busy ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
               {busy ? "Escrevendo os textos…" : "Gerar textos"}
             </Button>
