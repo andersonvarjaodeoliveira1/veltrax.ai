@@ -647,15 +647,30 @@ export function CloneWizard() {
     try {
       const form = new FormData();
       form.append("video", file);
-      const response = await fetch("/api/multiplier/captions/draft", { method: "POST", body: form });
-      const data = await response.json().catch(() => null);
+      // Falha de rede, resposta que não é do servidor ou erro 5xx (proxy, demora): tenta de novo até 3 vezes antes de desistir.
+      let response!: Response;
+      let data: { lines?: unknown; detail?: unknown } | null = null;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          response = await fetch("/api/multiplier/captions/draft", { method: "POST", body: form });
+          data = await response.json().catch(() => null);
+        } catch (netErr) {
+          if (attempt === 2) throw netErr;
+          await new Promise((resolve) => setTimeout(resolve, 2500 * (attempt + 1)));
+          continue;
+        }
+        const transient = !response.ok && (data === null || (response.status >= 502 && typeof data.detail !== "string"));
+        if (response.ok || !transient || attempt === 2) break;
+        await new Promise((resolve) => setTimeout(resolve, 2500 * (attempt + 1)));
+      }
       if (!response.ok || !Array.isArray(data?.lines)) throw new Error(ptError(data?.detail, `Não foi possível ler o vídeo (erro ${response.status}${response.status === 413 ? ": arquivo grande demais" : response.status === 429 ? ": muitos envios, espere um pouco" : ""}). Tente de novo.`));
       const heard = (data.lines as { text: string }[]).map((line) => line.text).join(" ").trim();
       rememberTranscript(fingerprint, heard);
       patch({ reference: heard, scenes: [], mix: NO_MIX, variations: [], images: [], videos: [], approved: {} });
       endTask(taskId, "done");
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Não foi possível ler o vídeo. Tente de novo.";
+      const raw = err instanceof Error ? err.message : "";
+      const message = /failed to fetch|networkerror|load failed|aborted/i.test(raw) || !raw ? "A conexão caiu ao enviar o vídeo. Confira a internet e tente de novo." : raw;
       if (/Não encontrei fala/.test(message)) {
         // Vídeo sem fala não é falha: o aviso fica no próprio card e a pessoa descreve o vídeo nas notas.
         setSpeech("nospeech");
