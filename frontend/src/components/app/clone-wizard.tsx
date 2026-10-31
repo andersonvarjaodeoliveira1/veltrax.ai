@@ -17,6 +17,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import { FLOW_CHOICES, FLOW_MODELS, defaultFlowCategory, effectiveFlowId, saveFlowCategory, visibleFlowChoices } from "@/lib/flow-models";
 import { ReferenceSummary } from "@/components/app/reference-summary";
+import { clearMemory, readMemory, writeMemory } from "@/lib/client-memory";
 import { RunPlanCard } from "@/components/app/run-plan";
 import { ManualOptions, variationHint, type EntryMode, type VariationMode } from "@/components/app/manual-options";
 import { PresenterChoice, useReferenceGender, type Presenter } from "@/components/app/presenter-choice";
@@ -200,12 +201,29 @@ const LOOK_PRESETS: [string, string][] = [
 ];
 const CAPCUT_STEPS = ["Importar os arquivos do vídeo", "Colocar as cenas na sequência correta", "Ajustar as junções entre as cenas", "Revisar a CTA e a palavra-chave", "Exportar"];
 
+/** Projeto novo já com as escolhas que o cliente usou da última vez (memória do cliente). */
+function fresh(): Project {
+  const m = readMemory();
+  const lang = m.language ? LANGUAGES.find((item) => item.value === m.language) : undefined;
+  return {
+    ...EMPTY,
+    ...(m.keyword ? { keyword: m.keyword } : {}),
+    ...(lang ? { language: lang.value, cta: lang.cta } : {}),
+    ...(m.count ? { count: m.count } : {}),
+    ...(m.sceneCount ? { sceneCount: m.sceneCount } : {}),
+    ...(m.takes ? { takes: m.takes } : {}),
+    ...(m.takeKind ? { takeKind: m.takeKind as TakeKind } : {}),
+    ...(m.copyMode ? { copyMode: m.copyMode } : {}),
+    ...(m.avatarMode ? { avatarMode: m.avatarMode } : {}),
+  };
+}
+
 function load(): Project {
   try {
     const raw = window.localStorage.getItem(KEY);
     if (raw) return { ...EMPTY, ...(JSON.parse(raw) as Partial<Project>) };
   } catch { /* storage unavailable */ }
-  return EMPTY;
+  return fresh();
 }
 
 function ptError(detail: unknown, fallback = "Não foi possível gerar esta etapa. Tente de novo.") {
@@ -478,6 +496,11 @@ export function CloneWizard() {
       }
     } catch { /* storage unavailable */ }
   }, [ready, p]);
+  // Memória do cliente: guarda as escolhas para o próximo projeto abrir com elas.
+  useEffect(() => {
+    if (!ready) return;
+    writeMemory({ keyword: p.keyword.trim() || undefined, language: p.language, count: p.count, sceneCount: p.sceneCount, takes: p.takes, takeKind: p.takeKind, copyMode: p.copyMode, avatarMode: p.avatarMode });
+  }, [ready, p.keyword, p.language, p.count, p.sceneCount, p.takes, p.takeKind, p.copyMode, p.avatarMode]);
   // Projeto parado por mais de 10 minutos (ou 2 horas, se já foi enviado ao Flow) é apagado e vira um projeto novo.
   const [expiredNote, setExpiredNote] = useState(false);
   const hasContent = p.reference.trim().length > 0 || p.scenes.length > 0 || p.variations.length > 0;
@@ -1090,7 +1113,7 @@ export function CloneWizard() {
     setRedirectIn(null);
     setRedirectBlocked(false);
     try { window.sessionStorage.removeItem("gv-flow-redirected"); } catch { /* storage unavailable */ }
-    setP(EMPTY);
+    setP(fresh());
   }
   resetRef.current = reset;
 
@@ -1627,7 +1650,7 @@ export function CloneWizard() {
                   {(questHold || hasReference || !!refFile) && (
                     <ManualOptions mode={entryMode} onMode={(m) => { setEntryMode(m); if (m === "manual") patch({ variationMode: p.variationMode ?? "roulette" }); else patch({ variationMode: undefined }); }}
                       values={{ copyMode: p.copyMode, variationMode: p.variationMode ?? "roulette", keepPerson: p.avatarMode === "own", presenter: p.presenter ?? "", count: p.count, scenes: p.sceneCount, language: p.language, keyword: p.keyword }}
-                      languages={LANGUAGES.map((l) => ({ value: l.value, text: l.text }))}
+                      languages={LANGUAGES.map((l) => ({ value: l.value, text: l.text }))} onForget={clearMemory}
                       onChange={(c) => {
                         if (c.language) { chooseLanguage(c.language); return; }
                         if (c.count) { patch({ count: c.count }); return; }

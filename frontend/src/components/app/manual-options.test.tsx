@@ -28,4 +28,11 @@ describe("ManualOptions", () => {
     expect(variationHint()).toBe("");
     expect(variationHint("text")).toContain("gancho");
   });
+  it("lets the member forget what was remembered", () => {
+    const onForget = vi.fn();
+    render(<ManualOptions mode="auto" onMode={() => undefined} values={values} onChange={() => undefined} languages={langs} onForget={onForget} />);
+    fireEvent.click(screen.getByRole("button", { name: "Esquecer minhas escolhas" }));
+    expect(onForget).toHaveBeenCalled();
+    expect(screen.getByText(/esqueci as suas escolhas/)).toBeTruthy();
+  });
 });

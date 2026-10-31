@@ -132,6 +132,29 @@ claude mcp add clipgringa -e CLIPGRINGA_API_KEY=sk_your_key_here \
   -- uv --directory /absolute/path/to/clipgringa/mcp run clipgringa-mcp
 ```
 
+## Use with Google Antigravity
+
+Antigravity is an MCP client too. Add the same server entry to its MCP config
+(`mcp_config.json`, global or per workspace; open it from the agent panel's MCP
+settings) and restart the agent:
+
+```json
+{
+  "mcpServers": {
+    "clipgringa": {
+      "command": "uv",
+      "args": ["--directory", "/absolute/path/to/clipgringa/mcp", "run", "clipgringa-mcp"],
+      "env": { "CLIPGRINGA_API_KEY": "sk_your_key_here" }
+    }
+  }
+}
+```
+
+Use your own ClipGringa API key (Settings → API keys). This talks to the public
+ClipGringa API; it does not use anyone's Antigravity or Google login. If the tool
+list is long, Antigravity's `disabledTools` option can hide the ones you do not need
+to save context.
+
 ## Example prompts
 
 - "Use clipgringa to make clips from https://youtu.be/… with the hormozi caption template, then wait for it and download the top clip."

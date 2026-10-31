@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 
 export type VariationMode = "roulette" | "gesture" | "text" | "combined";
@@ -21,9 +22,10 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
 }
 
 /** Escolha entre o modo automático (a IA decide tudo) e o manual (a pessoa define as características do criativo). */
-export function ManualOptions({ mode, onMode, values, onChange, languages }: {
-  mode: EntryMode; onMode: (mode: EntryMode) => void; values: ManualValues; onChange: (patch: Partial<ManualValues>) => void; languages: { value: string; text: string }[];
+export function ManualOptions({ mode, onMode, values, onChange, languages, onForget }: {
+  mode: EntryMode; onMode: (mode: EntryMode) => void; values: ManualValues; onChange: (patch: Partial<ManualValues>) => void; languages: { value: string; text: string }[]; onForget?: () => void;
 }) {
+  const [forgot, setForgot] = useState(false);
   return (
     <section data-testid="entry-mode" className="space-y-3 rounded-[18px] border border-border bg-card p-4">
       <div role="group" aria-label="Como modelar" className="grid grid-cols-2 gap-2">
@@ -34,6 +36,12 @@ export function ManualOptions({ mode, onMode, values, onChange, languages }: {
           </button>
         ))}
       </div>
+      {onForget && (
+        <p className="text-xs text-muted-foreground">
+          {forgot ? "Pronto, esqueci as suas escolhas." : "Lembramos das suas últimas escolhas para o próximo projeto abrir igual."}{" "}
+          {!forgot && <button type="button" onClick={() => { onForget(); setForgot(true); }} className="underline hover:text-foreground">Esquecer minhas escolhas</button>}
+        </p>
+      )}
       {mode === "manual" && (
         <div data-testid="manual-panel" className="space-y-3 text-sm">
           <div className="space-y-1.5"><p className="text-xs font-medium">Copy</p>
