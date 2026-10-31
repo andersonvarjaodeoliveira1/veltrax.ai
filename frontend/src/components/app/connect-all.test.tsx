@@ -18,7 +18,7 @@ describe("ConnectAll", () => {
   it("offers the connect button when something is missing", async () => {
     flow.state = "logged-out"; probe.value = "login";
     render(<ConnectAll />);
-    expect(await screen.findByRole("button", { name: /Conectar Flow e Gemini/ })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /Abrir Flow e Gemini/ })).toBeTruthy();
   });
   it("closes only the tabs it opened once Flow and Gemini are connected", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -27,7 +27,7 @@ describe("ConnectAll", () => {
     const all = [...tabs];
     flow.state = "connected"; probe.value = "login";
     render(<ConnectAll />);
-    fireEvent.click(await screen.findByRole("button", { name: /Conectar Flow e Gemini/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Abrir Flow e Gemini/ }));
     expect(open).toHaveBeenCalledTimes(2);
     expect(all[0].location.href).toContain("labs.google");
     probe.value = "ready";
