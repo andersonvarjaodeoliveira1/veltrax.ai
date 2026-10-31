@@ -1273,12 +1273,15 @@ export function CloneWizard() {
   const [policyOk, setPolicyOk] = useState("");
   const [questDone, setQuestDone] = useState(false);
   const [entryMode, setEntryMode] = useState<EntryMode>("auto");
+  // Depois de escolher o vídeo, os passos aparecem um de cada vez: 0 conferir o vídeo · 1 modo e quantidades · 2 perguntas.
+  const [entryPanel, setEntryPanel] = useState(0);
   const [lastRun, setLastRun] = useState<{ ms: number; videos: number } | null>(null);
   const [readDone, setReadDone] = useState(false);
   const [questName, setQuestName] = useState("");
   const [questPhoto, setQuestPhoto] = useState(false);
   const chatRef = useRef<HTMLDivElement>(null);
   const topRef = useRef<HTMLDivElement>(null);
+  const goPanel = (n: number) => { setEntryPanel(n); window.setTimeout(() => topRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" }), 50); };
   // Sobe o vídeo, mostra o prompt e o resumo do criativo; só então desce sozinho até as perguntas (cenas, quantidade de vídeos...).
   useEffect(() => {
     if (!questHold || !readDone || questDone) return;
@@ -1381,6 +1384,8 @@ export function CloneWizard() {
     const sceneTotal = p.variations.length * p.sceneCount;
     const received = Object.keys(clips).length;
     const hasReference = p.reference.trim().length >= 20;
+    const stepped = questHold && !questDone;
+    const showPanel = (n: number) => !stepped || entryPanel === n;
     const productFields = (
               <div className="space-y-3">
                 <p className="text-xs text-muted-foreground">Se quiser que o produto apareça nos vídeos, conte um pouco ou envie fotos. A mensagem do vídeo de referência não muda.</p>
@@ -1411,9 +1416,9 @@ export function CloneWizard() {
                 </Group>
                 {productPhotos.length > 0 && lookState !== "reading" && (
                   <div data-testid="product-next" className="flex flex-wrap items-center gap-3 rounded-[14px] border border-[#7B3FE4]/50 bg-[#7B3FE4]/10 p-3">
-                    <span className="min-w-0 flex-1 text-sm"><b>Foto pronta.</b> {chatRef.current ? "Agora responda as perguntas para eu preparar tudo." : "Agora escolha o vídeo ou a imagem que quer clonar."}</span>
+                    <span className="min-w-0 flex-1 text-sm"><b>Foto pronta.</b> {stepped ? "Agora responda as perguntas para eu preparar tudo." : chatRef.current ? "Agora responda as perguntas para eu preparar tudo." : "Agora escolha o vídeo ou a imagem que quer clonar."}</span>
                     <Button type="button" size="sm" className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white"
-                      onClick={() => { const target = chatRef.current ?? topRef.current; target?.scrollIntoView?.({ behavior: "smooth", block: "start" }); }}>
+                      onClick={() => { if (stepped) { goPanel(2); return; } const target = chatRef.current ?? topRef.current; target?.scrollIntoView?.({ behavior: "smooth", block: "start" }); }}>
                       Avançar <ArrowUp className="size-4 rotate-90" />
                     </Button>
                   </div>
@@ -1538,8 +1543,8 @@ export function CloneWizard() {
           </div>
         )}
 
-        {!ready && (refFile || p.reference.trim()) && <ReferenceSummary file={refFile} transcript={p.reference} reading={busy === "upload"} noSpeech={speech === "nospeech"} photos={productPhotos} />}
-        {!ready && refFile && p.avatarMode !== "own" && <PresenterChoice detected={refGender.gender} reading={refGender.reading} value={p.presenter ?? ""} onChange={(value) => patch({ presenter: value })} />}
+        {!ready && showPanel(0) && (refFile || p.reference.trim()) && <ReferenceSummary file={refFile} transcript={p.reference} reading={busy === "upload"} noSpeech={speech === "nospeech"} photos={productPhotos} />}
+        {!ready && showPanel(0) && refFile && p.avatarMode !== "own" && <PresenterChoice detected={refGender.gender} reading={refGender.reading} value={p.presenter ?? ""} onChange={(value) => patch({ presenter: value })} />}
 
         {!ready && !working && askProduct && (
           <section aria-label="Produto" className="space-y-4 rounded-[18px] border border-[#A98BFF]/40 bg-card p-5">
@@ -1626,6 +1631,7 @@ export function CloneWizard() {
                   );
                 })()}
                 <div ref={topRef} className="gt-pop scroll-mt-4 space-y-3">
+                  {!questHold && (
                   <div className="cg-orbit relative w-full" style={{ "--cg-r": "22px" } as React.CSSProperties}>
                     <button type="button" onClick={() => fileRef.current?.click()}
                       className="relative flex w-full items-center gap-4 rounded-[22px] border border-transparent bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-6 py-6 text-left text-white shadow-[0_14px_36px_-14px_#7B3FE4] transition-transform hover:-translate-y-0.5">
@@ -1636,18 +1642,25 @@ export function CloneWizard() {
                       </span>
                     </button>
                   </div>
+                  )}
                   {!questHold && !hasReference && !refFile && <LinkVideo onFile={chooseVideo} onPhotos={(files, title) => choosePhotos(files, title)} photoLabel="Criar o vídeo com essas fotos" />}
                   {questHold && <p role="status" className="flex flex-wrap items-center gap-3 rounded-[14px] border border-[#5BD69A]/40 bg-[#5BD69A]/10 p-3 text-sm">{questPhoto && productPhotos.slice(0, 3).map((photo, index) => (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img key={photo.url} src={photo.url} alt={`Foto escolhida ${index + 1}`} className="size-12 rounded-[10px] object-cover" />
-                  ))}<span>✓ {questPhoto ? "Foto escolhida" : "Vídeo escolhido"}{questName ? `: ${questName}` : ""}. {readDone ? "Já li. Responda as perguntas e eu sigo." : "Lendo a fala enquanto você responde…"}</span></p>}
-                  {questHold && readDone && !questDone && (
+                  ))}<span>✓ {questPhoto ? "Foto escolhida" : "Vídeo escolhido"}{questName ? `: ${questName}` : ""}. {readDone ? "Já li. Responda as perguntas e eu sigo." : "Lendo a fala enquanto você responde…"}</span><button type="button" onClick={() => fileRef.current?.click()} className="ml-auto rounded-full border border-border px-3 py-1 text-xs hover:text-foreground">Trocar</button></p>}
+                  {stepped && (
+                    <p data-testid="step-header" aria-live="polite" className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#A98BFF]">
+                      Passo {entryPanel + 1} de 3 · {["Conferir o vídeo", "Escolher o modo e as quantidades", "Responder as perguntas"][entryPanel]}
+                      <span aria-hidden className="ml-auto flex gap-1">{[0, 1, 2].map((i) => <span key={i} className={cn("h-1 w-6 rounded-full", i <= entryPanel ? "bg-[#7B3FE4]" : "bg-white/15")} />)}</span>
+                    </p>
+                  )}
+                  {stepped && showPanel(0) && (
                     <div data-testid="next-step" className="flex flex-wrap items-center gap-3 rounded-[14px] border border-[#7B3FE4]/50 bg-[#7B3FE4]/10 p-3 text-sm">
-                      <span className="min-w-0 flex-1"><b>Próximo passo:</b> o prompt e o resumo do criativo já estão prontos. Agora escolha a quantidade de vídeos, as cenas e o resto nas perguntas logo abaixo.</span>
-                      <button type="button" onClick={() => chatRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" })} className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-4 py-2 text-xs font-medium text-white">Ir para as perguntas ↓</button>
+                      <span className="min-w-0 flex-1">{readDone ? <><b>Confira o resumo e quem apresenta</b> (logo acima). Estando certo, é só continuar.</> : "Estou lendo o vídeo. Quando terminar, você pode continuar."}</span>
+                      <button type="button" onClick={() => goPanel(1)} className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-4 py-2 text-xs font-medium text-white">Continuar →</button>
                     </div>
                   )}
-                  {(questHold || hasReference || !!refFile) && (
+                  {showPanel(1) && (questHold || hasReference || !!refFile) && (
                     <ManualOptions mode={entryMode} onMode={(m) => { setEntryMode(m); if (m === "manual") patch({ variationMode: p.variationMode ?? "roulette" }); else patch({ variationMode: undefined }); }}
                       values={{ copyMode: p.copyMode, variationMode: p.variationMode ?? "roulette", keepPerson: p.avatarMode === "own", presenter: p.presenter ?? "", count: p.count, scenes: p.sceneCount, language: p.language, keyword: p.keyword }}
                       languages={LANGUAGES.map((l) => ({ value: l.value, text: l.text }))} onForget={clearMemory}
@@ -1664,8 +1677,15 @@ export function CloneWizard() {
                         });
                       }} />
                   )}
-                  {(questHold || hasReference || !!refFile) && <RunPlanCard videos={p.count} scenes={p.sceneCount} takes={p.takes ?? 1} lastRun={lastRun} />}
-                  {(questHold || hasReference || !!refFile) ? (
+                  {showPanel(1) && (questHold || hasReference || !!refFile) && <RunPlanCard videos={p.count} scenes={p.sceneCount} takes={p.takes ?? 1} lastRun={lastRun} />}
+                  {stepped && entryPanel === 1 && (
+                    <div data-testid="panel-nav" className="flex flex-wrap items-center justify-between gap-2">
+                      <button type="button" onClick={() => goPanel(0)} className="rounded-full border border-border px-4 py-2 text-xs hover:text-foreground">← Voltar</button>
+                      <button type="button" onClick={() => goPanel(2)} className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-5 py-2 text-sm font-medium text-white">Continuar para as perguntas →</button>
+                    </div>
+                  )}
+                  {showPanel(2) && stepped && <button type="button" onClick={() => goPanel(1)} className="text-xs text-muted-foreground underline">← Voltar</button>}
+                  {!showPanel(2) ? null : (questHold || hasReference || !!refFile) ? (
                   <div ref={chatRef} className="scroll-mt-4">
                   <QuestChat
                     values={{ cta: p.cta, product: p.product, count: p.count, sceneCount: p.sceneCount, takes: p.takes ?? 1, takeKind: p.takeKind ?? "same", language: p.language, copySource: p.copySource ?? "video", ownCopy: p.ownCopy ?? "", keyword: p.keyword, flowModel: flowModelId }}
@@ -1690,7 +1710,7 @@ export function CloneWizard() {
                 </div>
               </div>
             )}
-            <div className="space-y-3 rounded-[22px] border border-dashed border-[#7B3FE4]/40 bg-[#7B3FE4]/[0.05] p-4" data-testid="quest-extras">
+            {showPanel(1) && <div className="space-y-3 rounded-[22px] border border-dashed border-[#7B3FE4]/40 bg-[#7B3FE4]/[0.05] p-4" data-testid="quest-extras">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#A98BFF]">Complementos · opcional</p>
                 <p className="mt-1 text-sm text-muted-foreground">Não precisa para clonar. Abra só se quiser deixar o vídeo mais com a sua cara.</p>
@@ -1707,7 +1727,7 @@ export function CloneWizard() {
                   <div className="mt-4 border-t border-white/10 pt-4">{productFields}</div>
                 </details>
               </div>
-            </div>
+            </div>}
           </section>
         )}
 
