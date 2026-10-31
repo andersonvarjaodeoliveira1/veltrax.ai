@@ -30,25 +30,6 @@
     window.postMessage({ source: "clipgringa-flow", type: "package-ack", ok }, window.location.origin);
   });
 
-  // Fotos/vídeos que a pessoa guardou pelo botão da própria página da Shopee: a página do ClipGringa pega e confirma.
-  const INBOX = "clipgringa-shopee-inbox-v1";
-  const deliverInbox = async () => {
-    try {
-      const item = (await chrome.storage.local.get(INBOX))[INBOX];
-      if (item && Date.now() - Number(item.at || 0) < 6 * 3600_000) window.postMessage({ source: "clipgringa-flow", type: "shopee-inbox", data: item }, window.location.origin);
-    } catch (_e) { /* extensão recarregada */ }
-  };
-  on((event) => {
-    if (event.source !== window || !event.data || event.data.source !== "clipgringa-page") return;
-    if (event.data.type === "shopee-inbox?") void deliverInbox();
-    if (event.data.type === "shopee-inbox-ack") { try { chrome.storage.local.remove(INBOX); } catch (_e) { /* ignora */ } }
-  });
-  try {
-    const onStore = (changes, area) => { if (area === "local" && changes[INBOX] && changes[INBOX].newValue) void deliverInbox(); };
-    chrome.storage.onChanged.addListener(onStore);
-    offs.push(() => { try { chrome.storage.onChanged.removeListener(onStore); } catch (_e) { /* ignora */ } });
-  } catch (_e) { /* sem acesso */ }
-
   // O site pede para ler um anúncio da Shopee no navegador da pessoa (a Shopee bloqueia o servidor, não o navegador).
   on((event) => {
     if (event.source !== window || !event.data || event.data.source !== "clipgringa-page" || event.data.type !== "shopee-read") return;

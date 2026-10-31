@@ -45,9 +45,12 @@ describe("LinkVideo · Shopee pela extensão", () => {
     await userEvent.type(screen.getByLabelText("Link do vídeo para clonar"), "https://shopee.com.br/Bola-i.1.2");
     await userEvent.click(screen.getByRole("button", { name: "Usar o link" }));
     expect(await screen.findByTestId("shopee-videos")).toHaveTextContent("Bola PIC");
+    const download = screen.getByRole("link", { name: "Baixar vídeo 2" });
+    expect(download).toHaveAttribute("download", "video-2.mp4");
+    expect(download).toHaveAttribute("href", "https://down-bs.vod.susercontent.com/api/v4/1/mms/b.mp4");
     await userEvent.click(screen.getByRole("button", { name: "Usar o vídeo 2" }));
     await vi.waitFor(() => expect(onFile).toHaveBeenCalled());
-    expect(calls.map((c) => JSON.parse(c)).find((c) => c.cdn_url)).toEqual({ cdn_url: "https://down-bs.vod.susercontent.com/api/v4/1/mms/b.mp4" });
+    expect(JSON.parse(calls[0])).toEqual({ cdn_url: "https://down-bs.vod.susercontent.com/api/v4/1/mms/b.mp4" });
   });
 
   it("sem extensão explica o motivo real em vez de tentar baixar pelo servidor", async () => {
@@ -61,29 +64,32 @@ describe("LinkVideo · Shopee pela extensão", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("sem vídeo do vendedor mostra as fotos, sem erro, e deixa usar no produto", async () => {
+  it("sem vídeo do vendedor mostra as fotos para baixar e não usa nenhuma sozinho", async () => {
     bridge.read.mockResolvedValue({ ok: true, title: "Bola", images: ["https://down-br.img.susercontent.com/file/a", "https://down-br.img.susercontent.com/file/b"], videos: [] });
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(new Blob(["img"], { type: "image/jpeg" }), { status: 200 })));
+    const fetchSpy = vi.fn(async () => new Response(new Blob(["img"], { type: "image/jpeg" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchSpy);
     const onPhotos = vi.fn();
     render(<LinkVideo onFile={() => {}} onPhotos={onPhotos} />);
     await userEvent.type(screen.getByLabelText("Link do vídeo para clonar"), "https://shopee.com.br/Bola-i.1.2");
     await userEvent.click(screen.getByRole("button", { name: "Usar o link" }));
     expect(await screen.findByTestId("shopee-photos")).toHaveTextContent("não tem vídeo do vendedor, mas tem 2 fotos");
     expect(screen.queryByRole("alert")).toBeNull();
-    // sem clicar em nada: as fotos já vão para o produto
-    await vi.waitFor(() => expect(onPhotos).toHaveBeenCalled());
-    expect(onPhotos.mock.calls[0][0]).toHaveLength(2);
+    // cada foto tem o botão de baixar para o computador; nada é usado nem guardado automaticamente
+    const download = screen.getByRole("link", { name: "Baixar foto 1" });
+    expect(download).toHaveAttribute("download", "produto-1.jpg");
+    expect(download).toHaveAttribute("href", "https://down-br.img.susercontent.com/file/a");
+    expect(screen.getByTestId("shopee-photos")).toHaveTextContent("suba o arquivo");
+    expect(onPhotos).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it("colar o link já começa a ler, sem apertar o botão", async () => {
     bridge.read.mockResolvedValue({ ok: true, title: "Bola", images: ["https://down-br.img.susercontent.com/file/a"], videos: [] });
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(new Blob(["img"], { type: "image/jpeg" }), { status: 200 })));
-    const onPhotos = vi.fn();
-    render(<LinkVideo onFile={() => {}} onPhotos={onPhotos} />);
+    render(<LinkVideo onFile={() => {}} />);
     await userEvent.click(screen.getByLabelText("Link do vídeo para clonar"));
     await userEvent.paste("https://shopee.com.br/Bola-i.1.2");
-    await vi.waitFor(() => expect(onPhotos).toHaveBeenCalled());
-    expect(bridge.read).toHaveBeenCalled();
+    await vi.waitFor(() => expect(bridge.read).toHaveBeenCalled());
+    expect(await screen.findByTestId("shopee-photos")).toBeInTheDocument();
   });
 
   it("mostra a animação de carregamento enquanto lê o link", async () => {
@@ -100,42 +106,5 @@ describe("LinkVideo · Shopee pela extensão", () => {
     await userEvent.type(screen.getByLabelText("Link do vídeo para clonar"), "https://shopee.com.br/Bola-i.1.2");
     await userEvent.click(screen.getByRole("button", { name: "Usar o link" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("não achei vídeo nem fotos");
-  });
-});
-
-describe("LinkVideo · Banco de imagens", () => {
-  it("guarda as fotos do anúncio no banco e o botão de baixar guarda no ClipGringa, sem baixar no Windows", async () => {
-    const saved: string[] = [];
-    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
-      if (String(url).includes("save-from-urls")) { saved.push(String(init?.body)); return new Response(JSON.stringify({ saved: [{ id: "1", file: "a.jpg", kind: "image" }] }), { status: 200 }); }
-      return new Response(new Blob(["img"], { type: "image/jpeg" }), { status: 200 });
-    }));
-    bridge.read.mockResolvedValue({ ok: true, title: "Fritadeira", videos: [], images: ["https://down-br.img.susercontent.com/a.jpg", "https://down-br.img.susercontent.com/b.jpg"] });
-    const user = userEvent.setup();
-    render(<LinkVideo onFile={vi.fn()} onPhotos={vi.fn()} />);
-    await user.type(screen.getByLabelText(/Link do vídeo/i), "https://shopee.com.br/Fritadeira-i.1.2");
-    await user.click(screen.getByRole("button", { name: /Usar o link/i }));
-    expect(await screen.findByText(/Salvei 1 arquivo/i)).toBeTruthy();
-    expect(JSON.parse(saved[0]).urls).toHaveLength(2);
-    expect(screen.queryByRole("link", { name: /Baixar foto/i })).toBeNull();
-    await user.click(await screen.findByRole("button", { name: /Guardar foto 2 no ClipGringa/i }));
-    expect(await screen.findByText(/Foto 2 guardada no seu Banco de imagens/i)).toBeTruthy();
-  });
-});
-
-describe("LinkVideo · fotos guardadas pelo botão da extensão na Shopee", () => {
-  it("mostra as fotos recebidas, guarda no Banco e confirma o recebimento", async () => {
-    const calls: { url: string; body: string }[] = [];
-    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => { calls.push({ url, body: String(init?.body) }); return new Response(JSON.stringify({ saved: [{ kind: "image" }, { kind: "image" }] }), { status: 200 }); }));
-    const posted: { type?: string }[] = [];
-    const spy = vi.spyOn(window, "postMessage").mockImplementation(((data: { type?: string }) => { posted.push(data); }) as never);
-    render(<LinkVideo onFile={vi.fn()} />);
-    expect(posted.some((m) => m.type === "shopee-inbox?")).toBe(true);
-    const images = ["https://down-br.img.susercontent.com/file/aaaaaaaaaaaaaaaaaaaaaaaa", "https://down-br.img.susercontent.com/file/bbbbbbbbbbbbbbbbbbbbbbbb"];
-    window.dispatchEvent(new MessageEvent("message", { source: window, data: { source: "clipgringa-flow", type: "shopee-inbox", data: { at: 1, title: "Air Fryer", images, videos: [] } } }));
-    expect(await screen.findByTestId("shopee-photos")).toHaveTextContent("Air Fryer");
-    await vi.waitFor(() => expect(calls.some((c) => c.url.includes("save-from-urls"))).toBe(true));
-    expect(posted.some((m) => m.type === "shopee-inbox-ack")).toBe(true);
-    spy.mockRestore();
   });
 });

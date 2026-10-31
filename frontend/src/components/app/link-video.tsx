@@ -25,45 +25,14 @@ function LinkLoading({ shopee }: { shopee: boolean }) {
 }
 
 /** Cola o link de um vídeo (TikTok, Instagram, YouTube...): o servidor baixa e o vídeo segue como se tivesse sido enviado. */
-export function LinkVideo({ onFile, onPhotos, photoLabel, disabled }: { onFile: (file: File) => void; onPhotos?: (files: File[], title: string) => void; photoLabel?: string; disabled?: boolean }) {
+export function LinkVideo({ onFile, disabled }: { onFile: (file: File) => void; onPhotos?: (files: File[], title: string) => void; photoLabel?: string; disabled?: boolean }) {
   const [link, setLink] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [videos, setVideos] = useState<{ url: string; poster: string }[]>([]);
   const [title, setTitle] = useState("");
   const [photos, setPhotos] = useState<string[]>([]);
-  const [photoNote, setPhotoNote] = useState("");
-  const [sel, setSel] = useState<string[]>([]);
-  const [applied, setApplied] = useState("");
-  const [bankNote, setBankNote] = useState("");
-  const [fromBank, setFromBank] = useState(false);
   const isShopee = !!normalizeShopeeUrl(link);
-
-  // Fotos/vídeos que a pessoa guardou pelo botão "Guardar no ClipGringa" da página da Shopee (extensão): aparecem aqui e vão para o Banco de imagens.
-  useEffect(() => {
-    let last = 0;
-    const onMsg = (event: MessageEvent) => {
-      if (event.source !== window || event.data?.source !== "clipgringa-flow" || event.data?.type !== "shopee-inbox") return;
-      const data = event.data.data ?? {};
-      const at = Number(data.at || 0);
-      if (at && at === last) return;
-      last = at;
-      const images: string[] = Array.isArray(data.images) ? data.images.filter((u: unknown) => typeof u === "string" && u.startsWith("https://")).slice(0, 9) : [];
-      const vids: { url: string; poster: string }[] = Array.isArray(data.videos) ? data.videos.filter((v: { url?: unknown }) => typeof v?.url === "string").slice(0, 6) : [];
-      if (!images.length && !vids.length) return;
-      const name = String(data.title ?? "");
-      setError(""); setFromBank(false); setApplied("");
-      setTitle(name); setVideos(vids); setPhotos(images); setSel(images.slice(0, 3));
-      setPhotoNote("Recebi as fotos que você guardou na Shopee. Já ficam no seu Banco de imagens.");
-      void saveToBank(images, vids, name);
-      window.postMessage({ source: "clipgringa-page", type: "shopee-inbox-ack" }, window.location.origin);
-      if (!vids.length && images.length && onPhotos) void applyPhotos(images.slice(0, 3));
-    };
-    window.addEventListener("message", onMsg);
-    window.postMessage({ source: "clipgringa-page", type: "shopee-inbox?" }, window.location.origin);
-    return () => window.removeEventListener("message", onMsg);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   async function toFile(response: Response) {
     const blob = await response.blob();
@@ -81,62 +50,8 @@ export function LinkVideo({ onFile, onPhotos, photoLabel, disabled }: { onFile: 
     } catch { setError("Não consegui baixar esse vídeo agora. Tente de novo."); } finally { setBusy(false); }
   }
 
-  // Guarda as fotos e vídeos do anúncio no Banco de imagens da conta (sem passar pela pasta do Windows). Nunca atrapalha o resto.
-  async function saveToBank(images: string[], vids: { url: string }[], name: string) {
-    try {
-      const urls = [...images.slice(0, 9), ...vids.slice(0, 2).map((v) => v.url)];
-      if (!urls.length) return;
-      const response = await fetch("/api/multiplier/flow-videos/save-from-urls", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ package: `Shopee · ${name || "anúncio"}`.slice(0, 120), urls }) });
-      if (!response.ok) return;
-      const data = (await response.json()) as { saved?: { kind: string }[] };
-      const n = data.saved?.length ?? 0;
-      if (n) setBankNote(`Salvei ${n} ${n === 1 ? "arquivo" : "arquivos"} do anúncio no seu Banco de imagens (Automação → Banco de imagens). Não precisa baixar nada.`);
-    } catch { /* o banco é um extra: a leitura do anúncio já funcionou */ }
-  }
-
-  // Botão de baixar de cada foto: em vez de ir para a pasta do Windows, a foto vai para o Banco de imagens do ClipGringa e já fica marcada.
-  async function keepPhoto(src: string, index: number) {
-    setPhotoNote("");
-    await saveToBank([src], [], title);
-    setSel((current) => (current.includes(src) ? current : current.length >= 3 ? [...current.slice(1), src] : [...current, src]));
-    setPhotoNote(`Foto ${index + 1} guardada no seu Banco de imagens e marcada para usar (até 3 por vez).`);
-  }
-
-  // Mostra as imagens que a pessoa já tem no Banco de imagens para usar como fotos do produto.
-  async function loadBank() {
-    setBusy(true); setError(""); setBankNote("");
-    try {
-      const response = await fetch("/api/multiplier/flow-videos", { cache: "no-store" });
-      const data = (await response.json()) as { videos?: { id: string; kind: string }[] };
-      const urls = (data.videos ?? []).filter((item) => item.kind === "image").slice(0, 24).map((item) => `/api/multiplier/flow-videos/${item.id}/file`);
-      if (!urls.length) { setError("Seu Banco de imagens ainda está vazio. Cole o link de um anúncio da Shopee para guardar as fotos dele aqui."); return; }
-      setVideos([]); setFromBank(true); setTitle(""); setPhotos(urls); setSel(urls.slice(0, 3)); setApplied("");
-    } catch { setError("Não consegui abrir o Banco de imagens agora. Tente de novo."); } finally { setBusy(false); }
-  }
-
-  async function applyPhotos(list: string[] = sel) {
-    if (!onPhotos || !list.length) return;
-    setBusy(true); setError("");
-    try {
-      const files = await Promise.all(list.slice(0, 3).map(async (src, index) => {
-        const response = await fetch(src, { referrerPolicy: "no-referrer" });
-        const blob = await response.blob();
-        return new File([blob], `produto-${index + 1}.jpg`, { type: blob.type || "image/jpeg" });
-      }));
-      onPhotos(files, title);
-      setApplied(list.join("|"));
-      setPhotoNote("Fotos adicionadas ao produto. Agora escolha um vídeo para clonar (suba o arquivo ou cole outro link).");
-    } catch { setError("Não consegui carregar essas fotos. Baixe e anexe no bloco do produto."); } finally { setBusy(false); }
-  }
-
-  function toggle(src: string) {
-    setPhotoNote("");
-    setSel((current) => current.includes(src) ? current.filter((item) => item !== src) : current.length >= 3 ? [...current.slice(1), src] : [...current, src]);
-  }
-
   async function load(raw = link) {
-    setBusy(true); setError(""); setVideos([]); setPhotos([]); setPhotoNote(""); setSel([]); setApplied("");
-    setBankNote(""); setFromBank(false);
+    setBusy(true); setError(""); setVideos([]); setPhotos([]);
     const shopee = normalizeShopeeUrl(raw);
     if (shopee) {
       // A Shopee bloqueia o servidor, mas não o navegador da pessoa: a extensão abre o anúncio e lê os vídeos.
@@ -144,13 +59,10 @@ export function LinkVideo({ onFile, onPhotos, photoLabel, disabled }: { onFile: 
       if (read.ok) {
         setBusy(false);
         setTitle(read.title);
-        void saveToBank(read.images, read.videos, read.title);
         if (read.videos.length) setVideos(read.videos);
         if (read.images.length) {
-          const all = read.images.slice(0, 9);
-          setPhotos(all); setSel(all.slice(0, 3));
-          // Sem vídeo do vendedor: já usa as 3 primeiras fotos (a pessoa pode trocar abaixo).
-          if (!read.videos.length && onPhotos) void applyPhotos(all.slice(0, 3));
+          // As fotos só aparecem para a pessoa escolher, baixar e subir. Nada é usado sozinho: a IA precisa da foto certa do produto.
+          setPhotos(read.images.slice(0, 9));
         }
         if (!read.videos.length && !read.images.length) setError("Abri o anúncio, mas não achei vídeo nem fotos do vendedor. Confira se o link é de um produto e tente de novo.");
         return;
@@ -158,7 +70,7 @@ export function LinkVideo({ onFile, onPhotos, photoLabel, disabled }: { onFile: 
       // A Shopee bloqueia o servidor, então cair no download pelo servidor só esconde o motivo real. Diz o que houve de verdade.
       setBusy(false);
       if (read.error === "login") setError("A Shopee pediu login ou uma verificação no seu navegador. Entre na Shopee (shopee.com.br) nesse mesmo Chrome e tente de novo.");
-      else if (read.error === "no-extension") setError("Não encontrei a extensão ClipGringa · Flow neste Chrome. Aperte Ctrl+F5 nesta página; se continuar, confira em chrome://extensions se ela está ligada (versão 1.21.0) e recarregue-a.");
+      else if (read.error === "no-extension") setError("Não encontrei a extensão ClipGringa · Flow neste Chrome. Aperte Ctrl+F5 nesta página; se continuar, confira em chrome://extensions se ela está ligada (versão 1.21.1) e recarregue-a.");
       else if (read.error === "notfound") setError("Esse anúncio da Shopee não existe mais ou saiu do ar. Confira o link e tente com outro produto.");
       else if (read.error === "empty") setError("Abri o anúncio, mas não achei vídeo nem fotos do vendedor. Confira se o link é de um produto e tente de novo.");
       else if (read.error === "timeout") setError("A Shopee demorou demais para abrir o anúncio (mais de 1 minuto). Abra o produto na Shopee neste mesmo Chrome, espere carregar e cole o link de novo: eu leio a aba que você já abriu.");
@@ -193,47 +105,28 @@ export function LinkVideo({ onFile, onPhotos, photoLabel, disabled }: { onFile: 
         </button>
       </form>
       </div>
-      {onPhotos && photos.length === 0 && !busy && (
-        <button type="button" onClick={() => void loadBank()} disabled={disabled} className="text-xs font-medium text-[#A98BFF] underline-offset-4 hover:underline disabled:opacity-50">Ou escolha fotos do meu Banco de imagens</button>
-      )}
-      {bankNote && <p role="status" className="text-xs font-medium text-[#5BD69A]">{bankNote}</p>}
       {busy && videos.length === 0 && <LinkLoading shopee={isShopee} />}
       {photos.length > 0 && (
         <div data-testid="shopee-photos" className="space-y-2 rounded-[18px] border border-border bg-background/40 p-3">
           <p className="text-xs text-muted-foreground">
-            {fromBank ? <>Imagens do seu <strong className="text-foreground">Banco de imagens</strong>. Escolha as que vão para o produto.</> : <>
             {videos.length ? "Fotos do anúncio" : <>Este anúncio não tem vídeo do vendedor, mas tem <strong className="text-foreground">{photos.length} {photos.length === 1 ? "foto" : "fotos"}</strong></>}
-            {title ? <> de <strong className="text-foreground">{title}</strong></> : null}. São da galeria do vendedor.</>}
+            {title ? <> de <strong className="text-foreground">{title}</strong></> : null}. São da galeria do vendedor.
           </p>
-          {onPhotos && <p className="text-xs text-muted-foreground">Toque nas fotos para escolher quais usar (até 3). As {sel.length} marcadas já vão para o seu produto.</p>}
+          <p className="text-xs text-muted-foreground">Baixe <strong className="text-foreground">só a foto do produto</strong> que você quer usar (toque no botão de baixar) e depois suba o arquivo em <strong className="text-foreground">Escolher o vídeo ou imagem</strong>. Assim a IA identifica exatamente o produto.</p>
           <ul className="grid grid-cols-3 gap-2 sm:grid-cols-5">
-            {photos.map((src, index) => {
-              const on = sel.includes(src);
-              return (
-                <li key={src} className="relative">
-                  <button type="button" onClick={() => toggle(src)} disabled={!onPhotos || busy} aria-pressed={on} aria-label={`Foto ${index + 1} do anúncio`} className={`block w-full overflow-hidden rounded-[12px] ring-2 ${on ? "ring-[#7B3FE4]" : "ring-transparent"}`}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={src} alt={`Foto ${index + 1} do anúncio`} referrerPolicy="no-referrer" className={`aspect-square w-full object-cover ${on ? "" : "opacity-60"}`} />
-                  </button>
-                  {on && <span aria-hidden className="absolute left-1 top-1 grid size-5 place-items-center rounded-full bg-[#7B3FE4] text-[10px] font-semibold text-white">{sel.indexOf(src) + 1}</span>}
-                  {!fromBank && (
-                    <button type="button" onClick={() => void keepPhoto(src, index)} disabled={busy} aria-label={`Guardar foto ${index + 1} no ClipGringa`} title="Guardar no ClipGringa (não baixa no Windows)" className="absolute bottom-1 right-1 grid size-7 place-items-center rounded-full bg-black/60 text-white disabled:opacity-50"><Download className="size-3.5" /></button>
-                  )}
-                </li>
-              );
-            })}
+            {photos.map((src, index) => (
+              <li key={src} className="relative overflow-hidden rounded-[12px]">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={src} alt={`Foto ${index + 1} do anúncio`} referrerPolicy="no-referrer" className="aspect-square w-full object-cover" />
+                <a href={src} download={`produto-${index + 1}.jpg`} target="_blank" rel="noreferrer" aria-label={`Baixar foto ${index + 1}`} className="absolute bottom-1 right-1 grid size-7 place-items-center rounded-full bg-black/60 text-white"><Download className="size-3.5" /></a>
+              </li>
+            ))}
           </ul>
-          {onPhotos && sel.length > 0 && sel.join("|") !== applied && (
-            <button type="button" disabled={busy || disabled} onClick={() => void applyPhotos()} className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-4 py-2 text-xs font-medium text-white disabled:opacity-50">
-              {photoLabel ?? "Usar essas fotos no meu produto"}
-            </button>
-          )}
-          {photoNote && <p role="status" className="text-xs font-medium text-[#5BD69A]">{photoNote}</p>}
         </div>
       )}
       {videos.length > 0 && (
         <div data-testid="shopee-videos" className="space-y-2 rounded-[18px] border border-border bg-background/40 p-3">
-          <p className="text-xs text-muted-foreground">{title ? <>Vídeos do anúncio <strong className="text-foreground">{title}</strong>. </> : "Vídeos do anúncio. "}Escolha qual clonar (só vídeos do vendedor, não de avaliações).</p>
+          <p className="text-xs text-muted-foreground">{title ? <>Vídeos do anúncio <strong className="text-foreground">{title}</strong>. </> : "Vídeos do anúncio. "}Escolha qual clonar ou baixe para o seu computador e suba o arquivo (só vídeos do vendedor, não de avaliações).</p>
           <ul className="grid gap-3 sm:grid-cols-3">
             {videos.map((video, index) => (
               <li key={video.url} className="space-y-1.5">
@@ -241,6 +134,7 @@ export function LinkVideo({ onFile, onPhotos, photoLabel, disabled }: { onFile: 
                 <button type="button" disabled={busy || disabled} onClick={() => void pickShopeeVideo(video.url)} className="w-full rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-3 py-2 text-xs font-medium text-white disabled:opacity-50">
                   {busy ? "Baixando…" : `Usar o vídeo ${index + 1}`}
                 </button>
+                <a href={video.url} download={`video-${index + 1}.mp4`} target="_blank" rel="noreferrer" aria-label={`Baixar vídeo ${index + 1}`} className="flex w-full items-center justify-center gap-1.5 rounded-full border border-border px-3 py-2 text-xs font-medium text-foreground"><Download className="size-3.5" />Baixar o vídeo {index + 1}</a>
               </li>
             ))}
           </ul>

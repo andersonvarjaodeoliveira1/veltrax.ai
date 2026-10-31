@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ClipGringa · Flow",
-  "version": "1.21.0",
+  "version": "1.21.1",
   "description": "Gera sozinho as imagens e os vídeos do seu pacote do ClipGringa no Google Flow e, se você quiser, os textos pela sua conta do Gemini, ChatGPT ou Claude.",
   "permissions": [
     "storage",
@@ -53,17 +53,6 @@
       ],
       "js": [
         "site.js"
-      ],
-      "run_at": "document_idle"
-    },
-    {
-      "matches": [
-        "https://shopee.com.br/*",
-        "https://*.shopee.com.br/*"
-      ],
-      "js": [
-        "shopee.js",
-        "shopee-page.js"
       ],
       "run_at": "document_idle"
     },

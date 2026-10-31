@@ -63,14 +63,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       .catch((e) => sendResponse({ ok: false, error: String((e && e.message) || e) }));
     return true;
   }
-  if (message && message.type === "clipgringa-shopee-save") {
-    const images = Array.isArray(message.images) ? message.images.filter((u) => typeof u === "string" && /^https:\/\//.test(u)).slice(0, 9) : [];
-    const videos = Array.isArray(message.videos) ? message.videos.filter((v) => v && typeof v.url === "string" && /^https:\/\//.test(v.url)).slice(0, 6).map((v) => ({ url: v.url, poster: typeof v.poster === "string" ? v.poster : "" })) : [];
-    chrome.storage.local.set({ "clipgringa-shopee-inbox-v1": { at: Date.now(), title: String(message.title || "").slice(0, 120), images, videos } })
-      .then(() => sendResponse({ ok: images.length + videos.length > 0 }))
-      .catch(() => sendResponse({ ok: false }));
-    return true;
-  }
   if (message && message.type === "clipgringa-shopee") {
     readShopee(String(message.url || ""))
       .then((r) => sendResponse(r))
