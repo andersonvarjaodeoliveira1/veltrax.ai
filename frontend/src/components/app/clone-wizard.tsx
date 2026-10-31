@@ -1444,7 +1444,9 @@ export function CloneWizard() {
           <div className="cg-orbit relative" data-testid="change-box">
             <div className="relative rounded-[26px] bg-[#1a191d] p-5 ring-1 ring-white/10 shadow-[0_20px_60px_-30px_#000]">
               <label className="sr-only" htmlFor="change-text">Quer mudar alguma coisa?</label>
-              <p className="mb-2 px-1 text-sm font-medium text-[#C9BBFA]">Quer mudar alguma coisa? <span className="font-normal text-muted-foreground">· escreva e eu adapto os prompts</span></p>
+              {p.videos.length > 0 && p.ctaLocked
+                ? <p data-testid="another-variation" className="mb-2 px-1 text-sm font-medium text-[#C9BBFA]">Ficou pronto. Quer criar outra variação com outra cena? <span className="font-normal text-muted-foreground">· descreva aqui como ela deve ser e eu refaço</span></p>
+                : <p className="mb-2 px-1 text-sm font-medium text-[#C9BBFA]">Quer mudar alguma coisa? <span className="font-normal text-muted-foreground">· escreva e eu adapto os prompts</span></p>}
               <textarea id="change-text" value={changeText} onFocus={pauseForChange} onChange={(event) => setChangeText(event.target.value)} rows={3} maxLength={400}
                 placeholder={changeDemo ? `${changeDemo}▍` : "Ex.: troque o cenário para uma cozinha, a pessoa mais jovem, fale mais devagar"}
                 className="min-h-[84px] w-full resize-none bg-transparent px-1 py-1 text-lg outline-none placeholder:text-muted-foreground/70" />
@@ -1610,11 +1612,12 @@ export function CloneWizard() {
                   )}
                   {(questHold || hasReference || !!refFile) && (
                     <ManualOptions mode={entryMode} onMode={(m) => { setEntryMode(m); if (m === "manual") patch({ variationMode: p.variationMode ?? "roulette" }); else patch({ variationMode: undefined }); }}
-                      values={{ copyMode: p.copyMode, variationMode: p.variationMode ?? "roulette", keepPerson: p.avatarMode === "own", presenter: p.presenter ?? "", count: p.count, language: p.language }}
+                      values={{ copyMode: p.copyMode, variationMode: p.variationMode ?? "roulette", keepPerson: p.avatarMode === "own", presenter: p.presenter ?? "", count: p.count, scenes: p.sceneCount, language: p.language }}
                       languages={LANGUAGES.map((l) => ({ value: l.value, text: l.text }))}
                       onChange={(c) => {
                         if (c.language) { chooseLanguage(c.language); return; }
                         if (c.count) { patch({ count: c.count }); return; }
+                        if (c.scenes) { patch({ sceneCount: c.scenes }); return; }
                         patch({
                           ...(c.copyMode ? { copyMode: c.copyMode } : {}),
                           ...(c.variationMode ? { variationMode: c.variationMode } : {}),

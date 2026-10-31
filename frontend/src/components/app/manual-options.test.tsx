@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { ManualOptions, variationHint, type ManualValues } from "./manual-options";
 
-const values: ManualValues = { copyMode: "same", variationMode: "roulette", keepPerson: true, presenter: "", count: 3, language: "pt" };
+const values: ManualValues = { copyMode: "same", variationMode: "roulette", keepPerson: true, presenter: "", count: 3, scenes: 4, language: "pt" };
 const langs = [{ value: "pt", text: "Português" }, { value: "en", text: "Inglês" }];
 
 describe("ManualOptions", () => {
@@ -19,8 +19,9 @@ describe("ManualOptions", () => {
     fireEvent.click(screen.getByRole("button", { name: "Gesto" }));
     fireEvent.click(screen.getByRole("button", { name: "Trocar a pessoa" }));
     fireEvent.click(screen.getByRole("button", { name: "10" }));
+    fireEvent.click(screen.getByRole("button", { name: "2 cenas" }));
     fireEvent.change(screen.getByLabelText("Idioma"), { target: { value: "en" } });
-    expect(onChange.mock.calls.map((c) => c[0])).toEqual([{ variationMode: "gesture" }, { keepPerson: false }, { count: 10 }, { language: "en" }]);
+    expect(onChange.mock.calls.map((c) => c[0])).toEqual([{ variationMode: "gesture" }, { keepPerson: false }, { count: 10 }, { scenes: 2 }, { language: "en" }]);
   });
   it("builds a hint only when a mode is set", () => {
     expect(variationHint()).toBe("");

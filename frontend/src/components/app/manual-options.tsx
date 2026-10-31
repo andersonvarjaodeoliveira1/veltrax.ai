@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 export type VariationMode = "roulette" | "gesture" | "text" | "combined";
 export type EntryMode = "auto" | "manual";
-export type ManualValues = { copyMode: "same" | "mix"; variationMode: VariationMode; keepPerson: boolean; presenter: "" | "woman" | "man"; count: number; language: string };
+export type ManualValues = { copyMode: "same" | "mix"; variationMode: VariationMode; keepPerson: boolean; presenter: "" | "woman" | "man"; count: number; scenes: number; language: string };
 
 export const VARIATION_LABEL: Record<VariationMode, { name: string; hint: string; prompt: string }> = {
   roulette: { name: "Roleta", hint: "Cada vídeo muda de cenário e de objeto.", prompt: "Em cada vídeo, mude o cenário e o objeto em cena; a fala e a estrutura ficam iguais." },
@@ -55,6 +55,8 @@ export function ManualOptions({ mode, onMode, values, onChange, languages }: {
             </div></div>
           <div className="space-y-1.5"><p className="text-xs font-medium">Quantos vídeos</p>
             <div className="flex flex-wrap gap-2">{[1, 2, 3, 5, 10].map((n) => <Chip key={n} active={values.count === n} onClick={() => onChange({ count: n })}>{n}</Chip>)}</div></div>
+          <div className="space-y-1.5"><p className="text-xs font-medium">Quantas cenas por vídeo</p>
+            <div className="flex flex-wrap gap-2">{[1, 2, 3, 4, 5, 6].map((n) => <Chip key={n} active={values.scenes === n} onClick={() => onChange({ scenes: n })}>{`${n} ${n === 1 ? "cena" : "cenas"}`}</Chip>)}</div></div>
           <label className="block space-y-1.5"><span className="text-xs font-medium">Idioma</span>
             <select value={values.language} onChange={(event) => onChange({ language: event.target.value })} className="block w-full rounded-[12px] border border-border bg-background px-3 py-2 text-sm">
               {languages.map((l) => <option key={l.value} value={l.value}>{l.text}</option>)}
