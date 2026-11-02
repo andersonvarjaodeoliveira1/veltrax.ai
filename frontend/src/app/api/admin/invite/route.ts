@@ -15,16 +15,18 @@ export async function POST(request: Request) {
 
   const rawDays = Number(body.testDays);
   const testDays = Number.isInteger(rawDays) && rawDays >= 1 && rawDays <= 30 ? rawDays : undefined;
-  if (body.testDays !== undefined && body.testDays !== "" && body.testDays !== null && !testDays) return NextResponse.json({ error: "invalid_days" }, { status: 400 });
+  // 0 = tirar o prazo de teste (liberar a conta sem data para acabar).
+  const clearTest = body.testDays !== "" && body.testDays !== null && body.testDays !== undefined && rawDays === 0;
+  if (body.testDays !== undefined && body.testDays !== "" && body.testDays !== null && !testDays && !clearTest) return NextResponse.json({ error: "invalid_days" }, { status: 400 });
 
   let testUntil: string | null = null;
   const markTest = async (userId: string) => {
-    if (!testDays) return true;
+    if (!testDays && !clearTest) return true;
     const mark = await fetchBackend(`/admin/users/${encodeURIComponent(userId)}/test-access`, {
       method: "PUT",
       userId: check.userId,
       extraHeaders: { "Content-Type": "application/json" },
-      body: JSON.stringify({ days: testDays }),
+      body: JSON.stringify({ days: clearTest ? 0 : testDays }),
       cache: "no-store",
     });
     if (!mark.ok) return false;
@@ -32,7 +34,7 @@ export async function POST(request: Request) {
     return true;
   };
 
-  const result = await inviteMember(body.email, { testDays, beforeEmail: markTest, skipEmail: body.skipEmail === true && Boolean(testDays) });
+  const result = await inviteMember(body.email, { testDays, beforeEmail: markTest, skipEmail: body.skipEmail === true && (Boolean(testDays) || clearTest) });
   if (!result.ok && result.error === "invalid_email") return NextResponse.json({ error: "invalid_email" }, { status: 400 });
   if (!result.ok && result.error === "test_access_failed") return NextResponse.json({ error: "test_access_failed", created: result.created }, { status: 502 });
 

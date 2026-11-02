@@ -42,7 +42,7 @@ function InviteCard({ onDone }: { onDone: () => void }) {
       } else if (response.status === 403) {
         setResult({ ok: false, text: "Destrave o Admin (senha da conta) e tente de novo." });
       } else if (data.error === "invalid_days") {
-        setResult({ ok: false, text: "Os dias de teste devem ser de 1 a 30." });
+        setResult({ ok: false, text: "Os dias de teste devem ser de 1 a 30 (ou 0 para tirar o prazo)." });
       } else if (data.error === "test_access_failed") {
         setResult({ ok: false, text: `${data.created ? "O usuário foi criado, mas não consegui" : "Não consegui"} marcar a validade do teste, e o e-mail NÃO foi enviado. Tente de novo antes de avisar a pessoa.` });
         if (data.created) onDone();
@@ -77,7 +77,7 @@ function InviteCard({ onDone }: { onDone: () => void }) {
           <input type="number" min={0} step={10000} value={tokens} onChange={(e) => setTokens(e.target.value)} placeholder="ex.: 500000" className="h-10 rounded-full border bg-background px-4 text-sm text-foreground" />
         </label>
         <label className="flex w-40 flex-col gap-1 text-xs text-muted-foreground">Conta de teste (dias)
-          <input type="number" min={1} max={30} value={testDays} onChange={(e) => setTestDays(e.target.value)} placeholder="ex.: 7" className="h-10 rounded-full border bg-background px-4 text-sm text-foreground" />
+          <input type="number" min={0} max={30} value={testDays} onChange={(e) => setTestDays(e.target.value)} placeholder="ex.: 7 (0 = sem prazo)" className="h-10 rounded-full border bg-background px-4 text-sm text-foreground" />
         </label>
         <label className="flex h-10 items-center gap-2 text-xs text-muted-foreground">
           <input type="checkbox" checked={onlyMark} onChange={(e) => setOnlyMark(e.target.checked)} /> Só marcar o teste (não reenviar e-mail)

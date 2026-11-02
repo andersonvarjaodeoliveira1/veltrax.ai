@@ -495,7 +495,7 @@ async def restore_deleted_chat(user_id: str, chat_id: str, request: Request, db:
 
 
 class TestAccess(BaseModel):
-    days: int = Field(ge=1, le=30)
+    days: int = Field(ge=0, le=30)  # 0 = tira o prazo de teste
 
 
 @router.put("/users/{user_id}/test-access")
@@ -507,6 +507,10 @@ async def set_test_access(user_id: str, body: TestAccess, request: Request, db: 
         raise HTTPException(status_code=404, detail="User not found")
     if row["is_admin"]:
         raise HTTPException(status_code=400, detail="Administrators cannot be test accounts")
+    if body.days == 0:
+        await db.execute(text("UPDATE users SET test_expires_at = NULL WHERE id = :u"), {"u": user_id})
+        await db.commit()
+        return {"user_id": user_id, "test_expires_at": None}
     expires = (await db.execute(
         text("UPDATE users SET test_expires_at = NOW() + make_interval(days => :d) WHERE id = :u RETURNING test_expires_at"),
         {"d": body.days, "u": user_id},
