@@ -327,7 +327,7 @@
 
   const generateButton = () => {
     const ed = editor();
-    const isArrow = (b) => text(b).split("\n").map((x) => x.trim()).includes("arrow_forward");
+    const isArrow = (b) => text(b).split("\n").map((x) => x.trim()).some((x) => x === "arrow_forward" || x === "arrow_upward" || x === "send" || x === "arrow_upward_alt");
     // sobe da caixa de texto até achar o container que tem a seta de enviar (o promptBox() pode ser só a parte do texto)
     let node = ed;
     for (let i = 0; node && i < 10; i += 1, node = node.parentElement) {
@@ -357,11 +357,28 @@
   async function pressGenerate() {
     await dismissNotices();
     const btn = await waitFor(() => { const b = generateButton(); return b && !b.disabled && b.getAttribute("aria-disabled") !== "true" ? b : null; }, 8000);
-    if (!btn) throw new Error(`O botão de gerar do Flow está desativado. [${flowDiagnosis()}]`);
+    if (!btn) {
+      // Sem seta visível (janela pequena ou tela do Flow diferente): tenta o Enter de verdade na caixa de prompt antes de desistir.
+      const ed0 = editor();
+      if (ed0) {
+        const beforeNoBtn = tileKeys();
+        ed0.focus();
+        try { await chrome.runtime.sendMessage({ type: "clipgringa-key" }); } catch (_) {}
+        for (let i = 0; i < 12; i += 1) {
+          await sleep(500);
+          if (!text(editor() || document.body).trim() || firstTiles(12).some((t) => !beforeNoBtn.has(t.src) || /%/.test(t.info))) return;
+        }
+      }
+      throw new Error(`O botão de gerar do Flow está desativado. [${flowDiagnosis()}]`);
+    }
     const before = tileKeys();
     const typed = text(editor() || document.body).trim();
+    // Só vale olhando a grade de mídias do Flow (nunca o painel da extensão, que também mostra "%").
+    const pctCount = () => { const root = tilesRoot(); if (!root || root === document) return 0; const t = text(root); return (t.match(/\d{1,3}\s*%/g) || []).length + (t.match(/gerando|generating/gi) || []).length; };
+    const pctBefore = pctCount();
     const startedNow = () => {
       const ed = editor();
+      if (pctCount() > pctBefore) return true; // apareceu uma geração em andamento (%, "gerando") mesmo sem miniatura nova ainda
       if (ed && !text(ed).trim()) return true; // o Flow limpa a caixa ao enviar
       if (ed && typed && text(ed).trim() !== typed) return true; // a caixa mudou (ex.: voltou ao texto de exemplo)
       return firstTiles(12).some((t) => !before.has(t.src) || /%/.test(t.info));
