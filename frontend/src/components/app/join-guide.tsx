@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Check, Copy, Download } from "lucide-react";
+import { UploadAndJoin } from "@/components/app/upload-and-join";
 
 export type JoinVideo = { label: string; scenes: { n: string; files: string[] }[] };
 
@@ -28,7 +29,6 @@ export function JoinGuide({ videos, copy }: { videos: JoinVideo[]; copy: string 
     URL.revokeObjectURL(url);
   }
 
-  if (videos.length === 0 && !text) return null;
   return (
     <section aria-label="Ordem para juntar e copy" className="space-y-4 rounded-[22px] border border-white/10 bg-[#1a191d] p-5" data-testid="join-guide">
       {videos.length > 0 && (
@@ -68,6 +68,7 @@ export function JoinGuide({ videos, copy }: { videos: JoinVideo[]; copy: string 
           <p className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-xl bg-black/30 px-3 py-2 text-sm">{text}</p>
         </div>
       )}
+      <UploadAndJoin />
     </section>
   );
 }

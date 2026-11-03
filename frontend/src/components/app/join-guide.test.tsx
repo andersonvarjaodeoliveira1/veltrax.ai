@@ -10,8 +10,3 @@ it("lista a ordem das cenas, os takes de cada uma e a copy", () => {
   expect(screen.getByText("Minha copy")).toBeTruthy();
   expect(screen.getByText("Baixar .txt")).toBeTruthy();
 });
-
-it("não mostra nada sem cenas nem copy", () => {
-  const { container } = render(<JoinGuide videos={[]} copy="" />);
-  expect(container.firstChild).toBeNull();
-});

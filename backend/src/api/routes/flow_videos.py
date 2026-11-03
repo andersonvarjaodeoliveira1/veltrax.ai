@@ -89,7 +89,17 @@ async def create_token(request: Request, db: AsyncSession = Depends(get_db)):
 
 @router.post("/upload")
 async def upload_video(request: Request, token: str = "", package: str = "", file: str = "", db: AsyncSession = Depends(get_db)):
-    user_id = read_token(token)
+    return await _store(request, read_token(token), package, file, db)
+
+
+@router.post("/mine")
+async def upload_my_video(request: Request, package: str = "", file: str = "", db: AsyncSession = Depends(get_db)):
+    """Envio feito pela própria pessoa, logada no site (vídeos que ela baixou do Flow e quer juntar)."""
+    user_id = await _user_id(request, db)
+    return await _store(request, user_id, package, file, db)
+
+
+async def _store(request: Request, user_id: str, package: str, file: str, db: AsyncSession):
     package, file = _clean(package, 120), _clean(file, 160) or "video.mp4"
     image_ext = _image_ext(file)
     limit = MAX_IMAGE_BYTES if image_ext else MAX_VIDEO_BYTES
