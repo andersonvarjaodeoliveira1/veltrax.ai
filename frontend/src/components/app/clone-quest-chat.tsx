@@ -5,6 +5,9 @@ import { ArrowUp } from "lucide-react";
 import { TAKE_KINDS } from "@/lib/take-kinds";
 
 type Opt = { value: string; label: string };
+// Perguntas de resposta livre: campo grande, para a pessoa descrever com calma.
+const ROOMY: Record<string, number> = { copy: 5, extra: 5, camera: 3, cta: 3, product: 2 };
+
 export type QuestValues = { cta: string; product: string; count: number; sceneCount: number; takes: number; takeKind: string; language: string; copySource: "video" | "own" | "describe"; ownCopy: string; keyword: string; flowModel: string };
 type Props = {
   values: QuestValues;
@@ -194,10 +197,10 @@ export function QuestChat({ values, languages, models, onCount, onScenes, onTake
               ))}
             </div>
             <div className="flex items-end gap-2">
-              <textarea value={text} onChange={(e) => setText(e.target.value)} rows={current.id === "copy" ? 3 : 1} maxLength={current.id === "copy" ? 4000 : 80} aria-label={current.question}
+              <textarea value={text} onChange={(e) => setText(e.target.value)} rows={ROOMY[current.id] ?? 1} maxLength={ROOMY[current.id] ? 4000 : 80} aria-label={current.question}
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); } }}
                 placeholder={current.hint}
-                className="min-h-[44px] w-full resize-none rounded-[14px] bg-black/30 px-3 py-2 text-base outline-none placeholder:text-muted-foreground/70" />
+                className={`${ROOMY[current.id] ? "min-h-[120px]" : "min-h-[44px]"} w-full resize-y rounded-[14px] bg-black/30 px-3 py-2 text-base outline-none placeholder:text-muted-foreground/70`} />
               <button type="button" aria-label="Avançar" title="Avançar (Enter)" onClick={() => submit()} disabled={!text.trim()}
                 className="flex size-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#A98BFF] to-[#7B3FE4] text-white disabled:opacity-40"><ArrowUp className="size-5" /></button>
             </div>
