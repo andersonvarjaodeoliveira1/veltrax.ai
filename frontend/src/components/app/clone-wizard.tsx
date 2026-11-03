@@ -8,6 +8,7 @@ import { checkPolicy, policySignature } from "@/lib/shopee-policy";
 import { LinkVideo } from "@/components/app/link-video";
 import { ShopeeImport } from "@/components/app/shopee-import";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { JoinGuide } from "@/components/app/join-guide";
 import { takeKind, takeTag, withTake, type TakeKind } from "@/lib/take-kinds";
 import { FlowRunPanel } from "@/components/app/flow-run-panel";
 import { QuestChat } from "./clone-quest-chat";
@@ -1740,6 +1741,18 @@ export function CloneWizard() {
           </section>
         )}
 
+        {ready && (
+          <JoinGuide
+            copy={(p.copySource === "own" || p.copySource === "describe" ? p.ownCopy ?? "" : "") || p.scenes.map((sc) => sc.line).filter(Boolean).join("\n\n") || p.reference}
+            videos={p.variations.map((variation, vi) => ({
+              label: `Vídeo ${pad(vi + 1)}${variation.title ? ` · ${variation.title}` : ""}`,
+              scenes: Array.from({ length: p.sceneCount }, (_x, si) => si).filter((si) => wantScene(vi, si)).map((si) => ({
+                n: pad(si + 1),
+                files: Array.from({ length: p.takes ?? 1 }, (_t, t) => fileName(vi, si, "x.mp4").replace(/(\.\w+)$/, t === 0 ? "$1" : `${takeTag(t + 1, p.takeKind)}$1`)),
+              })),
+            })).filter((v) => v.scenes.length > 0)}
+          />
+        )}
         {ready && <FlowRunPanel onRetake={retake} onVariations={(n) => { patch({ count: n, variations: [], images: [], videos: [], gen: {}, final: {}, approved: {}, ctaLocked: false }); void new Promise((resolve) => setTimeout(resolve, 150)).then(() => runAll(true)); }} />}
 
         {ready && (redirectIn !== null || redirectBlocked) && (
