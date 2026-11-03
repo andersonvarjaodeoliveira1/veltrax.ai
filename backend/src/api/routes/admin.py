@@ -517,3 +517,76 @@ async def set_test_access(user_id: str, body: TestAccess, request: Request, db: 
     )).scalar()
     await db.commit()
     return {"user_id": user_id, "test_expires_at": expires.isoformat() if expires else None}
+
+
+# ---------------------------------------------------------------------------
+# Atividade: o que cada conta está gerando e onde deu erro (somente administrador)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/activity")
+async def activity_overview(request: Request, days: int = 7, db: AsyncSession = Depends(get_db)):
+    await require_admin_user(request, db, get_config())
+    days = max(1, min(int(days), 90))
+    totals = (
+        await db.execute(
+            text(
+                """
+                SELECT kind,
+                       COUNT(*) FILTER (WHERE created_at > now() - interval '24 hours') AS last_24h,
+                       COUNT(*) FILTER (WHERE created_at > now() - make_interval(days => :d)) AS period
+                FROM activity_events GROUP BY kind
+                """
+            ),
+            {"d": days},
+        )
+    ).mappings().all()
+    per_user = (
+        await db.execute(
+            text(
+                """
+                SELECT a.user_id, u.email, u.name,
+                       COUNT(*) FILTER (WHERE a.kind = 'imagem') AS images,
+                       COUNT(*) FILTER (WHERE a.kind = 'cena') AS scenes,
+                       COUNT(*) FILTER (WHERE a.kind IN ('erro', 'ia_conta_falhou')) AS errors,
+                       MAX(a.created_at) AS last_at
+                FROM activity_events a LEFT JOIN users u ON u.id = a.user_id
+                WHERE a.created_at > now() - make_interval(days => :d) AND a.user_id IS NOT NULL
+                GROUP BY a.user_id, u.email, u.name
+                ORDER BY (COUNT(*) FILTER (WHERE a.kind IN ('imagem', 'cena'))) DESC, MAX(a.created_at) DESC
+                LIMIT 200
+                """
+            ),
+            {"d": days},
+        )
+    ).mappings().all()
+    recent_errors = (
+        await db.execute(
+            text(
+                """
+                SELECT a.id, a.kind, a.detail, a.created_at, u.email
+                FROM activity_events a LEFT JOIN users u ON u.id = a.user_id
+                WHERE a.kind IN ('erro', 'ia_conta_falhou') AND a.created_at > now() - make_interval(days => :d)
+                ORDER BY a.created_at DESC LIMIT 60
+                """
+            ),
+            {"d": days},
+        )
+    ).mappings().all()
+    return {
+        "days": days,
+        "totals": {row["kind"]: {"last_24h": int(row["last_24h"]), "period": int(row["period"])} for row in totals},
+        "users": [
+            {
+                "id": row["user_id"], "email": row["email"], "name": row["name"],
+                "images": int(row["images"]), "scenes": int(row["scenes"]), "errors": int(row["errors"]),
+                "last_at": row["last_at"].isoformat() if row["last_at"] else None,
+            }
+            for row in per_user
+        ],
+        "errors": [
+            {"id": int(row["id"]), "kind": row["kind"], "detail": row["detail"], "email": row["email"],
+             "at": row["created_at"].isoformat() if row["created_at"] else None}
+            for row in recent_errors
+        ],
+    }

@@ -121,6 +121,9 @@ async def upload_video(request: Request, token: str = "", package: str = "", fil
         {"id": video_id, "u": user_id, "p": package, "f": file, "path": str(path), "size": size},
     )
     await db.commit()
+    from ...activity import IMAGE, SCENE, note
+
+    note(user_id, IMAGE if image_ext else SCENE, f"{package} · {file}")
     return {"id": video_id, "size": size}
 
 

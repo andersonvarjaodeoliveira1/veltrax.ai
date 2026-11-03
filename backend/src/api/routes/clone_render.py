@@ -302,6 +302,9 @@ async def create_image(body: _ImageIn, request: Request, db: AsyncSession = Depe
             raise HTTPException(status_code=429, detail="Daily image limit reached. Try again tomorrow")
         content, mime = await google_image(body.prompt.strip())
     extension = ".jpg" if "jpeg" in mime else ".png"
+    from ...activity import IMAGE, note
+
+    note(user_id, IMAGE, "Kie.ai" if kie_key else "Google")
     item_id = str(uuid.uuid4())
     (_user_dir(user_id) / f"{item_id}{extension}").write_bytes(content)
     meta = {"id": item_id, "kind": "image", "status": "ready", "file": f"{item_id}{extension}", "mime": mime, "created": time.time()}
@@ -317,11 +320,20 @@ async def _run_video(user_id: str, item_id: str, prompt: str, image: tuple[bytes
         name = f"{item_id}.mp4"
         (_user_dir(user_id) / name).write_bytes(content)
         meta.update(status="ready", file=name, mime="video/mp4")
+        from ...activity import SCENE, note
+
+        note(user_id, SCENE, "Google")
     except HTTPException as exc:
         meta.update(status="error", error=str(exc.detail))
+        from ...activity import ERROR, note
+
+        note(user_id, ERROR, f"cena (Google): {str(exc.detail)[:200]}")
     except Exception:
         logger.exception("clone render video %s crashed", item_id)
         meta.update(status="error", error="Could not generate now. Try again")
+        from ...activity import ERROR, note
+
+        note(user_id, ERROR, "cena (Google): erro inesperado")
     finally:
         _running.get(user_id, set()).discard(item_id)
     _write_meta(user_id, meta)

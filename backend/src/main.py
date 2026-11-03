@@ -39,6 +39,22 @@ from .observability import (
 configure_logging()
 
 logger = logging.getLogger(__name__)
+
+_TRACKED_PREFIXES = ("/multiplier/", "/tasks", "/start-with-progress", "/upload")
+_TRACKED_CLIENT_ERRORS = {400, 402, 413, 422, 429}
+
+
+def _note_failure(request, status: int) -> None:
+    """Anota no painel do administrador os erros do servidor e as etapas de geração que falharam."""
+    path = request.url.path
+    if status < 500 and not (status in _TRACKED_CLIENT_ERRORS and path.startswith(_TRACKED_PREFIXES)):
+        return
+    if "ai-relay" in path:
+        return
+    from .activity import ERROR, note
+
+    note(request.headers.get("x-clipgringa-user-id"), ERROR, f"{request.method} {path} -> {status}")
+
 def create_app(
     *,
     config: Config | None = None,
@@ -137,6 +153,7 @@ def create_app(
             raise
 
         elapsed_ms = round((time.perf_counter() - started_at) * 1000, 2)
+        _note_failure(request, response.status_code)
         response.headers[TRACE_HEADER] = trace_id
         if ai_path.get("path"):
             response.headers["x-ai-path"] = ai_path["path"]

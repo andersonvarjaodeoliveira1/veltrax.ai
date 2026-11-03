@@ -304,6 +304,9 @@ def account_model(user_id: str | None) -> Any | None:
             text = await ask(user_id, "", build_chat_prompt(system, prompt, tool.parameters_json_schema if tool else None, notes), images=images)
         except RelayError as exc:
             set_ai_why(why_of(exc))
+            from .activity import TEXT_FAIL, note
+
+            note(user_id, TEXT_FAIL, f"{site}: {why_of(exc)}")
             raise
         if tool is None:
             from pydantic_ai.messages import TextPart
