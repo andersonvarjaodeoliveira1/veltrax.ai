@@ -10,7 +10,9 @@ const MAX_BYTES = 150 * 1024 * 1024;
 const byName = (a: Picked, b: Picked) => a.file.name.localeCompare(b.file.name, "pt-BR", { numeric: true });
 
 /** A pessoa envia as cenas que já baixou, põe na ordem e o ClipGringa junta num vídeo só (com legenda, título e transição). */
-export function UploadAndJoin({ label = "Vídeo completo" }: { label?: string }) {
+const STEPS = ["Escolher os vídeos", "Deixar na ordem", "Enviar", "Ajustar e baixar"];
+
+export function UploadAndJoin({ label = "Vídeo completo", steps = false }: { label?: string; steps?: boolean }) {
   const [files, setFiles] = useState<Picked[]>([]);
   const [ids, setIds] = useState<string[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -67,11 +69,23 @@ export function UploadAndJoin({ label = "Vídeo completo" }: { label?: string })
     }
   }
 
+  const step = ids ? 4 : busy ? 3 : files.length > 0 ? 2 : 1;
+
   return (
     <div className="space-y-3" data-testid="upload-join">
+      {steps && (
+        <ol className="flex flex-wrap gap-2" aria-label="Passo a passo">
+          {STEPS.map((name, i) => (
+            <li key={name} aria-current={step === i + 1 ? "step" : undefined}
+              className={`flex items-center gap-2 rounded-full border px-3 py-1 text-xs ${step === i + 1 ? "border-[#7B3FE4] bg-[#7B3FE4]/25" : step > i + 1 ? "border-white/10 text-muted-foreground line-through" : "border-white/10 text-muted-foreground"}`}>
+              <span className="font-semibold tabular-nums">{i + 1}</span>{name}
+            </li>
+          ))}
+        </ol>
+      )}
       <div>
-        <h3 className="text-base font-semibold">Juntar vídeos que você já baixou</h3>
-        <p className="text-xs text-muted-foreground">Envie as cenas (uma ou mais por vez), deixe na ordem e eu junto num vídeo completo, com legenda e título.</p>
+        <h3 className="text-base font-semibold">{step === 1 ? "Passo 1 · Escolha os vídeos" : step === 2 ? "Passo 2 · Deixe na ordem" : step === 3 ? "Passo 3 · Enviando" : "Passo 4 · Ajuste e baixe"}</h3>
+        <p className="text-xs text-muted-foreground">Escolha as cenas que você baixou (uma ou várias de uma vez). Eu junto na ordem que você deixar.</p>
       </div>
       <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-white/15 px-4 py-2 text-sm hover:border-[#7B3FE4]">
         <Upload className="size-4" /> Escolher vídeos

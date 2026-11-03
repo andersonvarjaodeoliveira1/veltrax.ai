@@ -50,6 +50,7 @@ const NAV: NavItem[] = [
   { href: "/folders", label: "Pastas", sub: "Cortes para TikTok", icon: FolderOpen, match: (p) => p.startsWith("/folders") },
   { href: DOWNLOADER_URL, label: "Baixar vídeo", sub: "Cortes para TikTok", icon: Download, match: () => false, external: true },
   { href: "/conectar-flow", label: "Conectar ao Flow", icon: Link2, match: (p) => p.startsWith("/conectar-flow") },
+  { href: "/juntar-videos", label: "Juntar vídeos", icon: Film, match: (p) => p.startsWith("/juntar-videos") },
   { href: "/minhas-apis", label: "Minhas APIs", icon: KeyRound, match: (p) => p.startsWith("/minhas-apis") },
   { href: WHATSAPP_URL, label: "API e Flow", group: "Comprar", icon: ShoppingCart, match: () => false, external: true },
   { href: ADMIN_WHATSAPP_URL, label: "Mais tokens", icon: Coins, match: () => false, external: true },
