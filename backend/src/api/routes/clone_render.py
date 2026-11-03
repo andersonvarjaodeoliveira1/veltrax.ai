@@ -268,19 +268,39 @@ def _status_payload(user_id: str) -> dict[str, Any]:
     }
 
 
+async def _kie_key(db: AsyncSession, user_id: str) -> str:
+    """Chave do Kie.ai que a própria pessoa conectou em Minhas APIs ('' se não conectou)."""
+    from ...integrations import load_user_keys
+
+    return (await load_user_keys(db, user_id)).get("kie", "")
+
+
 @router.get("/status")
 async def status(request: Request, db: AsyncSession = Depends(get_db)):
     user_id = await _user_id(request, db)
-    return _status_payload(user_id)
+    payload = _status_payload(user_id)
+    has_kie = bool(await _kie_key(db, user_id))
+    # "enabled" continua sendo a geração completa (imagem + cena) pelo servidor; o Kie.ai da pessoa cobre as imagens.
+    payload["kie_connected"] = has_kie
+    payload["images_enabled"] = bool(payload["enabled"]) or has_kie
+    payload["images_provider"] = "kie" if has_kie else ("google" if payload["enabled"] else None)
+    return payload
 
 
 @router.post("/image")
 async def create_image(body: _ImageIn, request: Request, db: AsyncSession = Depends(get_db)):
     user_id = await _user_id(request, db)
-    _require_enabled()
-    if _status_payload(user_id)["images_left"] <= 0:
-        raise HTTPException(status_code=429, detail="Daily image limit reached. Try again tomorrow")
-    content, mime = await google_image(body.prompt.strip())
+    kie_key = await _kie_key(db, user_id)
+    if kie_key:
+        # Conta do Kie.ai da pessoa: os créditos são dela, então não há o limite diário do servidor.
+        from ... import kie
+
+        content, mime = await kie.generate_image(kie_key, body.prompt.strip())
+    else:
+        _require_enabled()
+        if _status_payload(user_id)["images_left"] <= 0:
+            raise HTTPException(status_code=429, detail="Daily image limit reached. Try again tomorrow")
+        content, mime = await google_image(body.prompt.strip())
     extension = ".jpg" if "jpeg" in mime else ".png"
     item_id = str(uuid.uuid4())
     (_user_dir(user_id) / f"{item_id}{extension}").write_bytes(content)

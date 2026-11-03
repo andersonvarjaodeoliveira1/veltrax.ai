@@ -26,6 +26,7 @@ PROVIDERS: dict[str, dict[str, str]] = {
     "openrouter": {"label": "OpenRouter", "help": "Chave do OpenRouter (openrouter.ai/keys)."},
     "huggingface": {"label": "Hugging Face", "help": "Token do Hugging Face (huggingface.co/settings/tokens, tipo Fine-grained com “Make calls to Inference Providers”). Atenção: conta grátis não tem créditos de inferência; precisa comprar créditos ou ter o plano PRO (inclui US$ 2 por mês). O uso é cobrado por lá, sem custo extra do ClipGringa."},
     "ollama": {"label": "Ollama (nuvem ou servidor seu)", "help": "Para o Ollama Cloud: crie a chave em ollama.com/settings/keys e deixe o endereço padrão (https://ollama.com). Se você hospeda o seu Ollama, informe o endereço público dele (https); o servidor do ClipGringa não alcança o localhost do seu computador. O modelo é opcional: sem ele, uso o primeiro que o Ollama listar."},
+    "kie": {"label": "Kie.ai (geração de imagens)", "help": "Chave da sua conta do Kie.ai (kie.ai/api-key). As imagens saem dos créditos da sua conta. Ainda não tem conta? Crie em https://kie.ai?ref=2b4b3522f2a880658e693c28eb3483ce"},
     "apify": {"label": "Apify (busca de fotos no Pinterest)", "help": "Token do Apify (console.apify.com/settings/integrations). Sem ele, a busca usa um banco de fotos grátis."},
     "flow": {"label": "Chave do Google para o Veo (opcional)", "help": "Isto NÃO é a conta do Flow. A conta do Flow conecta pela extensão, na página Conectar ao Flow. Aqui só entra uma chave do Google AI Studio com acesso ao Veo."},
 }
@@ -144,6 +145,15 @@ async def check_key(provider: str, value: str) -> tuple[bool, str]:
         url, headers = "https://api.openai.com/v1/models", {"Authorization": f"Bearer {value}"}
     elif provider == "anthropic":
         url, headers = "https://api.anthropic.com/v1/models", {"x-api-key": value, "anthropic-version": "2023-06-01"}
+    elif provider == "kie":
+        from .kie import credits
+
+        try:
+            await credits(value)
+        except Exception as exc:  # chave recusada
+            if getattr(exc, "status_code", 0) == 401:
+                return False, "O Kie.ai recusou essa chave. Confira se copiou inteira."
+        return True, ""
     elif provider == "apify":
         url, headers = "https://api.apify.com/v2/users/me", {"Authorization": f"Bearer {value}"}
     elif provider == "huggingface":
