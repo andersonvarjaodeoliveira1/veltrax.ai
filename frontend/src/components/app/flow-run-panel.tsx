@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Download, ImageDown } from "lucide-react";
 import { TAKE_KINDS, type TakeKind } from "@/lib/take-kinds";
 import { FinalVideoMaker } from "@/components/app/final-video-maker";
+import { estimatedPct, keepProjectAlive } from "@/lib/clone-keys";
 
 export type FlowProgress = {
   at: number; running: boolean; total: number; done: number; errors: number; phase: string; now: string;
@@ -38,6 +39,14 @@ export function FlowRunPanel({ onRetake, onVariations }: { onRetake: (vbase: num
     return () => window.clearInterval(t);
   }, [limit]);
   const flowActive = !!flowProg && flowProg.total > 0 && flowProg.done < flowProg.total;
+  // Enquanto o Flow gera, o projeto não expira e a barra da cena anda sozinha (o Flow nem sempre manda a porcentagem).
+  const [, setClock] = useState(0);
+  useEffect(() => {
+    if (!flowActive || !flowProg?.running) return;
+    keepProjectAlive();
+    const id = window.setInterval(() => { keepProjectAlive(); setClock((n) => n + 1); }, 1000);
+    return () => window.clearInterval(id);
+  }, [flowActive, flowProg?.running]);
   useEffect(() => {
     if (!flowProg || flowProg.total === 0) return;
     let stop = false;
@@ -150,7 +159,7 @@ export function FlowRunPanel({ onRetake, onVariations }: { onRetake: (vbase: num
                     const secs = flowProg.dur?.[job.key];
                     const image = flowImages[job.key];
                     const videoId = flowFiles[job.file];
-                    const value = job.done ? 100 : typeof job.pct === "number" ? job.pct : running ? 8 : 0;
+                    const value = job.done ? 100 : typeof job.pct === "number" ? job.pct : running ? estimatedPct(Date.now() - (flowProg.jobStartedAt || flowProg.at)) : 0;
                     return (
                       <li key={job.key} className="flex flex-wrap items-center gap-3 rounded-[14px] border border-white/10 bg-black/20 p-2.5">
                         {videoId ? (

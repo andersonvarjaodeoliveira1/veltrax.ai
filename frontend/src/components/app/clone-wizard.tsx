@@ -8,6 +8,7 @@ import { checkPolicy, policySignature } from "@/lib/shopee-policy";
 import { LinkVideo } from "@/components/app/link-video";
 import { ShopeeImport } from "@/components/app/shopee-import";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { SENT_KEY, TOUCH_KEY } from "@/lib/clone-keys";
 import { JoinGuide } from "@/components/app/join-guide";
 import { takeKind, takeTag, withTake, type TakeKind } from "@/lib/take-kinds";
 import { FlowRunPanel } from "@/components/app/flow-run-panel";
@@ -82,8 +83,6 @@ const PHOTO_BRIEF = "Vídeo curto de avatar apresentando o produto da foto: most
 const KEY = "gv-clonagem-v2";
 const MODE_KEY = "gv-clonagem-mode";
 const VIEW_KEY = "gv-clonagem-view-v2";
-const TOUCH_KEY = "gv-clonagem-touch";
-const SENT_KEY = "gv-clonagem-sent";
 const IDLE_MS = 10 * 60 * 1000; // projeto parado: some e começa um novo
 const WAIT_FLOW_MS = 2 * 60 * 60 * 1000; // depois de enviar ao Flow a pessoa precisa de tempo para gerar e voltar
 // Ferramenta "ClipGringa — Gerar Vídeos" no Flow (BETA). Trocar pelo link compartilhado quando for liberada aos membros.
