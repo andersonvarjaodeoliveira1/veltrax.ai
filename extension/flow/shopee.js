@@ -1,5 +1,5 @@
 /* ClipGringa · Flow — lê o anúncio da Shopee dentro do navegador da própria pessoa.
- * Devolve só endereços (vídeos e fotos do ANÚNCIO do vendedor); vídeos e fotos de avaliações de clientes ficam de fora.
+ * Devolve só endereços (vídeos e fotos do ANÚNCIO do vendedor); vídeos e fotos de avaliações de clientes ficam de fora, inclusive do histórico de rede.
  * É injetada na aba do produto pelo background.js; precisa ser autocontida. */
 function clipgringaScrapeShopee() {
   var CDN = /(?:susercontent\.com|shopee\.com\.br|shopee\.com)\/file\/[A-Za-z0-9_\-]{20,}/;
@@ -36,15 +36,24 @@ function clipgringaScrapeShopee() {
     if (videos.some(function (v) { return v.url === u; })) return;
     videos.push({ url: u, poster: poster ? abs(poster) : "" });
   }
+  // Endereços de vídeos de AVALIAÇÕES (fora da área do vendedor): nunca entram, nem pelo histórico de rede.
+  var reviewUrls = [];
   document.querySelectorAll("video").forEach(function (v) {
-    if (!inside(v)) return;
     var srcs = [v.currentSrc, v.src];
     v.querySelectorAll("source").forEach(function (s) { srcs.push(s.src); });
+    if (!inside(v)) { srcs.forEach(function (u) { if (u) reviewUrls.push(abs(u)); }); return; }
     srcs.forEach(function (u) { if (u) addVideo(u, v.poster); });
   });
-  try {
-    performance.getEntriesByType("resource").forEach(function (e) { addVideo(e.name, ""); });
-  } catch (e) { /* sem resource timing */ }
+  // Plano B: o vídeo do vendedor às vezes só aparece no histórico de rede. Só vale o primeiro que a página carregou
+  // (o do vendedor carrega antes) e só se não for um vídeo de avaliação.
+  if (!videos.length) {
+    try {
+      var loaded = performance.getEntriesByType("resource").filter(function (e) {
+        return /\.mp4(\?|$)/i.test(e.name) && reviewUrls.indexOf(abs(e.name)) === -1;
+      }).sort(function (a, b) { return a.startTime - b.startTime; });
+      if (loaded.length) addVideo(loaded[0].name, "");
+    } catch (e) { /* sem resource timing */ }
+  }
 
   var images = [];
   document.querySelectorAll("img").forEach(function (img) {

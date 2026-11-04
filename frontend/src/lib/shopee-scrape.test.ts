@@ -25,4 +25,21 @@ describe("leitura do anúncio da Shopee", () => {
     expect(out.images).toEqual([`${CDN}br-11134207-aaaaaaaaaaaaaaaaaaaa`, `${CDN}br-11134207-bbbbbbbbbbbbbbbbbbbb`]); // sem _tn, sem avaliação, sem recomendado
     expect(out.videos.map((v) => v.url)).toEqual(["https://down-bs.vod.susercontent.com/api/v4/1/mms/seller.16000081.mp4"]);
   });
+
+  it("não pega vídeo de avaliação pelo histórico de rede e usa o primeiro carregado como o do vendedor", () => {
+    document.body.innerHTML = `
+      <div class="shop-rating-list"><video src="https://down-bs.vod.susercontent.com/api/v4/1/mms/review.16000081.mp4"></video></div>`;
+    const entries = [
+      { name: "https://down-bs.vod.susercontent.com/api/v4/1/mms/review.16000081.mp4", startTime: 9000 },
+      { name: "https://down-bs.vod.susercontent.com/api/v4/1/mms/seller.16000081.mp4", startTime: 800 },
+      { name: "https://down-bs.vod.susercontent.com/api/v4/1/mms/other-review.16000081.mp4", startTime: 12000 },
+    ];
+    const original = performance.getEntriesByType;
+    performance.getEntriesByType = (() => entries) as unknown as typeof performance.getEntriesByType;
+    try {
+      expect(scrape().videos.map((v) => v.url)).toEqual(["https://down-bs.vod.susercontent.com/api/v4/1/mms/seller.16000081.mp4"]);
+    } finally {
+      performance.getEntriesByType = original;
+    }
+  });
 });
