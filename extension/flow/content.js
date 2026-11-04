@@ -597,6 +597,7 @@
       throw new Error(lastError);
     } catch (e) {
       state.cloud[job.key] = "fail";
+      state.cloudWhy = { ...(state.cloudWhy || {}), [job.key]: String((e && e.message) || e).slice(0, 80) };
       setNow(`Não consegui enviar ${job.file} pela página (${(e && e.message) || e}). Tento pelo download.`);
       return false;
     }
@@ -805,7 +806,7 @@
     el("list").innerHTML = state.jobs.map((j) => {
       const label = `${j.vname} · ${j.sname}`;
       let st = "<span class='st-wait'>na fila</span>";
-      if (state.done[j.key]) st = `<span class='st-done'>baixado${state.cloud[j.key] === "ok" ? " · no ClipGringa" : state.cloud[j.key] ? " · não enviado" : ""}</span>`;
+      if (state.done[j.key]) st = `<span class='st-done'>baixado${state.cloud[j.key] === "ok" ? " · no ClipGringa" : state.cloud[j.key] ? ` · não enviado${state.cloudWhy && state.cloudWhy[j.key] ? ` (${state.cloudWhy[j.key].replace(/[<>&]/g, "")})` : ""}` : ""}</span>`;
       else if (state.errors[j.key]) st = "<span class='st-err'>erro</span>";
       else if (state.current === j.key) st = `<span class='st-run'>${state.phase || "gerando"}</span>`;
       return `<li class="${state.current === j.key ? "cur" : ""}"><span>${label}</span>${st}</li>`;
@@ -1328,7 +1329,10 @@
       if (!got || !got.newValue) return;
       for (const job of state.jobs) {
         const r = got.newValue[job.file];
-        if (r && Date.now() - r.at < 120000) state.cloud[job.key] = r.ok ? "ok" : "fail";
+        if (r && Date.now() - r.at < 120000) {
+          state.cloud[job.key] = r.ok ? "ok" : "fail";
+          if (!r.ok && r.error) state.cloudWhy = { ...(state.cloudWhy || {}), [job.key]: String(r.error).slice(0, 80) };
+        }
       }
       persist().catch(() => undefined); render();
     });

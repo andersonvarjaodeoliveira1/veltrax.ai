@@ -89,7 +89,14 @@ async def create_token(request: Request, db: AsyncSession = Depends(get_db)):
 
 @router.post("/upload")
 async def upload_video(request: Request, token: str = "", package: str = "", file: str = "", db: AsyncSession = Depends(get_db)):
-    return await _store(request, read_token(token), package, file, db)
+    user_id = read_token(token)
+    try:
+        return await _store(request, user_id, package, file, db)
+    except HTTPException as exc:
+        from ...activity import ERROR, note
+
+        note(user_id, ERROR, f"upload {file[:80]}: {exc.status_code} {str(exc.detail)[:120]}")
+        raise
 
 
 @router.post("/mine")
