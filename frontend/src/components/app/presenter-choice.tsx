@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Loader2, User } from "lucide-react";
 import { dataUrlToFile, videoFrames } from "@/lib/influencer-models";
 
@@ -39,6 +39,17 @@ export function useReferenceGender(file: File | null): GenderRead {
 
 /** Pergunta se mantém quem aparece no vídeo (mulher ou homem) ou troca para o outro. */
 export function PresenterChoice({ detected, reading, value, onChange }: { detected: Presenter; reading: boolean; value: Presenter; onChange: (value: Presenter) => void }) {
+  const boxRef = useRef<HTMLDivElement>(null);
+  const wasReading = useRef(false);
+  // Quando termina de olhar o vídeo, desce até a pergunta para a pessoa escolher.
+  useEffect(() => {
+    if (wasReading.current && !reading) {
+      const timer = window.setTimeout(() => boxRef.current?.scrollIntoView?.({ behavior: "smooth", block: "center" }), 150);
+      wasReading.current = false;
+      return () => window.clearTimeout(timer);
+    }
+    wasReading.current = reading;
+  }, [reading]);
   if (reading) {
     return <p role="status" data-testid="presenter-reading" className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="size-3.5 animate-spin" />Vendo quem aparece no vídeo…</p>;
   }
@@ -48,7 +59,7 @@ export function PresenterChoice({ detected, reading, value, onChange }: { detect
     : [{ value: "", label: "Tanto faz" }, { value: "woman", label: "Mulher" }, { value: "man", label: "Homem" }];
   const current = value || detected;
   return (
-    <div data-testid="presenter-choice" className="space-y-2 rounded-[14px] border border-border p-3">
+    <div ref={boxRef} data-testid="presenter-choice" className="space-y-2 rounded-[14px] border border-border p-3">
       <p className="flex items-center gap-2 text-sm font-medium"><User className="size-4 text-[#A98BFF]" />
         {detected ? `No vídeo original aparece ${NAME[detected]}.` : "Não consegui ver quem aparece no vídeo."} Quem vai apresentar o seu?
       </p>

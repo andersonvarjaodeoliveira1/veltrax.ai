@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowUp } from "lucide-react";
 import { TAKE_KINDS } from "@/lib/take-kinds";
+import { ctaFor, ctaSuffix, defaultKeyword, keywordsFor } from "@/lib/clone-language";
 
 type Opt = { value: string; label: string };
 // Perguntas de resposta livre: campo grande, para a pessoa descrever com calma.
@@ -38,6 +39,9 @@ export function QuestChat({ values, languages, models, onCount, onScenes, onTake
   const [oops, setOops] = useState(false);
   const [picking, setPicking] = useState<string | null>(null);
   const [copyMode, setCopyMode] = useState<"own" | "describe">("own");
+  // Estilo do vídeo: a pessoa descreve; só se falar de câmera (ou tocar na opção) aparecem os formatos de câmera.
+  const [wantCamera, setWantCamera] = useState(false);
+  const [styleAnswer, setStyleAnswer] = useState("Automático");
   const endRef = useRef<HTMLDivElement>(null);
   const num = (t: string, min: number, max: number) => { const n = parseInt((t.match(/\d+/) ?? [""])[0], 10); return Number.isFinite(n) && n >= min && n <= max ? n : null; };
 
@@ -89,31 +93,42 @@ export function QuestChat({ values, languages, models, onCount, onScenes, onTake
       ],
       answer: values.cta.trim() ? values.cta.trim().replace("{KEYWORD}", "…").slice(0, 44) : "Assistir o vídeo completo",
       apply: (t, picked) => {
-        const map: Record<string, string> = { full: "", link: "Comente {KEYWORD} que eu te envio o link no direct", material: "Comente {KEYWORD} e receba o material grátis", whats: "Comente {KEYWORD} e eu te chamo no WhatsApp" };
+        const map: Record<string, string> = { full: "", link: ctaFor(values.language, "link"), material: ctaFor(values.language, "material"), whats: ctaFor(values.language, "whats") };
         if (picked) { onCta(map[picked] ?? ""); return true; }
         const typed = t.trim().slice(0, 190);
         if (typed.length < 8) return false;
-        onCta(typed.includes("{KEYWORD}") ? typed : `${typed.replace(/[.!\s]+$/, "")}. Comente {KEYWORD} para receber`);
+        onCta(typed.includes("{KEYWORD}") ? typed : `${typed.replace(/[.!\s]+$/, "")}. ${ctaSuffix(values.language)}`);
         return true;
       } },
     { id: "keyword", question: "Qual palavra a pessoa vai comentar?", hint: "É a palavra que dispara a sua automação de comentários (ex.: QUERO). Escreva e aperte Enter.",
-      options: [{ value: "QUERO", label: "QUERO" }, { value: "LINK", label: "LINK" }, { value: "EU QUERO", label: "EU QUERO" }, { value: "INFO", label: "INFO" }],
-      answer: values.keyword.trim() ? values.keyword.trim().toUpperCase() : "QUERO",
+      options: keywordsFor(values.language).slice(0, 4).map((k) => ({ value: k, label: k })),
+      answer: values.keyword.trim() ? values.keyword.trim().toUpperCase() : defaultKeyword(values.language),
       apply: (t, picked) => { const k = (picked ?? t).trim().slice(0, 30); if (!k) return false; onKeyword(k); return true; } },
     { id: "product", question: "Vai falar de algum produto?", hint: "Escreva o nome do produto e aperte Enter, ou pule.",
       options: [{ value: "skip", label: "Não, só o vídeo" }],
       answer: values.product.trim() ? values.product.trim().slice(0, 40) : "Sem produto",
       apply: (t, picked) => { if (picked === "skip" || !t.trim()) { onProduct(""); return true; } onProduct(t.trim().slice(0, 120)); return true; } },
-    { id: "camera", question: "Qual estilo de câmera?", hint: "Toque numa opção ou descreva (ex.: celular na mão, de perto).",
+    { id: "style", question: "Qual o estilo do vídeo?", hint: "Descreva como quer o vídeo (ex.: bem natural, como um depoimento) ou escolha o formato de câmera.",
+      options: [{ value: "camera", label: "Escolher o formato de câmera" }, { value: "skip", label: "Deixar automático" }],
+      answer: styleAnswer,
+      apply: (t, picked) => {
+        if (picked === "skip") { setWantCamera(false); setStyleAnswer("Automático"); return true; }
+        const talksCamera = !picked && /c[aâ]mera/i.test(t) && t.trim().split(/\s+/).length <= 8;
+        if (picked === "camera" || talksCamera) { setWantCamera(true); setStyleAnswer("Formato de câmera"); return true; }
+        const desc = t.trim().slice(0, 300);
+        if (!desc) return false;
+        onExtra(`Estilo do vídeo: ${desc}`); setWantCamera(false); setStyleAnswer(desc.length > 40 ? `${desc.slice(0, 40)}…` : desc); return true;
+      } },
+    ...(wantCamera ? [{ id: "camera", question: "Qual formato de câmera?", hint: "Toque numa opção ou descreva (ex.: celular na mão, de perto).",
       options: [{ value: "selfie", label: "Selfie, celular na mão" }, { value: "tripod", label: "Tripé fixo" }, { value: "close", label: "De perto, rosto" }, { value: "skip", label: "Deixar automático" }],
       answer: "Câmera definida",
-      apply: (t, picked) => {
+      apply: (t: string, picked?: string) => {
         const map: Record<string, string> = { selfie: "selfie vertical com o celular na mão", tripod: "câmera fixa em tripé, plano médio", close: "close no rosto, bem de perto" };
         if (picked === "skip") return true;
         const desc = picked ? map[picked] : t.trim();
         if (!desc) return false;
         onExtra(`Câmera: ${desc}`); return true;
-      } },
+      } } satisfies Step] : []),
     { id: "extra", question: "Quer mudar mais alguma coisa?", hint: "Ex.: cenário numa cozinha, pessoa mais jovem. Escreva e aperte Enter, ou siga.",
       options: [{ value: "skip", label: "Não, pode seguir" }],
       answer: "Ajustes anotados",

@@ -9,6 +9,7 @@ import { LinkVideo } from "@/components/app/link-video";
 import { ShopeeImport } from "@/components/app/shopee-import";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SENT_KEY, TOUCH_KEY } from "@/lib/clone-keys";
+import { defaultKeyword, keywordsFor, translateKeyword } from "@/lib/clone-language";
 import { JoinGuide } from "@/components/app/join-guide";
 import { takeKind, takeTag, withTake, type TakeKind } from "@/lib/take-kinds";
 import { FlowRunPanel } from "@/components/app/flow-run-panel";
@@ -173,7 +174,6 @@ const LANGUAGES = [
   { value: "de", text: "Alemão", cta: "Kommentiere {KEYWORD}, um das ganze Video zu sehen" },
   { value: "it", text: "Italiano", cta: "Scrivi {KEYWORD} nei commenti per vedere il video completo" },
 ];
-const KEYWORDS = ["QUERO", "EU QUERO", "LINK", "INFO", "GUIA", "AULA"];
 const CTA_PRESETS = [
   "Comente {KEYWORD} para assistir o vídeo completo",
   "Comente {KEYWORD} que eu te mando o link",
@@ -392,11 +392,11 @@ function Chips<T extends string | number>({ label, options, value, onPick, disab
 }
 
 /** Escolha da palavra-chave: exemplos clicáveis ou escrita livre (maiúsculas e minúsculas, se o membro autorizar). */
-function KeywordPicker({ keyword, keepCase, disabled, onChange, onKeepCase, placeholder }: { keyword: string; keepCase: boolean; disabled?: boolean; onChange: (value: string) => void; onKeepCase: (value: boolean) => void; placeholder: string }) {
+function KeywordPicker({ keyword, keepCase, disabled, onChange, onKeepCase, placeholder, language }: { language?: string; keyword: string; keepCase: boolean; disabled?: boolean; onChange: (value: string) => void; onKeepCase: (value: boolean) => void; placeholder: string }) {
   return (
     <div className="space-y-2">
       <p className="text-xs text-muted-foreground">Exemplos de palavra-chave. Clique em um ou escreva a sua abaixo.</p>
-      <Chips label="Exemplos de palavra-chave" disabled={disabled} value={keyword} onPick={onChange} options={KEYWORDS.map((k) => ({ value: k, text: k }))} />
+      <Chips label="Exemplos de palavra-chave" disabled={disabled} value={keyword} onPick={onChange} options={keywordsFor(language).map((k) => ({ value: k, text: k }))} />
       <input value={keyword} onChange={(event) => onChange(keepCase ? event.target.value : event.target.value.toUpperCase())} disabled={disabled} maxLength={30} placeholder={placeholder} aria-label="Escrever a minha palavra-chave" className={inputClass} />
       <label className="flex items-center gap-2 text-xs text-muted-foreground">
         <input type="checkbox" checked={keepCase} disabled={disabled} onChange={(event) => onKeepCase(event.target.checked)} className="size-4" />
@@ -556,7 +556,7 @@ export function CloneWizard() {
     setImgs({});
     setBuilt({});
     const isDefault = (text: string) => ALL_CTAS.includes(text) || !text.trim();
-    setP((cur) => ({ ...cur, language, cta: isDefault(cur.cta) ? LANGUAGES.find((item) => item.value === language)?.cta ?? cur.cta : cur.cta, scenes: [], mix: NO_MIX, variations: [], images: [], videos: [], approved: {}, checks: {}, gen: {}, final: {} }));
+    setP((cur) => ({ ...cur, language, keyword: translateKeyword(cur.keyword, cur.language, language), cta: isDefault(cur.cta) ? LANGUAGES.find((item) => item.value === language)?.cta ?? cur.cta : cur.cta, scenes: [], mix: NO_MIX, variations: [], images: [], videos: [], approved: {}, checks: {}, gen: {}, final: {} }));
   };
   const chooseMode = (next: "free" | "auto") => {
     setMode(next);
@@ -564,7 +564,7 @@ export function CloneWizard() {
   };
   useEffect(() => {
     if (!ready) return;
-    fetch(`${RENDER}/status`).then((r) => (r.ok ? r.json() : null)).then((data) => { setRender(data?.enabled === true ? { enabled: true } : null); if (data?.enabled === true) setP((cur) => (cur.keyword.trim() ? cur : { ...cur, keyword: "QUERO" })); }).catch(() => setRender(null));
+    fetch(`${RENDER}/status`).then((r) => (r.ok ? r.json() : null)).then((data) => { setRender(data?.enabled === true ? { enabled: true } : null); if (data?.enabled === true) setP((cur) => (cur.keyword.trim() ? cur : { ...cur, keyword: defaultKeyword(cur.language) })); }).catch(() => setRender(null));
   }, [ready]);
   // Depois de atualizar a página, traz de volta o que já foi gerado e salvo.
   useEffect(() => {
@@ -967,7 +967,7 @@ export function CloneWizard() {
     setCanResume(false);
     let proj = projRef.current;
     if (proj.reference.trim().length < 20 && proj.notes.trim().length < 20) { setError(ptError("Send the reference")); return; }
-    if (!proj.keyword.trim() && textOnly) { proj = { ...proj, keyword: "QUERO" }; projRef.current = proj; setP(proj); }
+    if (!proj.keyword.trim() && textOnly) { proj = { ...proj, keyword: defaultKeyword(proj.language) }; projRef.current = proj; setP(proj); }
     if (!proj.keyword.trim()) { setError("Escolha a palavra-chave da CTA antes de começar."); return; }
     lastRunRef.current = textOnly;
     runningRef.current = true;
@@ -1725,7 +1725,7 @@ export function CloneWizard() {
                     onCta={(value) => patch({ cta: value || (LANGUAGES.find((l) => l.value === p.language)?.cta ?? p.cta) })}
                     onProduct={(value) => patch({ product: value })}
                     onExtra={(value) => setP((cur) => ({ ...cur, changes: [cur.changes, value].filter(Boolean).join(" | ").slice(0, 600) }))}
-                   onFinish={() => { setQuestDone(true); setP((cur) => (cur.keyword.trim() ? cur : { ...cur, keyword: "QUERO" })); }} hasVideo={questHold || hasReference || !!refFile} />
+                   onFinish={() => { setQuestDone(true); setP((cur) => (cur.keyword.trim() ? cur : { ...cur, keyword: defaultKeyword(cur.language) })); }} hasVideo={questHold || hasReference || !!refFile} />
                   </div>
                   ) : (
                     <p className="text-sm text-muted-foreground">Escolha o vídeo ou a imagem acima. Depois eu faço as perguntas e o resto é automático.</p>
@@ -2037,7 +2037,7 @@ export function CloneWizard() {
                     <p className="text-xs text-muted-foreground">{p.count} {p.count === 1 ? "vídeo" : "vídeos"} × {p.sceneCount} {p.sceneCount === 1 ? "cena" : "cenas"} = {p.count * p.sceneCount} cenas para animar. Tempo estimado: cerca de {Math.max(2, Math.ceil((p.count * p.sceneCount * (15 + 180)) / 3 / 60))} min, e o app avisa cada etapa.</p>
                   </Group>
                   <Group label="Palavra-chave da CTA">
-                    <KeywordPicker keyword={p.keyword} keepCase={p.keepCase} placeholder="Ou escreva outra palavra" onChange={(keyword) => patch({ keyword })} onKeepCase={(keepCase) => patch({ keepCase, keyword: keepCase ? p.keyword : p.keyword.toUpperCase() })} />
+                    <KeywordPicker language={p.language} keyword={p.keyword} keepCase={p.keepCase} placeholder="Ou escreva outra palavra" onChange={(keyword) => patch({ keyword })} onKeepCase={(keepCase) => patch({ keepCase, keyword: keepCase ? p.keyword : p.keyword.toUpperCase() })} />
                   </Group>
                   <Button type="button" size="lg" className="w-full rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] text-white sm:w-auto" onClick={() => void runAll()} disabled={working || (p.reference.trim().length < 20 && p.notes.trim().length < 20) || !p.keyword.trim()}>
                     {Object.keys(p.gen).length > 0 || p.scenes.length > 0 ? "Continuar de onde parou" : "Criar meus vídeos automaticamente"}
@@ -2242,7 +2242,7 @@ export function CloneWizard() {
                   <input value={p.product} onChange={(event) => patch({ product: event.target.value })} disabled={p.ctaLocked} maxLength={120} className={inputClass} />
                 </Field>
                 <Group label="Palavra-chave">
-                  <KeywordPicker keyword={p.keyword} keepCase={p.keepCase} disabled={p.ctaLocked} placeholder="LIMON" onChange={(keyword) => patch({ keyword })} onKeepCase={(keepCase) => patch({ keepCase, keyword: keepCase ? p.keyword : p.keyword.toUpperCase() })} />
+                  <KeywordPicker language={p.language} keyword={p.keyword} keepCase={p.keepCase} disabled={p.ctaLocked} placeholder="LIMON" onChange={(keyword) => patch({ keyword })} onKeepCase={(keepCase) => patch({ keepCase, keyword: keepCase ? p.keyword : p.keyword.toUpperCase() })} />
                 </Group>
               </div>
               {p.copyMode === "same" && (
