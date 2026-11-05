@@ -12,6 +12,7 @@
   const IMAGE_WAIT_MS = 4 * 60 * 1000;
   const VIDEO_WAIT_MS = 25 * 60 * 1000;
   const RETRIES = 3;
+  let roundNo = 0; // 0 = primeira rodada; 2 = último recurso (anima só pelo texto, espera mais)
 
   // Dorme em fatias curtas e, se o membro clicou em Parar, aborta na hora (em vez de esperar a etapa acabar).
   const sleep = async (ms) => {
@@ -1023,7 +1024,8 @@
     }
     setNow(`${label}: mandando animar a imagem…`);
     await configure("video");
-    try { await chooseStartFrame(image.src, true); } catch (pickErr) {
+    if (roundNo >= 2) setNow(`${label}: último recurso, animando só pelo texto…`);
+    else try { await chooseStartFrame(image.src, true); } catch (pickErr) {
       if (/vi:|Início|Incluir/.test(String(pickErr.message)) && attemptNo >= RETRIES) setNow(`${label}: não consegui escolher a imagem inicial, animando só pelo texto.`);
       else throw pickErr;
     }
@@ -1031,7 +1033,7 @@
     const known = new Set(tilesNow().map((t) => t.src));
     const count0 = known.size;
     await pressGenerate();
-    const appeared = await waitFor(() => { const now = tilesNow(); return now.length > count0 ? now.find((t) => !known.has(t.src)) || null : null; }, 30000, 700);
+    const appeared = await waitFor(() => { const now = tilesNow(); return now.length > count0 ? now.find((t) => !known.has(t.src)) || null : null; }, roundNo >= 1 ? 60000 : 30000, 700);
     if (!appeared) throw new Error("O Flow não começou a animar esta cena.");
     claimedTiles.add(appeared.src);
     return { src: appeared.src, tile: appeared.tile, t0: Date.now() };
@@ -1213,12 +1215,13 @@
     const onlyFirst = el("test").checked;
     await persist(); render();
     try {
-      // Duas rodadas: cenas que falharam na primeira são tentadas de novo sozinhas no fim, sem você clicar.
-      for (let round = 0; round < 2 && !stopFlag; round += 1) {
-        if (round === 1) {
+      // Três rodadas: cenas que falharam são tentadas de novo sozinhas, sem você clicar (a 3ª muda a forma: anima só pelo texto e espera mais).
+      for (let round = 0; round < 3 && !stopFlag; round += 1) {
+        roundNo = round;
+        if (round >= 1) {
           const pending = state.jobs.filter((j) => !state.done[j.key]);
           if (!pending.length) break;
-          setNow(`Tentando de novo ${pending.length} cena(s) que não saíram na primeira rodada…`);
+          setNow(`Tentando de novo ${pending.length} cena(s) que não saíram ${round === 1 ? "na primeira rodada" : "(último recurso, de outro jeito)"}…`);
           setError("");
         }
         if (round === 0 && !onlyFirst && el("fast").checked && state.jobs.filter((j) => !state.done[j.key]).length > 1) {
