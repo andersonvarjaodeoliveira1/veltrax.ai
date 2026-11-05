@@ -1212,7 +1212,6 @@ async def product_search(request: Request, db: AsyncSession = Depends(get_db)):
 async def _run_parts(system: str, output_type: type[BaseModel], parts: list[Any], model: Any = None) -> Any:
     from pydantic_ai import Agent
 
-    explicit = model
     own: list[Any] = []
     if model is None:
         from ...integrations import user_models
