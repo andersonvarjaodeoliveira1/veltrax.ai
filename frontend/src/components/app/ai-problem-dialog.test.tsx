@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { OPEN_ACCOUNT_AI_EVENT } from "@/lib/account-ai";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { AiProblemDialog } from "./ai-problem-dialog";
 
 afterEach(() => cleanup());
@@ -38,4 +38,15 @@ it("a primeira opção conecta a conta de IA do navegador, sem chave", async () 
   expect(opened).toHaveBeenCalled();
   expect(screen.queryByTestId("ai-problem")).toBeNull();
   window.removeEventListener(OPEN_ACCOUNT_AI_EVENT, opened);
+});
+
+it("falha da conta de IA oferece Tentar de novo e avisa o assistente para retomar", async () => {
+  const retried = vi.fn();
+  window.addEventListener("gv-ai-retry", retried);
+  render(<AiProblemDialog />);
+  act(() => { window.dispatchEvent(new CustomEvent("gv-ai-problem", { detail: { kind: "account", provider: "gemini", reason: "timeout" } })); });
+  const buttons = await screen.findAllByRole("button", { name: "Tentar de novo" });
+  fireEvent.click(buttons[0]);
+  expect(retried).toHaveBeenCalledTimes(1);
+  window.removeEventListener("gv-ai-retry", retried);
 });

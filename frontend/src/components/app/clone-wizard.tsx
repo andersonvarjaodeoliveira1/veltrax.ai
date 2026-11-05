@@ -950,6 +950,17 @@ export function CloneWizard() {
 
   /** Do vídeo de referência até os vídeos finais montados, sem parar no meio. Pode ser retomado. */
   /** `textOnly`: só escreve tudo (cenas, variações, prompts) e para, pronto para enviar ao Flow. Não gera imagens nem vídeos. */
+  const lastRunRef = useRef(false);
+  const runningRef = useRef(false);
+  const runAllRef = useRef<(textOnly?: boolean) => Promise<void>>(async () => undefined);
+  runAllRef.current = (textOnly = false) => runAll(textOnly);
+  // "Tentar de novo" do aviso da IA: retoma de onde parou, sem perder as respostas já dadas.
+  useEffect(() => {
+    const retry = () => { if (!runningRef.current) void runAllRef.current(lastRunRef.current); };
+    window.addEventListener("gv-ai-retry", retry);
+    return () => window.removeEventListener("gv-ai-retry", retry);
+  }, []);
+
   async function runAll(textOnly = false) {
     stopRef.current = false;
     setError(null);
@@ -958,6 +969,8 @@ export function CloneWizard() {
     if (proj.reference.trim().length < 20 && proj.notes.trim().length < 20) { setError(ptError("Send the reference")); return; }
     if (!proj.keyword.trim() && textOnly) { proj = { ...proj, keyword: "QUERO" }; projRef.current = proj; setP(proj); }
     if (!proj.keyword.trim()) { setError("Escolha a palavra-chave da CTA antes de começar."); return; }
+    lastRunRef.current = textOnly;
+    runningRef.current = true;
     const taskId = startTask(textOnly ? "Preparando seus vídeos" : "Criando seus vídeos automaticamente");
     const runStart = Date.now();
     let doneW = 0;
@@ -1062,6 +1075,7 @@ export function CloneWizard() {
       if (!stopped) setError(err instanceof Error ? err.message : "Não foi possível continuar. Tente de novo.");
       endTask(taskId, "error", stopped ? "Parado. Clique em continuar para seguir de onde parou." : "Parou aqui. Clique em continuar para seguir de onde parou.");
     } finally {
+      runningRef.current = false;
       setAuto(null);
     }
   }
@@ -1491,7 +1505,7 @@ export function CloneWizard() {
       if (policyBlocked) return;
       markSent();
       void copy("flow-send", flowPackage());
-      void pushPackage(flowPackage()).then((ok) => { if (!ok) { setError("A extensão não confirmou o recebimento do pacote. Aperte Ctrl+F5 nesta página (e confira se a extensão está ligada e na versão 1.21.7) e clique em Enviar para o Flow de novo."); window.open(FLOW_HOME_URL, "_blank", "noopener"); } });
+      void pushPackage(flowPackage()).then((ok) => { if (!ok) { setError("A extensão não confirmou o recebimento do pacote. Aperte Ctrl+F5 nesta página (e confira se a extensão está ligada e na versão 1.21.8) e clique em Enviar para o Flow de novo."); window.open(FLOW_HOME_URL, "_blank", "noopener"); } });
     };
     const assembling_ = Object.values(built).some((b) => b.state === "running");
     return (
@@ -1756,7 +1770,7 @@ export function CloneWizard() {
 
         {ready && (redirectIn !== null || redirectBlocked) && (
           <section role="status" className="space-y-2 rounded-[18px] border border-[#7B3FE4]/60 bg-[#7B3FE4]/15 p-4" data-testid="flow-redirect">
-            <p className="text-sm font-semibold">{redirectBlocked ? "A extensão não respondeu. Recarregue esta página (F5) e confira se a extensão 1.21.7 está ligada; ou abra o Flow pelo botão abaixo." : `Abrindo o Flow e enviando tudo em ${redirectIn}s…`}</p>
+            <p className="text-sm font-semibold">{redirectBlocked ? "A extensão não respondeu. Recarregue esta página (F5) e confira se a extensão 1.21.8 está ligada; ou abra o Flow pelo botão abaixo." : `Abrindo o Flow e enviando tudo em ${redirectIn}s…`}</p>
             <div className="h-1.5 overflow-hidden rounded-full bg-border"><div className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A98BFF] transition-all duration-1000" style={{ width: `${redirectBlocked ? 100 : ((1 - (redirectIn ?? 1)) / 1) * 100}%` }} /></div>
             <p className="text-xs text-muted-foreground">Tudo pronto. A extensão recebe o pacote, abre um projeto novo e gera as imagens e os vídeos sozinha. Você não precisa copiar nem colar nada.</p>
             <div className="flex gap-2">

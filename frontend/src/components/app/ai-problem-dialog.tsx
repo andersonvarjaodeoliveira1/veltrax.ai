@@ -8,6 +8,8 @@ import { accountReasonText, ACCOUNT_SITE_NAME, aiBillingUrl, type AiProblem } fr
 import { ADMIN_WHATSAPP_URL } from "@/lib/token-balance";
 import { OPEN_ACCOUNT_AI_EVENT } from "@/lib/account-ai";
 
+export const AI_RETRY_EVENT = "gv-ai-retry";
+
 const NAMES: Record<string, string> = {
   openai: "OpenAI (ChatGPT)", anthropic: "Anthropic (Claude)", gemini: "Google (Gemini)", openrouter: "OpenRouter", huggingface: "Hugging Face", ollama: "Ollama",
 };
@@ -33,6 +35,7 @@ function copy(problem: AiProblem): Copy {
       title: `Não consegui gerar pela sua conta do ${name}`,
       text: accountReasonText(problem.provider, problem.reason ?? "failed"),
       choices: [
+        { title: "Tentar de novo", text: "Às vezes o site demora só dessa vez. Eu continuo de onde parou, sem perder o que você já respondeu.", action: [{ label: "Tentar de novo", event: AI_RETRY_EVENT }] },
         { title: "Conferir a sua conta", text: `Abra o ${name} neste Chrome, entre na conta e deixe o ClipGringa aberto. Depois é só gerar de novo.`, action: [] },
         { title: "Usar uma chave de API", text: "Conecte uma chave em Minhas APIs e a geração não depende da conta aberta no navegador.", action: [MY_APIS] },
         { title: "Pedir ajuda", text: "Se continuar, fale com a gente.", action: [ADMIN] },

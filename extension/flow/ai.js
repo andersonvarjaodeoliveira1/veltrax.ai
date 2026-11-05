@@ -173,6 +173,21 @@
     setText(composer, prompt);
     await sleep(500);
     await send(composer);
+    // Confere se o pedido saiu de verdade (campo esvaziou, botão de parar apareceu ou já há resposta). Senão tenta de novo uma vez.
+    const wentOut = async (ms) => {
+      for (let i = 0; i < ms / 300; i += 1) {
+        const left = (composer.innerText || composer.value || composer.textContent || "").replace(/\s+/g, "").length;
+        if (first(SEL.stop) || replyCount() > before || left < Math.floor(prompt.replace(/\s+/g, "").length * 0.3)) return true;
+        await sleep(300);
+      }
+      return false;
+    };
+    if (!(await wentOut(6000))) {
+      pressEnter(composer);
+      const again = first(SEL.send);
+      if (again && !again.disabled) again.click();
+      if (!(await wentOut(6000))) return { ok: false, error: "failed:o site não aceitou o envio do pedido" };
+    }
 
     const deadline = Date.now() + timeoutMs;
     let started = false;
