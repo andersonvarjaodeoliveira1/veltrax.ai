@@ -102,6 +102,16 @@ function ReportPanel({ email: initialEmail, onClose }: { email: string; onClose:
     setState("idle");
   }
 
+  const whatsappHref = () => {
+    const label = kind === "bug" ? "Erro" : "Sugestão";
+    const text = `*ClipGringa · ${label}*\n${message.trim().slice(0, 1500)}\n\nPágina: ${pathname}${email.trim() ? `\nE-mail: ${email.trim()}` : ""}`;
+    return `https://wa.me/5511913142143?text=${encodeURIComponent(text)}`;
+  };
+  const sendWhatsapp = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    if (message.trim().length < 5) { event.preventDefault(); setError("Conte o que aconteceu em pelo menos uma frase."); return; }
+    setError("");
+  };
+
   return (
     <PanelShell title="CONTA PRA GENTE" subtitle="erro, sugestão ou ideia" onClose={onClose}>
       {state === "done" ? (
@@ -124,7 +134,8 @@ function ReportPanel({ email: initialEmail, onClose }: { email: string; onClose:
           <label className="block space-y-1"><span className="text-xs text-white/60">Seu telefone com DDD (WhatsApp)</span>
             <input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="(11) 90000-0000" className="w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 placeholder:text-white/30 focus:border-[#A98BFF] focus:outline-none" /></label>
           {error && <p role="alert" className="text-xs text-[#F0466B]">{error}</p>}
-          <button type="submit" disabled={state === "sending"} className="w-full rounded-full bg-white py-2.5 text-sm font-bold text-black disabled:opacity-60">{state === "sending" ? "Enviando…" : "Enviar"}</button>
+          <a href={whatsappHref()} target="_blank" rel="noopener noreferrer" onClick={sendWhatsapp} className="block w-full rounded-full bg-[#25D366] py-2.5 text-center text-sm font-bold text-black">Enviar pelo WhatsApp</a>
+          <button type="submit" disabled={state === "sending"} className="w-full rounded-full border border-white/25 py-2.5 text-sm font-semibold text-white disabled:opacity-60">{state === "sending" ? "Enviando…" : "Enviar por e-mail para a equipe"}</button>
           <p className="text-[11px] text-white/45">Vai junto, para a gente entender: a página em que você está e o seu pedido atual. Nunca coloque senhas.</p>
         </form>
       )}
