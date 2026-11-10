@@ -38,7 +38,7 @@ def brief(exc: Exception, limit: int = 600) -> str:
     return text[:limit]
 
 
-def ai_fail(exc: Exception | None, fallback: str) -> HTTPException:
+def ai_fail(exc: Exception | None, fallback: str, source: str = "") -> HTTPException:
     """Diz de quem é a falha: sem créditos na chave, chave recusada, limite de uso da API ou erro genérico."""
     from .ai_relay import RelayError
 
@@ -52,5 +52,10 @@ def ai_fail(exc: Exception | None, fallback: str) -> HTTPException:
         return HTTPException(status_code=503, detail="AI_QUOTA")
     if exc is not None:
         # Falha que não é de conta/chave/limite: devolve o tipo e um resumo curto (sem chaves) para dar para identificar a causa.
-        return HTTPException(status_code=502, detail=f"AI_ERROR:{provider_of(exc) or 'ia'}:{brief(exc)}|{fallback}")
+        who = provider_of(exc)
+        if source.startswith("account:"):
+            who = "conta-" + source.split(":", 1)[1]  # a conta ligada pela extensão (Gemini, ChatGPT ou Claude)
+        elif not who and source.startswith("api:"):
+            who = {"claude": "anthropic", "chatgpt": "openai"}.get(source[4:], source[4:])
+        return HTTPException(status_code=502, detail=f"AI_ERROR:{who or 'ia'}:{brief(exc)}|{fallback}")
     return HTTPException(status_code=502, detail=fallback)

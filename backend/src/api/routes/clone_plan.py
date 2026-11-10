@@ -298,6 +298,17 @@ async def _build_model() -> Any:
 from ...ai_errors import ai_fail as _ai_fail, is_key_error as _is_key_error, is_no_credit_error as _is_no_credit_error, is_quota_error as _is_quota_error, provider_of as _provider_of  # noqa: F401
 
 
+def _own_source(candidate: Any) -> str:
+    from ...ai_relay import path_of_model
+
+    return path_of_model(candidate)
+
+
+def _fail_for(own_error: Exception | None, exc: Exception | None, fallback: str, own_src: str) -> HTTPException:
+    blamed = _blame(own_error, exc)
+    return _ai_fail(blamed, fallback, own_src if blamed is not None and blamed is own_error else "")
+
+
 def _blame(own_error: Exception | None, last_error: Exception | None) -> Exception | None:
     """Se a chave própria da pessoa foi recusada ou está sem créditos, é esse o motivo que ela precisa ver
     (e não o limite de uma reserva que só entrou depois)."""
@@ -358,8 +369,9 @@ async def _run(system: str, output_type: type[BaseModel], prompt: str, model: An
         candidates = own + [model] + reserve + (await _fallback_models() if explicit is None else [])
     last_error: Exception | None = None
     own_error: Exception | None = None
+    own_src = ""
     for index, candidate in enumerate(candidates):
-        agent = Agent(candidate, output_type=output_type, system_prompt=system, output_retries=2)
+        agent = Agent(candidate, output_type=output_type, system_prompt=system, output_retries=4 if candidate in own else 2)  # a IA da própria pessoa (conta/chave) é a única opção quando os tokens acabam: dá mais chances de acertar o formato
         try:
             result = await asyncio.wait_for(agent.run(prompt), timeout=_run_timeout(candidate))
             from ...usage import record_usage
@@ -381,14 +393,15 @@ async def _run(system: str, output_type: type[BaseModel], prompt: str, model: An
             last_error = exc
             if candidate in own and own_error is None:
                 own_error = exc
+                own_src = _own_source(candidate)
             if index + 1 < len(candidates):
                 # Qualquer falha de um modelo (cota, chave sem saldo, modelo indisponível) passa para o próximo.
                 logger.warning("clone plan: %s failed (%s: %s), trying the next model", candidate, type(exc).__name__, str(exc)[:300])
                 continue
             logger.exception("clone plan stage failed")
-            raise _ai_fail(_blame(own_error, exc), "Could not generate this step. Try again.")
+            raise _fail_for(own_error, exc, "Could not generate this step. Try again.", own_src)
     logger.error("clone plan: every model failed: %s", last_error)
-    raise _ai_fail(_blame(own_error, last_error), "Could not generate this step. Try again.")
+    raise _fail_for(own_error, last_error, "Could not generate this step. Try again.", own_src)
 
 
 
@@ -1227,8 +1240,9 @@ async def _run_parts(system: str, output_type: type[BaseModel], parts: list[Any]
         candidates = [model]
     last_error: Exception | None = None
     own_error: Exception | None = None
+    own_src = ""
     for index, candidate in enumerate(candidates):
-        agent = Agent(candidate, output_type=output_type, system_prompt=system, output_retries=2)
+        agent = Agent(candidate, output_type=output_type, system_prompt=system, output_retries=4 if candidate in own else 2)  # a IA da própria pessoa (conta/chave) é a única opção quando os tokens acabam: dá mais chances de acertar o formato
         try:
             result = await asyncio.wait_for(agent.run(parts), timeout=_run_timeout(candidate))
             from ...usage import record_usage
@@ -1250,14 +1264,15 @@ async def _run_parts(system: str, output_type: type[BaseModel], parts: list[Any]
             last_error = exc
             if candidate in own and own_error is None:
                 own_error = exc
+                own_src = _own_source(candidate)
             # Cota esgotada, modelo fora do ar ou que não aceita imagem: tenta o próximo da lista.
             if index + 1 < len(candidates):
                 logger.warning("clone product look: %s failed (%s), trying the next model", candidate, type(exc).__name__)
                 continue
             logger.exception("clone product look failed")
-            raise _ai_fail(_blame(own_error, exc), "Could not read the photos. Try again.")
+            raise _fail_for(own_error, exc, "Could not read the photos. Try again.", own_src)
     logger.error("clone product look: every model failed: %s", last_error)
-    raise _ai_fail(_blame(own_error, last_error), "Could not read the photos. Try again.")
+    raise _fail_for(own_error, last_error, "Could not read the photos. Try again.", own_src)
 
 
 # ---------------------------------------------------------------------------

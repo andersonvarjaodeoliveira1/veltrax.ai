@@ -59,7 +59,12 @@ export function aiErrorText(detail: unknown): string | null {
   if (/AI_KEY_INVALID/.test(detail)) return "A IA recusou a chave (inválida, sem saldo ou sem permissão). Confira a sua chave em Minhas APIs ou fale com o administrador.";
   if (/AI_QUOTA/.test(detail)) return "A API da IA está no limite de uso agora. Espere alguns minutos e tente de novo, ou conecte a sua própria chave em Minhas APIs.";
   if (/TOKENS_EXHAUSTED/.test(detail)) return "Seus tokens acabaram. Gere pela sua conta do Gemini, ChatGPT ou Claude (conecte pela extensão em Minhas APIs), use a sua própria chave de API ou chame o administrador para liberar mais.";
-  const generic = /^AI_ERROR:([a-z]+):([\s\S]*?)\|/.exec(detail);
+  const generic = /^AI_ERROR:([a-z-]+):([\s\S]*?)\|/.exec(detail);
+  if (generic && /output validation|maximum retries/i.test(generic[2])) {
+    const acct = /^conta-(gemini|chatgpt|claude)$/.exec(generic[1])?.[1];
+    const ai = acct ? `a sua conta do ${acct === "gemini" ? "Gemini" : acct === "chatgpt" ? "ChatGPT" : "Claude"} (ligada pela extensão)` : generic[1] === "ia" ? "a IA de texto" : `a chave ${name} em Minhas APIs`;
+    return `Onde deu o problema: ${ai}, que escreve os textos e prompts, respondeu fora do formato pedido. Não é o Flow nem a geração dos vídeos. Como arrumar: clique em Tentar de novo; se repetir, conecte outra IA em Minhas APIs (por exemplo a chave do Gemini) ou chame o administrador para liberar tokens.`;
+  }
   if (generic) {
     const who = generic[1] === "openai" ? "da OpenAI" : generic[1] === "anthropic" ? "da Anthropic (Claude)" : generic[1] === "gemini" ? "do Google (Gemini)" : "da IA";
     return `A IA ${who} respondeu com um erro que não é de saldo, de chave nem de limite. Tente de novo; se repetir, envie este texto ao suporte: ${generic[2].trim()}`;

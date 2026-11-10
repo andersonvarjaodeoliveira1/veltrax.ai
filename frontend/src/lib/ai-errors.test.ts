@@ -31,3 +31,11 @@ it("explica o motivo quando a geração pela conta (extensão) falha", () => {
   expect(aiErrorText("AI_ACCOUNT:claude:timeout")).toMatch(/Claude demorou/);
   expect(aiErrorText("AI_ACCOUNT:gemini:blocked")).toMatch(/verificação/);
 });
+
+it("erro de validação da IA própria vira aviso claro", () => {
+  const text = aiErrorText("AI_ERROR:gemini:UnexpectedModelBehavior: Exceeded maximum retries (2) for output validation|x");
+  expect(text).toContain("fora do formato");
+  expect(text).toContain("Onde deu o problema");
+  expect(text).toContain("Não é o Flow");
+  expect(aiErrorText("AI_ERROR:conta-gemini:UnexpectedModelBehavior: Exceeded maximum retries (2) for output validation|x")).toContain("sua conta do Gemini");
+});
