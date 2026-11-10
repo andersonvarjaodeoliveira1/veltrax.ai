@@ -312,7 +312,16 @@ def account_model(user_id: str | None) -> Any | None:
             from pydantic_ai.messages import TextPart
 
             return ModelResponse(parts=[TextPart(content=text)])
-        return ModelResponse(parts=[ToolCallPart(tool_name=tool.name, args=extract_json(text))])
+        body = extract_json(text)
+        try:
+            json.loads(body)
+        except ValueError:
+            # Não é JSON completo (resposta cortada ou com texto em volta): anota o começo e o fim para achar a causa no admin.
+            from .activity import TEXT_FAIL, note
+
+            flat = " ".join(text.split())
+            note(user_id, TEXT_FAIL, f"{site}: resposta fora do formato ({len(text)} caracteres) · início: {flat[:90]} · fim: {flat[-90:]}")
+        return ModelResponse(parts=[ToolCallPart(tool_name=tool.name, args=body)])
 
     model = FunctionModel(respond, model_name=f"conta-{site}")
     model.is_account_relay = True  # type: ignore[attr-defined]
