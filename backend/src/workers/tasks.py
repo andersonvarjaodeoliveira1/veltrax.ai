@@ -127,6 +127,19 @@ async def process_video_task(
 
 from ..services.editor_service import prepare_editor, export_editor, combine_editor
 
+
+async def publish_facebook(ctx: Dict[str, Any]) -> Dict[str, int]:
+    """Módulo Facebook (em construção): manda ao Facebook os posts pendentes das páginas conectadas."""
+    from ..database import AsyncSessionLocal
+    from ..facebook import publish_due
+
+    async with AsyncSessionLocal() as db:
+        try:
+            return await publish_due(db)
+        except Exception:  # noqa: BLE001 - tabela ainda não criada ou Meta fora do ar: tenta no próximo ciclo
+            logger.exception("Falha ao publicar no Facebook")
+            return {"enviados": 0, "falharam": 0}
+
 # Worker configuration for arq
 class WorkerSettings:
     """Configuration for arq worker."""
@@ -152,4 +165,6 @@ class WorkerSettings:
 
     # Worker pool settings
     max_jobs = 4  # Process up to 4 jobs simultaneously
-    cron_jobs = []
+    from arq import cron
+
+    cron_jobs = [cron(publish_facebook, minute=set(range(0, 60, 5)), run_at_startup=False, unique=True)]

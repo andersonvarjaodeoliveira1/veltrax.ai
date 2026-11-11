@@ -13,6 +13,7 @@ import { TranscriptPreview } from "@/components/transcript-preview";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { getClipUrl } from "@/lib/clip-actions";
+import { PostToPage } from "@/components/facebook/post-to-page";
 import { formatClipDuration } from "@/lib/generations";
 import { cn } from "@/lib/utils";
 
@@ -190,6 +191,7 @@ export function ClipFocus({ clip, taskId, index, total, busy, editable, onNaviga
                 <Button size="sm" onClick={onDownload} disabled={busy}>
                   {busy ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}Download
                 </Button>
+                <PostToPage clipId={clip.id} />
                 {editable && (
                   <Button size="sm" variant="outline" asChild>
                     <Link href={`/tasks/${taskId}/edit?clip=${clip.id}`}><Scissors className="size-4" />Open in editor</Link>

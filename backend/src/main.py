@@ -261,6 +261,12 @@ def create_app(
         app.include_router(offers_router)
     except Exception:  # pragma: no cover
         logging.getLogger(__name__).exception("Offers disabled")
+    try:  # EM CONSTRUÇÃO, só administradores: contas e páginas do Facebook
+        from .api.routes.facebook import router as facebook_router
+
+        app.include_router(facebook_router)
+    except Exception:  # pragma: no cover
+        logging.getLogger(__name__).exception("Facebook module disabled")
     try:  # BETA, isolated: vídeo final (juntar cenas, legenda e título)
         from .api.routes.final_video import router as final_video_router
 

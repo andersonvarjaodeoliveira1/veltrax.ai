@@ -5,7 +5,7 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowRight, Coins, CornerDownLeft, Download, Film, FolderOpen, LogOut, KeyRound, Link2, MessageCircle, Plus, Scissors, Search, Shield, ShoppingCart, Tag, UserRound, Workflow,
+  ArrowRight, Coins, CornerDownLeft, Download, Film, FolderOpen, LogOut, KeyRound, Link2, MessageCircle, Plus, Scissors, Megaphone, Search, Shield, ShoppingCart, Tag, UserRound, Workflow,
 } from "lucide-react";
 import { toast } from "sonner";
 import { TestBanner } from "@/components/app/test-banner";
@@ -110,7 +110,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // loaded — otherwise the page remounts and re-runs its initial fetches.
   const user = session?.user;
   const admin = Boolean((user as { is_admin?: boolean } | undefined)?.is_admin);
-  const items = admin ? [...NAV, { href: "/admin", label: "Admin", group: "Administração", icon: Shield, match: (p: string) => p.startsWith("/admin") }] : NAV;
+  const items = admin ? [
+    ...NAV,
+    { href: "/facebook", label: "Facebook", group: "Administração", icon: Megaphone, badge: "EM CONSTRUÇÃO", match: (p: string) => p.startsWith("/facebook") },
+    { href: "/admin", label: "Admin", group: "Administração", icon: Shield, match: (p: string) => p.startsWith("/admin") },
+  ] : NAV;
 
   return (
     <div data-app-shell={user ? "" : undefined} className={cn(user && "flex min-h-dvh bg-canvas")}>
