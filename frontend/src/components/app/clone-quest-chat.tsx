@@ -42,6 +42,7 @@ export function QuestChat({ values, languages, models, onCount, onScenes, onTake
   // Estilo do vídeo: a pessoa descreve; só se falar de câmera (ou tocar na opção) aparecem os formatos de câmera.
   const [wantCamera, setWantCamera] = useState(false);
   const [styleAnswer, setStyleAnswer] = useState("Automático");
+  const [angleAnswer, setAngleAnswer] = useState("Automático");
   const endRef = useRef<HTMLDivElement>(null);
   const num = (t: string, min: number, max: number) => { const n = parseInt((t.match(/\d+/) ?? [""])[0], 10); return Number.isFinite(n) && n >= min && n <= max ? n : null; };
 
@@ -129,6 +130,16 @@ export function QuestChat({ values, languages, models, onCount, onScenes, onTake
         if (!desc) return false;
         onExtra(`Câmera: ${desc}`); return true;
       } } satisfies Step] : []),
+    { id: "angle", question: "Qual ângulo para abrir o vídeo (o gancho)?", hint: "É o jeito de prender a atenção nos primeiros segundos. Toque numa opção ou descreva o seu.",
+      options: [{ value: "curiosity", label: "Curiosidade" }, { value: "problem", label: "O problema da pessoa" }, { value: "proof", label: "Prova ou resultado" }, { value: "question", label: "Uma pergunta" }, { value: "skip", label: "Deixar automático" }],
+      answer: angleAnswer,
+      apply: (t, picked) => {
+        if (picked === "skip") { setAngleAnswer("Automático"); return true; }
+        const label: Record<string, string> = { curiosity: "curiosidade que abre uma dúvida que a pessoa quer fechar", problem: "o problema da pessoa nas palavras dela", proof: "uma prova ou resultado concreto", question: "uma pergunta direta" };
+        const text = picked ? label[picked] : t.trim().slice(0, 200);
+        if (!text) return false;
+        onExtra(`Ângulo do gancho (primeira cena): ${text}`); setAngleAnswer(picked ? ({ curiosity: "Curiosidade", problem: "O problema da pessoa", proof: "Prova ou resultado", question: "Uma pergunta" } as Record<string, string>)[picked] : text.slice(0, 40)); return true;
+      } },
     { id: "extra", question: "Quer mudar mais alguma coisa?", hint: "Ex.: cenário numa cozinha, pessoa mais jovem. Escreva e aperte Enter, ou siga.",
       options: [{ value: "skip", label: "Não, pode seguir" }],
       answer: "Ajustes anotados",

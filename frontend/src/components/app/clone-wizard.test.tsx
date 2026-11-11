@@ -690,6 +690,7 @@ test("the quest chat collects the choices step by step with Enter and then offer
   await user.click(await screen.findByRole("button", { name: "QUERO" }));
   await user.click(await screen.findByRole("button", { name: "Não, só o vídeo" }));
   await user.click(await screen.findByRole("button", { name: "Deixar automático" }));
+  await user.click(await screen.findByRole("button", { name: "Deixar automático" }));
   await user.click(await screen.findByRole("button", { name: "Não, pode seguir" }));
   expect((await screen.findAllByText(/3 vídeos/)).length).toBeGreaterThan(0);
   expect(screen.getByText(/Minha copy: Minha copy própria/)).toBeInTheDocument();

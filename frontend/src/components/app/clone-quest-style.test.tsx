@@ -48,7 +48,7 @@ it("descrever o estilo do vídeo não mostra as opções de câmera", async () =
   await user.type(screen.getByLabelText("Qual o estilo do vídeo?"), "Bem natural, como um depoimento{Enter}");
   expect(onExtra).toHaveBeenCalledWith("Estilo do vídeo: Bem natural, como um depoimento");
   expect(screen.queryByRole("button", { name: "Tripé fixo" })).toBeNull();
-  expect(await screen.findByText("Quer mudar mais alguma coisa?")).toBeInTheDocument();
+  expect(await screen.findByText("Qual ângulo para abrir o vídeo (o gancho)?")).toBeInTheDocument();
 });
 
 it("falar de câmera mostra os formatos para escolher", async () => {
@@ -59,7 +59,7 @@ it("falar de câmera mostra os formatos para escolher", async () => {
   expect(await screen.findByText("Qual formato de câmera?")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Tripé fixo" }));
   await waitFor(() => expect(onExtra).toHaveBeenCalledWith("Câmera: câmera fixa em tripé, plano médio"));
-  expect(await screen.findByText("Quer mudar mais alguma coisa?")).toBeInTheDocument();
+  expect(await screen.findByText("Qual ângulo para abrir o vídeo (o gancho)?")).toBeInTheDocument();
 });
 
 it("tocar em Escolher o formato de câmera abre as opções", async () => {
@@ -84,4 +84,15 @@ it("não aceita mais de 12 cenas", async () => {
   await user.click(await screen.findByRole("button", { name: "1 vídeo" }));
   await user.type(await screen.findByLabelText("Quantas cenas em cada vídeo?"), "20{Enter}");
   expect(onScenes).not.toHaveBeenCalled();
+});
+
+it("pergunta o ângulo do gancho e manda para o pedido", async () => {
+  const user = userEvent.setup();
+  const { onExtra } = setup();
+  await untilStyle(user);
+  await user.click(await screen.findByRole("button", { name: "Deixar automático" }));
+  expect(await screen.findByText("Qual ângulo para abrir o vídeo (o gancho)?")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "O problema da pessoa" }));
+  await waitFor(() => expect(onExtra).toHaveBeenCalledWith(expect.stringContaining("Ângulo do gancho (primeira cena): o problema da pessoa")));
+  expect(await screen.findByText("Quer mudar mais alguma coisa?")).toBeInTheDocument();
 });
