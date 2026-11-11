@@ -50,7 +50,7 @@ def _row(row: Any) -> dict[str, Any]:
 
 @router.get("")
 async def list_offers(request: Request, db: AsyncSession = Depends(get_db)):
-    user_id = _user_id(request)
+    user_id = await _user_id(request, db)
     rows = await db.execute(
         text(f"SELECT {COLUMNS} FROM offers WHERE user_id = :u ORDER BY updated_at DESC LIMIT :n"),
         {"u": user_id, "n": MAX_OFFERS},
@@ -60,7 +60,7 @@ async def list_offers(request: Request, db: AsyncSession = Depends(get_db)):
 
 @router.post("")
 async def create_offer(request: Request, db: AsyncSession = Depends(get_db)):
-    user_id = _user_id(request)
+    user_id = await _user_id(request, db)
     values = _clean(await request.json())
     total = (await db.execute(text("SELECT COUNT(*) FROM offers WHERE user_id = :u"), {"u": user_id})).scalar() or 0
     if total >= MAX_OFFERS:
@@ -79,7 +79,7 @@ async def create_offer(request: Request, db: AsyncSession = Depends(get_db)):
 
 @router.put("/{offer_id}")
 async def update_offer(offer_id: str, request: Request, db: AsyncSession = Depends(get_db)):
-    user_id = _user_id(request)
+    user_id = await _user_id(request, db)
     values = _clean(await request.json())
     result = await db.execute(
         text(
@@ -97,7 +97,7 @@ async def update_offer(offer_id: str, request: Request, db: AsyncSession = Depen
 
 @router.delete("/{offer_id}")
 async def delete_offer(offer_id: str, request: Request, db: AsyncSession = Depends(get_db)):
-    user_id = _user_id(request)
+    user_id = await _user_id(request, db)
     result = await db.execute(text("DELETE FROM offers WHERE id=:id AND user_id=:u"), {"id": offer_id, "u": user_id})
     await db.commit()
     if not result.rowcount:
