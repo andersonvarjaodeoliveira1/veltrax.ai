@@ -278,8 +278,24 @@ def _variations_in(data: dict[str, Any], count: int) -> list[dict[str, str]]:
 def _spoken(scenes: list[dict[str, str]], cta: str) -> list[str]:
     """Spoken lines per scene. The locked CTA closes the last scene, identical everywhere."""
     lines = [scene["line"] for scene in scenes]
-    lines[-1] = _text(f"{lines[-1].rstrip()} {cta}", 400)
+    lines[-1] = _text(f"{_fit_before_cta(lines[-1], cta)} {cta}", 400)
     return lines
+
+
+CLIP_WORDS = 20  # fala que cabe nos 8 segundos do clipe (cerca de 2,5 palavras por segundo)
+
+
+def _fit_before_cta(line: str, cta: str) -> str:
+    """Corta a última fala para a chamada (CTA) caber inteira no clipe de 8 segundos, sem cortar frase no meio quando dá."""
+    budget = max(4, CLIP_WORDS - len(cta.split()))
+    words = line.split()
+    if len(words) <= budget:
+        return line
+    head = " ".join(words[:budget])
+    cut = max(head.rfind(". "), head.rfind("! "), head.rfind("? "))
+    if cut >= len(head) // 2:
+        return head[: cut + 1]
+    return head.rstrip(",;:- ") + "."
 
 
 async def _build_model() -> Any:

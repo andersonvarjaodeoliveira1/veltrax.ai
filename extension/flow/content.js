@@ -808,7 +808,7 @@
       const label = `${j.vname} · ${j.sname}`;
       let st = "<span class='st-wait'>na fila</span>";
       if (state.done[j.key]) st = `<span class='st-done'>baixado${state.cloud[j.key] === "ok" ? " · no ClipGringa" : state.cloud[j.key] ? ` · não enviado${state.cloudWhy && state.cloudWhy[j.key] ? ` (${state.cloudWhy[j.key].replace(/[<>&]/g, "")})` : ""}` : ""}</span>`;
-      else if (state.errors[j.key]) st = "<span class='st-err'>erro</span>";
+      else if (state.errors[j.key]) { const why = String(state.errors[j.key]).replace(/[<>&"]/g, "").slice(0, 160); st = `<span class='st-err' title="${why}">erro · ${why.slice(0, 55)}${why.length > 55 ? "…" : ""}</span>`; }
       else if (state.current === j.key) st = `<span class='st-run'>${state.phase || "gerando"}</span>`;
       return `<li class="${state.current === j.key ? "cur" : ""}"><span>${label}</span>${st}</li>`;
     }).join("");
