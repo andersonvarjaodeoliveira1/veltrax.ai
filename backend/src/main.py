@@ -255,6 +255,12 @@ def create_app(
         app.include_router(flow_videos_router)
     except Exception:  # pragma: no cover
         logging.getLogger(__name__).exception("Flow videos (beta) disabled")
+    try:  # ofertas salvas (produto, copy aprovada, palavra-chave)
+        from .api.routes.offers import router as offers_router
+
+        app.include_router(offers_router)
+    except Exception:  # pragma: no cover
+        logging.getLogger(__name__).exception("Offers disabled")
     try:  # BETA, isolated: vídeo final (juntar cenas, legenda e título)
         from .api.routes.final_video import router as final_video_router
 
