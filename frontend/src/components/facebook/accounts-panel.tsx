@@ -19,7 +19,7 @@ export function AccountsPanel({ accounts, onChange }: { accounts: FbAccount[]; o
   const [busy, setBusy] = useState(false);
 
   const refreshLocal = useCallback(async () => {
-    try { const s = await connector.status(); setLocal({ ok: true, name: s.navegador_nome }); setQueue(await connector.queue()); }
+    try { const s = await connector.status(); setLocal({ ok: true, name: s.navegador_nome || "navegador" }); const q = await connector.queue().catch(() => null); setQueue(q && Array.isArray(q.itens) ? q : null); }
     catch { setLocal({ ok: false, name: "" }); setQueue(null); }
   }, []);
   useEffect(() => {
