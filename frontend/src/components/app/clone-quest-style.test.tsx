@@ -7,12 +7,13 @@ const values = { cta: "", product: "", count: 1, sceneCount: 2, takes: 1, takeKi
 
 function setup() {
   const onExtra = vi.fn();
+  const onScenes = vi.fn();
   const view = render(
     <QuestChat values={values} languages={[{ value: "pt-BR", text: "Português" }, { value: "en", text: "Inglês" }]} models={[]} hasVideo
-      onCount={vi.fn()} onScenes={vi.fn()} onTakes={vi.fn()} onTakeKind={vi.fn()} onLanguage={vi.fn()} onCopy={vi.fn()} onKeyword={vi.fn()} onModel={vi.fn()}
+      onCount={vi.fn()} onScenes={onScenes} onTakes={vi.fn()} onTakeKind={vi.fn()} onLanguage={vi.fn()} onCopy={vi.fn()} onKeyword={vi.fn()} onModel={vi.fn()}
       onCta={vi.fn()} onProduct={vi.fn()} onExtra={onExtra} onFinish={vi.fn()} />,
   );
-  return { onExtra, ...view };
+  return { onExtra, onScenes, ...view };
 }
 
 async function untilStyle(user: ReturnType<typeof userEvent.setup>) {
@@ -67,4 +68,20 @@ it("tocar em Escolher o formato de câmera abre as opções", async () => {
   await untilStyle(user);
   await user.click(await screen.findByRole("button", { name: "Escolher o formato de câmera" }));
   expect(await screen.findByRole("button", { name: "Selfie, celular na mão" })).toBeInTheDocument();
+});
+
+it("aceita vídeo longo: digitar 12 cenas vale e mostra o tempo aproximado", async () => {
+  const user = userEvent.setup();
+  const { onScenes } = setup();
+  await user.click(await screen.findByRole("button", { name: "1 vídeo" }));
+  await user.type(await screen.findByLabelText("Quantas cenas em cada vídeo?"), "12{Enter}");
+  expect(onScenes).toHaveBeenCalledWith(12);
+});
+
+it("não aceita mais de 12 cenas", async () => {
+  const user = userEvent.setup();
+  const { onScenes } = setup();
+  await user.click(await screen.findByRole("button", { name: "1 vídeo" }));
+  await user.type(await screen.findByLabelText("Quantas cenas em cada vídeo?"), "20{Enter}");
+  expect(onScenes).not.toHaveBeenCalled();
 });

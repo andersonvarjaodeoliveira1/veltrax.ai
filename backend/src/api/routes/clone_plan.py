@@ -29,7 +29,7 @@ from .multiplier import _check_script_rate, _clip, _user_id
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/multiplier/clone", tags=["multiplier-clone"])
 
-MAX_SCENES = 6  # ~8 seconds each (one Veo clip); the member picks 1 to 6
+MAX_SCENES = 12  # ~8 seconds each (one Veo clip); the member picks 1 to 12 (video from 8 seconds to about 1.5 minutes)
 DEFAULT_SCENES = 4
 LANGUAGES = {
     "pt-BR": "Brazilian Portuguese",

@@ -50,10 +50,10 @@ export function QuestChat({ values, languages, models, onCount, onScenes, onTake
       options: [1, 2, 3, 5].map((n) => ({ value: String(n), label: n === 1 ? "1 vídeo" : `${n} vídeos` })),
       answer: values.count === 1 ? "1 vídeo" : `${values.count} vídeos`,
       apply: (t, picked) => { const n = num(picked ?? t, 1, 10); if (n === null) return false; onCount(n); return true; } },
-    { id: "scenes", question: "Quantas cenas em cada vídeo?", hint: "Cada cena tem cerca de 8 segundos. Digite de 1 a 6.",
-      options: [1, 2, 3, 4, 5, 6].map((n) => ({ value: String(n), label: n === 1 ? "1 cena" : `${n} cenas` })),
-      answer: values.sceneCount === 1 ? "1 cena" : `${values.sceneCount} cenas`,
-      apply: (t, picked) => { const n = num(picked ?? t, 1, 6); if (n === null) return false; onScenes(n); return true; } },
+    { id: "scenes", question: "Quantas cenas em cada vídeo?", hint: "Cada cena tem cerca de 8 segundos: 4 cenas dão um vídeo de uns 30 segundos. Toque numa opção ou digite de 1 a 12 para um vídeo mais longo.",
+      options: [1, 2, 3, 4, 6, 8, 12].map((n) => ({ value: String(n), label: n === 1 ? "1 cena" : `${n} cenas` })),
+      answer: `${values.sceneCount === 1 ? "1 cena" : `${values.sceneCount} cenas`} (cerca de ${values.sceneCount * 8} segundos)`,
+      apply: (t, picked) => { const n = num(picked ?? t, 1, 12); if (n === null) return false; onScenes(n); return true; } },
     { id: "takes", question: "Quantos takes de cada cena?", hint: "Take é outra versão da mesma cena, para você escolher a melhor. Gasta mais créditos.",
       options: [1, 2, 3].map((n) => ({ value: String(n), label: n === 1 ? "1 take" : `${n} takes` })),
       answer: values.takes === 1 ? "1 take" : `${values.takes} takes`,
@@ -165,7 +165,7 @@ export function QuestChat({ values, languages, models, onCount, onScenes, onTake
   const smart = (t: string): string[] => {
     const done: string[] = [];
     const v = t.match(/(\d+)\s*v[ií]deos?/i); if (v) { const n = num(v[1], 1, 10); if (n) { onCount(n); done.push("count"); } }
-    const c = t.match(/(\d+)\s*cenas?/i); if (c) { const n = num(c[1], 1, 6); if (n) { onScenes(n); done.push("scenes"); } }
+    const c = t.match(/(\d+)\s*cenas?/i); if (c) { const n = num(c[1], 1, 12); if (n) { onScenes(n); done.push("scenes"); } }
     const k = t.match(/(\d+)\s*takes?/i); if (k) { const n = num(k[1], 1, 3); if (n) { onTakes(n); done.push("takes"); } }
     const l = languages.find((x) => new RegExp(`\\b${x.text.toLowerCase()}\\b`).test(t.toLowerCase())); if (l) { onLanguage(l.value); done.push("language"); }
     return done;

@@ -2020,7 +2020,7 @@ export function CloneWizard() {
                 <Chips label="Idioma da fala" value={p.language} onPick={chooseLanguage} disabled={working} options={LANGUAGES.map((l) => ({ value: l.value, text: l.text }))} />
               </Group>
               <Group label="Quantas cenas" hint="Cada cena tem cerca de 8 segundos. Com 4 cenas o vídeo fica com cerca de 32 segundos, tempo de sobra para mostrar e falar do produto.">
-                <Chips label="Quantas cenas" value={p.sceneCount} onPick={chooseScenes} disabled={working} options={[1, 2, 3, 4, 5, 6].map((n) => ({ value: n, text: n === 1 ? "1 cena" : `${n} cenas` }))} />
+                <Chips label="Quantas cenas" value={p.sceneCount} onPick={chooseScenes} disabled={working} options={[1, 2, 3, 4, 5, 6, 8, 10, 12].map((n) => ({ value: n, text: n === 1 ? "1 cena" : `${n} cenas` }))} />
               </Group>
               <Group label="Quantos vídeos" hint="Escolha a quantidade e depois clique em “Gerar com essas opções”. Nada é gerado até você clicar.">
                 <Chips label="Quantos vídeos" value={p.count} onPick={chooseCount} disabled={working} options={COUNT_OPTIONS.map((n) => ({ value: n, text: String(n) }))} />

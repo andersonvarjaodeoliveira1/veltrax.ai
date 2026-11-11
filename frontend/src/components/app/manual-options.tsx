@@ -64,7 +64,7 @@ export function ManualOptions({ mode, onMode, values, onChange, languages, onFor
           <div className="space-y-1.5"><p className="text-xs font-medium">Quantos vídeos</p>
             <div className="flex flex-wrap gap-2">{[1, 2, 3, 5, 10].map((n) => <Chip key={n} active={values.count === n} onClick={() => onChange({ count: n })}>{n}</Chip>)}</div></div>
           <div className="space-y-1.5"><p className="text-xs font-medium">Quantas cenas por vídeo</p>
-            <div className="flex flex-wrap gap-2">{[1, 2, 3, 4, 5, 6].map((n) => <Chip key={n} active={values.scenes === n} onClick={() => onChange({ scenes: n })}>{`${n} ${n === 1 ? "cena" : "cenas"}`}</Chip>)}</div></div>
+            <div className="flex flex-wrap gap-2">{[1, 2, 3, 4, 5, 6, 8, 10, 12].map((n) => <Chip key={n} active={values.scenes === n} onClick={() => onChange({ scenes: n })}>{`${n} ${n === 1 ? "cena" : "cenas"}`}</Chip>)}</div></div>
           <label className="block space-y-1.5"><span className="text-xs font-medium">Palavra da CTA (o que a pessoa comenta)</span>
             <input value={values.keyword} onChange={(event) => onChange({ keyword: event.target.value.toUpperCase().slice(0, 30) })} placeholder="Ex.: QUERO" className="block w-full rounded-[12px] border border-border bg-background px-3 py-2 text-sm" /></label>
           <label className="block space-y-1.5"><span className="text-xs font-medium">Idioma</span>
