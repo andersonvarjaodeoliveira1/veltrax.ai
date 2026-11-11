@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, ClipboardCopy, Film, Loader2 } from "lucide-react";
+import { Check, ClipboardCopy, Film, Loader2, Sparkles } from "lucide-react";
 
 type Frame = { t: number; src: string };
 type Meta = { duration: number; width: number; height: number };
@@ -22,6 +22,19 @@ export function ReferenceSummary({ file, transcript, reading = false, noSpeech =
   const [meta, setMeta] = useState<Meta | null>(null);
   const [state, setState] = useState<"idle" | "working" | "done" | "failed">("idle");
   const [copied, setCopied] = useState(false);
+  const [method, setMethod] = useState<Record<string, string> | null>(null);
+  const [methodState, setMethodState] = useState<"idle" | "working" | "failed">("idle");
+
+  const showMethod = async () => {
+    setMethodState("working");
+    try {
+      const response = await fetch("/api/multiplier/clone/method", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reference: transcript }) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error("falhou");
+      setMethod(data as Record<string, string>);
+      setMethodState("idle");
+    } catch { setMethodState("failed"); }
+  };
 
   useEffect(() => {
     setFrames([]);
@@ -140,6 +153,19 @@ export function ReferenceSummary({ file, transcript, reading = false, noSpeech =
           </div>
           <blockquote className="max-h-72 overflow-y-auto whitespace-pre-line border-l-2 border-[#A98BFF] pl-4 text-sm leading-relaxed">{text}</blockquote>
           <p className="text-xs text-muted-foreground">{text.split(/\s+/).filter(Boolean).length} palavras.</p>
+          {text.trim().length >= 20 && !method && (
+            <button type="button" onClick={() => void showMethod()} disabled={methodState === "working"} className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs hover:text-foreground disabled:opacity-60">
+              {methodState === "working" ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5 text-[#A98BFF]" />} {methodState === "working" ? "Analisando…" : "Ver o método deste criativo"}
+            </button>
+          )}
+          {methodState === "failed" && <p role="alert" className="text-xs text-[#F0466B]">Não foi possível analisar agora. Tente de novo em instantes.</p>}
+          {method && (
+            <dl data-testid="method" className="space-y-2 rounded-[14px] border border-border p-3 text-sm">
+              {([["Gancho", "hook"], ["Ângulo", "angle"], ["Mecanismo", "mechanism"], ["Chamada", "cta"], ["Por que funciona", "why_it_works"]] as const).map(([label, key]) => method[key] ? (
+                <div key={key}><dt className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</dt><dd>{method[key]}</dd></div>
+              ) : null)}
+            </dl>
+          )}
         </div>
       ) : noSpeech ? (
         <p role="status" className="text-xs text-muted-foreground">Não encontrei fala nesse vídeo. Isso não é um erro: descreva o que acontece nele no campo de notas e o ClipGringa segue a partir daí.</p>

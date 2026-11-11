@@ -779,6 +779,42 @@ async def delete_chat(chat_id: str, request: Request, db: AsyncSession = Depends
     return {"ok": True}
 
 
+class _Method(BaseModel):
+    hook: str = Field(default="", description="How the video opens in the first seconds, 1 sentence")
+    angle: str = Field(default="", description="The opening angle: curiosity, problem, proof, question or other, with 1 short reason")
+    mechanism: str = Field(default="", description="Why the offer works according to the video, in 1-2 sentences, without inventing facts")
+    cta: str = Field(default="", description="What the person is asked to do at the end, 1 sentence")
+    why_it_works: str = Field(default="", description="2 short sentences on why this structure holds attention")
+
+
+METHOD_SYSTEM = f"""You get the spoken text of a direct-response video ad. Explain its METHOD for a marketer, in Brazilian Portuguese, simple and direct.
+Fill: hook (how it opens), angle, mechanism (what makes the offer believable), cta (the final action) and why_it_works.
+Use only what is in the text. If something is missing, say "não aparece no vídeo". No hype, no new claims.
+{SAFETY}"""
+
+
+@router.post("/method")
+async def reference_method(request: Request, db: AsyncSession = Depends(get_db)):
+    """Explica o método do criativo de referência: gancho, ângulo, mecanismo e chamada."""
+    user_id = await _user_id(request, db)
+    from ...integrations import load_user_keys
+    from ...usage import get_balance, set_server_blocked, set_usage_user
+
+    await load_user_keys(db, user_id)
+    set_usage_user(user_id)
+    set_server_blocked((await get_balance(db, user_id))["exhausted"])
+    try:
+        data = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    reference = _text(data.get("reference") if isinstance(data, dict) else "", 4000)
+    if len(reference) < 20:
+        raise HTTPException(status_code=400, detail="Send the reference transcript")
+    _check_script_rate(user_id)
+    out = await _run(METHOD_SYSTEM, _Method, f"Video text:\n{reference}")
+    return {key: _text(getattr(out, key), 400) for key in ("hook", "angle", "mechanism", "cta", "why_it_works")}
+
+
 class _Found(BaseModel):
     name: str = Field(default="", description="Short product name, up to 8 words")
     summary: str = Field(default="", description="What it is and who it is for, 1-2 short sentences in the language of the search")
