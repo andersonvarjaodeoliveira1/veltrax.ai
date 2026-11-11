@@ -1544,6 +1544,14 @@ export function CloneWizard() {
           </div>
         </div>
 
+        {!working && <OfferPicker onPick={(offer) => patch({
+          ...(offer.product ? { product: offer.product } : {}),
+          ...(offer.keyword ? { keyword: offer.keyword } : {}),
+          ...(offer.language ? { language: offer.language } : {}),
+          ...(offer.approved_copy.trim().length >= 20 ? { copySource: "own" as const, ownCopy: offer.approved_copy.trim() } : {}),
+          ...(offer.notes.trim() ? { changes: offer.notes.trim().slice(0, 400) } : {}),
+        })} />}
+
         {expiredNote && !hasContent && (
           <p role="note" className="rounded-[14px] border border-border bg-card p-3 text-sm text-muted-foreground">
             O projeto anterior ficou parado por mais de 10 minutos e foi apagado. Este é um projeto novo.
@@ -1711,13 +1719,6 @@ export function CloneWizard() {
                   {showPanel(2) && stepped && <button type="button" onClick={() => goPanel(1)} className="text-xs text-muted-foreground underline">Ajustar modo, quantidades e complementos</button>}
                   {!showPanel(2) ? null : (questHold || hasReference || !!refFile) ? (
                   <div ref={chatRef} className="scroll-mt-4">
-                  <OfferPicker onPick={(offer) => patch({
-                    ...(offer.product ? { product: offer.product } : {}),
-                    ...(offer.keyword ? { keyword: offer.keyword } : {}),
-                    ...(offer.language ? { language: offer.language } : {}),
-                    ...(offer.approved_copy.trim().length >= 20 ? { copySource: "own" as const, ownCopy: offer.approved_copy.trim() } : {}),
-                    ...(offer.notes.trim() ? { changes: offer.notes.trim().slice(0, 400) } : {}),
-                  })} />
                   <QuestChat
                     values={{ cta: p.cta, product: p.product, count: p.count, sceneCount: p.sceneCount, takes: p.takes ?? 1, takeKind: p.takeKind ?? "same", language: p.language, copySource: p.copySource ?? "video", ownCopy: p.ownCopy ?? "", keyword: p.keyword, flowModel: flowModelId }}
                     languages={LANGUAGES.map((l) => ({ value: l.value, text: l.text }))}
