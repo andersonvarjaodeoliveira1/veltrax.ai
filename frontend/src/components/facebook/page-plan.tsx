@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { fb, organicVideoUrl, type FbIdea, type FbPage } from "@/lib/facebook";
 import { cn } from "@/lib/utils";
+import { ViralityPreview } from "@/components/app/virality-map";
 import { Modal, primary, secondary } from "./ui";
 
 // ---------- sugestão de passo a passo: muda de página para página ----------
@@ -265,7 +266,7 @@ function IdeasDialog({ page, onClose, onChange }: { page: FbPage; onClose: () =>
         {fresh.map((idea) => (
           <li key={idea.id} className="rounded-[12px] border border-white/10 px-3 py-2.5">
             <button type="button" className="w-full text-left text-sm text-white" onClick={() => setOpen(open === idea.id ? null : idea.id)}>{idea.title}</button>
-            {open === idea.id ? <p className="mt-1.5 whitespace-pre-wrap text-xs text-white/60">{idea.script}</p> : null}
+            {open === idea.id ? <div className="mt-1.5 space-y-2"><p className="whitespace-pre-wrap text-xs text-white/60">{idea.script}</p><ViralityPreview script={idea.script} niche={page.niche} /></div> : null}
             <div className="mt-2 flex flex-wrap gap-2">
               <button type="button" className={secondary} onClick={() => void createVideo(idea)}>Criar vídeo</button>
               <button type="button" className={secondary} onClick={() => { void navigator.clipboard.writeText(idea.caption).then(() => toast.success("Legenda copiada")); }}>Copiar legenda</button>

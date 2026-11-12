@@ -815,6 +815,88 @@ async def reference_method(request: Request, db: AsyncSession = Depends(get_db))
     return {key: _text(getattr(out, key), 400) for key in ("hook", "angle", "mechanism", "cta", "why_it_works")}
 
 
+# ---------------------------------------------------------------------------
+# Prévia de viralização: estimativa pela leitura do roteiro, antes de gastar créditos no vídeo
+# ---------------------------------------------------------------------------
+VIRAL_REGIONS = ("attention", "emotion", "memory", "language", "vision", "sound")
+
+
+class _Region(BaseModel):
+    score: int = Field(default=0, ge=0, le=100, description="0-100")
+    note: str = Field(default="", description="One short sentence: what in the script drives this score")
+
+
+class _Drop(BaseModel):
+    quote: str = Field(default="", description="The exact words of the script where attention is likely to fall, up to 12 words")
+    why: str = Field(default="", description="Why people leave here, one short sentence")
+    fix: str = Field(default="", description="What to do at this point, one short sentence")
+
+
+class _Virality(BaseModel):
+    attention: _Region = Field(default_factory=_Region, description="Hook: do the first 3 seconds stop the scroll?")
+    emotion: _Region = Field(default_factory=_Region, description="Does it make the viewer feel something (surprise, fear, desire, relief)?")
+    memory: _Region = Field(default_factory=_Region, description="Is there one idea the viewer can repeat to a friend?")
+    language: _Region = Field(default_factory=_Region, description="Clarity: short sentences, plain words, one idea at a time")
+    vision: _Region = Field(default_factory=_Region, description="Does the text create concrete images that can be shown on screen?")
+    sound: _Region = Field(default_factory=_Region, description="Spoken rhythm: variation, pauses, lines that sound natural out loud")
+    hold_rate: int = Field(default=0, ge=0, le=100, description="Estimated % of viewers still watching at the end")
+    strongest_line: str = Field(default="", description="The exact strongest line of the script")
+    drops: list[_Drop] = Field(default_factory=list, description="Up to 3 moments where attention falls")
+    fixes: list[str] = Field(default_factory=list, description="3 concrete changes, most important first, one sentence each")
+    better_hook: str = Field(default="", description="A rewritten opening line, same language as the script, same facts, up to 18 words")
+    trending: list[str] = Field(default_factory=list, description="Up to 3 formats or angles that tend to work for this kind of content now, one short sentence each")
+    verdict: str = Field(default="", description="One sentence: publish as is, fix first, or rewrite")
+
+
+VIRALITY_SYSTEM = f"""You are a short-video editor who has studied thousands of viral Reels and TikToks. You get the SCRIPT of a short vertical video.
+Estimate how it will perform, honestly. Most scripts are average: use the whole 0-100 scale, do not flatter. 50 is an ordinary video.
+Score six areas the way a viewer's brain reacts: attention (the first 3 seconds), emotion, memory, language (clarity), vision (concrete images), sound (spoken rhythm).
+Then: hold_rate, the strongest line (exact words), up to 3 drops (exact words where people leave, why, and the fix), 3 fixes, a better opening line and up to 3 formats that work now for this kind of content.
+Write notes, fixes and verdict in Brazilian Portuguese, simple and direct. Keep better_hook and quotes in the language of the script.
+Use only facts that are in the script: never add claims, numbers, results or health promises.
+{SAFETY}"""
+
+
+def virality_total(scores: dict[str, int]) -> int:
+    """Nota geral: o gancho pesa mais, porque quem não para nos 3 primeiros segundos não vê o resto."""
+    weights = {"attention": 0.3, "emotion": 0.2, "memory": 0.15, "language": 0.15, "vision": 0.1, "sound": 0.1}
+    return round(sum(max(0, min(100, int(scores.get(k, 0)))) * w for k, w in weights.items()))
+
+
+@router.post("/virality")
+async def virality_preview(request: Request, db: AsyncSession = Depends(get_db)):
+    """Prévia de viralização do roteiro: nota, mapa por área, onde a atenção cai e o que arrumar."""
+    user_id = await _user_id(request, db)
+    from ...integrations import load_user_keys
+    from ...usage import get_balance, set_server_blocked, set_usage_user
+
+    await load_user_keys(db, user_id)
+    set_usage_user(user_id)
+    set_server_blocked((await get_balance(db, user_id))["exhausted"])
+    try:
+        data = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    script = _text(data.get("script") if isinstance(data, dict) else "", 4000)
+    if len(script) < 20:
+        raise HTTPException(status_code=400, detail="Send the script")
+    niche = _clip(str(data.get("niche") or ""), 80) if isinstance(data, dict) else ""
+    _check_script_rate(user_id)
+    out = await _run(VIRALITY_SYSTEM, _Virality, (f"Niche: {niche}\n" if niche else "") + f"Script:\n{script}")
+    regions = {key: {"score": max(0, min(100, int(getattr(out, key).score))), "note": _text(getattr(out, key).note, 200)} for key in VIRAL_REGIONS}
+    return {
+        "score": virality_total({k: v["score"] for k, v in regions.items()}),
+        "hold_rate": max(0, min(100, int(out.hold_rate))),
+        "regions": regions,
+        "strongest_line": _text(out.strongest_line, 240),
+        "drops": [{"quote": _text(d.quote, 160), "why": _text(d.why, 200), "fix": _text(d.fix, 200)} for d in out.drops[:3] if d.quote or d.why],
+        "fixes": [_text(f, 240) for f in out.fixes[:3] if str(f).strip()],
+        "better_hook": _text(out.better_hook, 240),
+        "trending": [_text(t, 200) for t in out.trending[:3] if str(t).strip()],
+        "verdict": _text(out.verdict, 240),
+    }
+
+
 class _Found(BaseModel):
     name: str = Field(default="", description="Short product name, up to 8 words")
     summary: str = Field(default="", description="What it is and who it is for, 1-2 short sentences in the language of the search")
