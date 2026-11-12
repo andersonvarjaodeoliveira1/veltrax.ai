@@ -155,3 +155,56 @@ async def test_accounts_report_where_they_open_and_protection(client, db_session
     accounts = {a["name"]: a for a in (await client.get("/facebook/overview", headers=auth_headers)).json()["accounts"]}
     assert accounts["Jaah Alves"]["provider"] == "dicloak"
     assert accounts["Dolphin sem proxy"]["provider"] == "dolphin"
+
+
+@pytest.mark.asyncio
+async def test_login_with_facebook_connects_pages(client, db_session, auth_headers, monkeypatch):
+    from src import facebook_meta
+
+    await create_user(db_session, user_id="user-1", is_admin=True)
+    monkeypatch.setattr(facebook_meta, "meta_app", lambda: None)
+    status = (await client.get("/facebook/meta/status", headers=auth_headers)).json()
+    assert status == {"configured": False, "connected": False, "name": None, "connected_at": None}
+    assert (await client.post("/facebook/meta/start", headers=auth_headers, json={"redirect_uri": "https://x.com/facebook/meta"})).status_code == 409
+
+    monkeypatch.setattr(facebook_meta, "meta_app", lambda: ("123", "s3cret"))
+    back = "https://clipgringa.gringatools.com/facebook/meta"
+    assert (await client.post("/facebook/meta/start", headers=auth_headers, json={"redirect_uri": "https://evil.com/steal"})).status_code == 400
+    url = (await client.post("/facebook/meta/start", headers=auth_headers, json={"redirect_uri": back})).json()["url"]
+    assert "client_id=123" in url and "pages_manage_posts" in url and "s3cret" not in url
+    state = url.split("state=")[1].split("&")[0]
+
+    await client.post("/facebook/accounts", headers=auth_headers, json={"name": "Jaah Alves"})
+    mine = (await client.post("/facebook/pages", headers=auth_headers, json={"name": "body explained"})).json()
+    fb_pages = [{"id": "111", "name": "Body Explained", "token": "PAGE-TOKEN-111", "can_post": True},
+                {"id": "222", "name": "The Curious Mind", "token": "PAGE-TOKEN-222", "can_post": True}]
+
+    async def fake_exchange(code, redirect_uri, client=None):
+        assert code == "CODE" and redirect_uri == back
+        return {"user": {"id": "9", "name": "Jaah Alves"}, "token": "USER-TOKEN", "pages": fb_pages}
+
+    async def fake_pages(token):
+        assert token == "USER-TOKEN"
+        return fb_pages
+
+    monkeypatch.setattr(facebook_meta, "exchange", fake_exchange)
+    monkeypatch.setattr(facebook_meta, "pages_of", fake_pages)
+    from urllib.parse import unquote
+    assert (await client.post("/facebook/meta/finish", headers=auth_headers, json={"code": "CODE", "state": "1.2.3", "redirect_uri": back})).status_code == 400
+    r = (await client.post("/facebook/meta/finish", headers=auth_headers, json={"code": "CODE", "state": unquote(state), "redirect_uri": back})).json()
+    assert r == {"name": "Jaah Alves", "conectadas": ["body explained"], "outras": [{"id": "222", "name": "The Curious Mind"}]}
+
+    ov = (await client.get("/facebook/overview", headers=auth_headers)).json()
+    page = next(p for p in ov["pages"] if p["id"] == mine["id"])
+    assert page["meta_connected"] and page["account_name"] == "Jaah Alves"
+    assert "TOKEN" not in str(ov)
+
+    listed = (await client.get("/facebook/meta/pages", headers=auth_headers)).json()["pages"]
+    assert [(p["name"], bool(p["page_id"])) for p in listed] == [("Body Explained", True), ("The Curious Mind", False)]
+    made = (await client.post("/facebook/meta/pages/222/link", headers=auth_headers)).json()
+    assert made["name"] == "The Curious Mind"
+    ov = (await client.get("/facebook/overview", headers=auth_headers)).json()
+    assert {p["name"]: p["meta_connected"] for p in ov["pages"]} == {"body explained": True, "The Curious Mind": True}
+    assert (await client.get("/facebook/meta/status", headers=auth_headers)).json()["name"] == "Jaah Alves"
+    assert (await client.delete("/facebook/meta", headers=auth_headers)).status_code == 200
+    assert (await client.get("/facebook/meta/pages", headers=auth_headers)).status_code == 409

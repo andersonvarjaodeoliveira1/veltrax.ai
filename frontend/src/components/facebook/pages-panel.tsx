@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { brDateTime, fb, type FbAccount, type FbClip, type FbPage, type FbPost, type FbVideo } from "@/lib/facebook";
+import { goToFacebookLogin, MetaCard, MetaSetupDialog, useMetaStatus } from "./meta-connect";
 import { PagePlanSteps } from "./page-plan";
 import { cn } from "@/lib/utils";
 import { ACTOR, card, field, Modal, Pill, primary, secondary } from "./ui";
@@ -26,6 +27,7 @@ export function PagesPanel({ pages, accounts, onChange }: { pages: FbPage[]; acc
         <button type="button" className={primary} onClick={() => setCreating((v) => !v)}>{creating ? "Fechar" : "Nova página"}</button>
         {pages.some((p) => p.meta_connected) ? <button type="button" className={secondary} disabled={sending} onClick={() => void sendNow()}>{sending ? "Enviando…" : "Enviar agora para o Facebook"}</button> : null}
       </div>
+      <MetaCard onChange={onChange} />
       {creating ? <NewPage accounts={accounts} onDone={async () => { setCreating(false); await onChange(); }} /> : null}
 
       {pages.length === 0 && !creating ? <p className="rounded-[16px] border border-dashed border-white/15 p-4 text-sm text-white/70">Nenhuma página ainda. Clique em Nova página e cadastre a primeira.</p> : null}
@@ -218,6 +220,8 @@ export function ClipsDialog({ page, onClose, onDone, preselect }: { page: FbPage
 function MetaDialog({ page, onClose, onDone }: { page: FbPage; onClose: () => void; onDone: () => Promise<void> }) {
   const [token, setToken] = useState("");
   const [busy, setBusy] = useState(false);
+  const { status } = useMetaStatus();
+  const [setup, setSetup] = useState(false);
   const connect = async () => {
     setBusy(true);
     try { const r = await fb.connectMeta(page.id, token); toast.success(`Conectada: ${r.page}`); onClose(); await onDone(); }
@@ -227,19 +231,21 @@ function MetaDialog({ page, onClose, onDone }: { page: FbPage; onClose: () => vo
     try { await fb.disconnectMeta(page.id); toast.success("Desconectada"); onClose(); await onDone(); } catch (problem) { toast.error((problem as Error).message); }
   };
   return (
-    <Modal open onClose={onClose} title={`Meta, ${page.name}`} description="Com o token da página, o ClipGringa agenda os cortes direto no Facebook, no horário da agenda. O token fica criptografado e nunca volta para a tela.">
-      <label className="block space-y-1.5"><span className="text-xs font-medium text-white/80">Token da página</span>
-        <input className={field} type="password" autoComplete="off" value={token} onChange={(e) => setToken(e.target.value)} placeholder="Cole o token de acesso da página" /></label>
-      <details className="text-xs text-white/60"><summary className="cursor-pointer">Como gerar o token</summary>
-        <ol className="mt-2 list-decimal space-y-1 pl-4">
-          <li>Em developers.facebook.com, crie um app do tipo Empresa.</li>
-          <li>No Explorador da Graph API, escolha o app e peça pages_show_list, pages_read_engagement e pages_manage_posts.</li>
-          <li>Em Token de acesso da página, escolha esta página e copie. Troque por um de longa duração no Depurador de token.</li>
-        </ol></details>
-      <div className="flex justify-end gap-2">
-        {page.meta_connected ? <button type="button" className={secondary} onClick={() => void disconnect()}>Desconectar</button> : null}
-        <button type="button" className={primary} disabled={token.trim().length < 20 || busy} onClick={() => void connect()}>{busy ? "Conferindo…" : "Conectar"}</button>
-      </div>
+    <Modal open onClose={onClose} title={`Meta, ${page.name}`} description="Conectada, o ClipGringa agenda os vídeos direto no Facebook, no horário da agenda.">
+      {status?.configured ? (
+        <button type="button" className={cn(primary, "w-full")} onClick={() => void goToFacebookLogin()}>Entrar com o Facebook</button>
+      ) : status ? (
+        <button type="button" className={cn(secondary, "w-full")} onClick={() => setSetup(true)}>Ativar o Entrar com o Facebook</button>
+      ) : null}
+      <p className="text-xs text-white/60">Você entra, marca as páginas e volta. A página {page.name} se conecta sozinha se tiver o mesmo nome no Facebook.</p>
+      <details className="text-xs text-white/60"><summary className="cursor-pointer">Colar um token à mão</summary>
+        <div className="mt-2 space-y-2">
+          <input className={field} type="password" autoComplete="off" value={token} onChange={(e) => setToken(e.target.value)} placeholder="Token de acesso da página" aria-label="Token da página" />
+          <div className="flex justify-end"><button type="button" className={secondary} disabled={token.trim().length < 20 || busy} onClick={() => void connect()}>{busy ? "Conferindo…" : "Conectar com o token"}</button></div>
+        </div>
+      </details>
+      {page.meta_connected ? <div className="flex justify-end"><button type="button" className={secondary} onClick={() => void disconnect()}>Desconectar</button></div> : null}
+      {setup ? <MetaSetupDialog onClose={() => setSetup(false)} /> : null}
     </Modal>
   );
 }

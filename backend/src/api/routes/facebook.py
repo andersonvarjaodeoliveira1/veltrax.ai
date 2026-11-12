@@ -31,6 +31,7 @@ from ...facebook import (
     plan_times,
     publish_due,
 )
+from ... import facebook_meta as meta
 from ...runtime_settings import decrypt_setting_value, encrypt_setting_value
 
 logger = logging.getLogger(__name__)
@@ -348,6 +349,141 @@ async def disconnect_meta(page_id: str, request: Request, db: AsyncSession = Dep
     await _own(db, "fb_pages", page_id, user_id)
     await db.execute(text("UPDATE fb_pages SET meta_token_enc = NULL, meta_connected_at = NULL, updated_at = NOW() WHERE id = :id"), {"id": page_id})
     await add_event(db, user_id, "Desconectada da Meta", page_id=page_id, actor="voce")
+    await db.commit()
+    return {"ok": True}
+
+
+# ---------- entrar com o Facebook ----------
+async def _meta_auth(db: AsyncSession, user_id: str) -> dict[str, Any] | None:
+    row = (await db.execute(text("SELECT * FROM fb_meta_auth WHERE user_id = :u"), {"u": user_id})).mappings().first()
+    return dict(row) if row else None
+
+
+async def _attach_meta_page(db: AsyncSession, user_id: str, page_id: str, mp: dict[str, Any], who: str) -> None:
+    await db.execute(text("""UPDATE fb_pages SET meta_page_id = :mid, meta_token_enc = :tok, meta_connected_at = NOW(), meta_error = NULL,
+        link = CASE WHEN link = '' THEN :link ELSE link END, updated_at = NOW() WHERE id = :id"""),
+        {"mid": mp["id"], "tok": encrypt_setting_value(mp["token"]), "link": f"https://www.facebook.com/{mp['id']}", "id": page_id})
+    await add_event(db, user_id, f"Conectada à Meta pelo login de {who}. A partir de agora o app agenda os posts sozinho", page_id=page_id, actor="voce")
+
+
+async def _account_for(db: AsyncSession, user_id: str, name: str) -> str | None:
+    rows = (await db.execute(text("SELECT id, name FROM fb_accounts WHERE user_id = :u"), {"u": user_id})).mappings().all()
+    return next((r["id"] for r in rows if meta.same_name(r["name"], name)), None)
+
+
+@router.get("/meta/status")
+async def meta_status(request: Request, db: AsyncSession = Depends(get_db)):
+    user_id = await _admin(request, db)
+    auth = await _meta_auth(db, user_id)
+    return {"configured": meta.meta_app() is not None, "connected": bool(auth), "name": auth["fb_user_name"] if auth else None,
+            "connected_at": _iso(auth["connected_at"]) if auth else None}
+
+
+@router.post("/meta/start")
+async def meta_start(request: Request, db: AsyncSession = Depends(get_db)):
+    """Devolve o endereço do login do Facebook. A pessoa autoriza e volta para /facebook/meta."""
+    user_id = await _admin(request, db)
+    app = meta.meta_app()
+    if not app:
+        raise HTTPException(status_code=409, detail="Configure o app da Meta em Admin antes de entrar")
+    redirect_uri = _s((await request.json()).get("redirect_uri"), 300)
+    if not meta.valid_redirect(redirect_uri):
+        raise HTTPException(status_code=400, detail="Endereço de retorno inválido")
+    return {"url": meta.login_url(app[0], redirect_uri, meta.make_state(user_id))}
+
+
+@router.post("/meta/finish")
+async def meta_finish(request: Request, db: AsyncSession = Depends(get_db)):
+    """Recebe o código do login, guarda o acesso e conecta sozinho as páginas que já estão aqui."""
+    user_id = await _admin(request, db)
+    body = await request.json()
+    code, state, redirect_uri = _s(body.get("code"), 1000), _s(body.get("state"), 200), _s(body.get("redirect_uri"), 300)
+    if not code or not meta.check_state(state, user_id):
+        raise HTTPException(status_code=400, detail="O login expirou. Clique em Entrar com o Facebook de novo.")
+    if not meta.valid_redirect(redirect_uri):
+        raise HTTPException(status_code=400, detail="Endereço de retorno inválido")
+    try:
+        got = await meta.exchange(code, redirect_uri)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    who = got["user"]["name"] or "Facebook"
+    await db.execute(text("""INSERT INTO fb_meta_auth (user_id, fb_user_id, fb_user_name, token_enc, connected_at)
+        VALUES (:u, :fid, :fname, :tok, NOW())
+        ON CONFLICT (user_id) DO UPDATE SET fb_user_id = :fid, fb_user_name = :fname, token_enc = :tok, connected_at = NOW()"""),
+        {"u": user_id, "fid": got["user"]["id"], "fname": who[:160], "tok": encrypt_setting_value(got["token"])})
+    ours = (await db.execute(text("SELECT id, name, meta_page_id, account_id FROM fb_pages WHERE user_id = :u"), {"u": user_id})).mappings().all()
+    account_id = await _account_for(db, user_id, who)
+    connected: list[str] = []
+    linked = {p["meta_page_id"] for p in ours if p["meta_page_id"]}
+    for mp in got["pages"]:
+        hit = next((p for p in ours if p["meta_page_id"] == mp["id"]), None) or next((p for p in ours if not p["meta_page_id"] and meta.same_name(p["name"], mp["name"])), None)
+        if hit and mp["can_post"]:
+            await _attach_meta_page(db, user_id, hit["id"], mp, who)
+            if account_id and not hit["account_id"]:
+                await db.execute(text("UPDATE fb_pages SET account_id = :a WHERE id = :id"), {"a": account_id, "id": hit["id"]})
+            connected.append(hit["name"])
+            linked.add(mp["id"])
+    await db.commit()
+    others = [{"id": mp["id"], "name": mp["name"]} for mp in got["pages"] if mp["id"] not in linked]
+    return {"name": who, "conectadas": connected, "outras": others}
+
+
+@router.get("/meta/pages")
+async def meta_pages(request: Request, db: AsyncSession = Depends(get_db)):
+    """Páginas do Facebook da pessoa, dizendo quais já estão no ClipGringa."""
+    user_id = await _admin(request, db)
+    auth = await _meta_auth(db, user_id)
+    if not auth:
+        raise HTTPException(status_code=409, detail="Entre com o Facebook primeiro")
+    try:
+        pages = await meta.pages_of(decrypt_setting_value(auth["token_enc"]))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"{exc} Entre com o Facebook de novo.")
+    ours = (await db.execute(text("SELECT id, meta_page_id FROM fb_pages WHERE user_id = :u AND meta_page_id IS NOT NULL"), {"u": user_id})).mappings().all()
+    by_meta = {p["meta_page_id"]: p["id"] for p in ours}
+    return {"pages": [{"id": p["id"], "name": p["name"], "can_post": p["can_post"], "page_id": by_meta.get(p["id"])} for p in pages]}
+
+
+@router.post("/meta/pages/{meta_page_id}/link")
+async def meta_link(meta_page_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    """Traz uma página do Facebook para o ClipGringa (ou liga numa página que já existe aqui)."""
+    user_id = await _admin(request, db)
+    auth = await _meta_auth(db, user_id)
+    if not auth:
+        raise HTTPException(status_code=409, detail="Entre com o Facebook primeiro")
+    body = await request.json() if (await request.body()) else {}
+    try:
+        pages = await meta.pages_of(decrypt_setting_value(auth["token_enc"]))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"{exc} Entre com o Facebook de novo.")
+    mp = next((p for p in pages if p["id"] == meta_page_id), None)
+    if not mp:
+        raise HTTPException(status_code=404, detail="Essa página não aparece no seu Facebook")
+    if not mp["can_post"]:
+        raise HTTPException(status_code=400, detail="Seu perfil não pode publicar nessa página")
+    page_id = _s(body.get("page_id"), 36)
+    if page_id:
+        await _own(db, "fb_pages", page_id, user_id)
+    else:
+        existing = (await db.execute(text("SELECT id FROM fb_pages WHERE user_id = :u AND meta_page_id = :m"), {"u": user_id, "m": mp["id"]})).scalar()
+        page_id = existing or str(uuid.uuid4())
+        if not existing:
+            total = (await db.execute(text("SELECT COUNT(*) FROM fb_pages WHERE user_id = :u"), {"u": user_id})).scalar() or 0
+            if total >= MAX_PAGES:
+                raise HTTPException(status_code=409, detail=f"Limite de {MAX_PAGES} páginas")
+            await db.execute(text("""INSERT INTO fb_pages (id, user_id, account_id, name, language) VALUES (:id, :u, :a, :n, 'en')"""),
+                             {"id": page_id, "u": user_id, "a": await _account_for(db, user_id, auth["fb_user_name"]), "n": mp["name"][:160]})
+            await add_event(db, user_id, f"Página {mp['name']} veio do Facebook", page_id=page_id, actor="voce")
+    await _attach_meta_page(db, user_id, page_id, mp, auth["fb_user_name"] or "Facebook")
+    await db.commit()
+    return {"page_id": page_id, "name": mp["name"]}
+
+
+@router.delete("/meta")
+async def meta_logout(request: Request, db: AsyncSession = Depends(get_db)):
+    """Esquece o login do Facebook. As páginas já conectadas continuam com o próprio token."""
+    user_id = await _admin(request, db)
+    await db.execute(text("DELETE FROM fb_meta_auth WHERE user_id = :u"), {"u": user_id})
     await db.commit()
     return {"ok": True}
 

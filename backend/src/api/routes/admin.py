@@ -107,6 +107,16 @@ SETTING_METADATA = {
         "description": "Deixe vazio para usar 465 (SSL).",
         "input_type": "text",
     },
+    "META_APP_ID": {
+        "label": "ID do app da Meta",
+        "description": "Para o botão Entrar com o Facebook (módulo Facebook). Fica em developers.facebook.com, no painel do app.",
+        "input_type": "text",
+    },
+    "META_APP_SECRET": {
+        "label": "Chave secreta do app da Meta",
+        "description": "Em Configurações do app, Básico. Fica criptografada e nunca volta para a tela.",
+        "input_type": "password",
+    },
 }
 
 

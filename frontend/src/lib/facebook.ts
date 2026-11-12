@@ -44,7 +44,18 @@ async function call<T>(path: string, init?: { method?: string; body?: unknown })
   return data;
 }
 
+export type MetaStatus = { configured: boolean; connected: boolean; name: string | null; connected_at: string | null };
+export type MetaPage = { id: string; name: string; can_post: boolean; page_id: string | null };
+export const metaCallbackUrl = () => `${window.location.origin}/facebook/meta`;
+
 export const fb = {
+  metaStatus: () => call<MetaStatus>("meta/status"),
+  metaStart: () => call<{ url: string }>("meta/start", { method: "POST", body: { redirect_uri: metaCallbackUrl() } }),
+  metaFinish: (code: string, state: string) =>
+    call<{ name: string; conectadas: string[]; outras: Array<{ id: string; name: string }> }>("meta/finish", { method: "POST", body: { code, state, redirect_uri: metaCallbackUrl() } }),
+  metaPages: () => call<{ pages: MetaPage[] }>("meta/pages").then((r) => r.pages),
+  metaLink: (metaPageId: string, pageId?: string) => call<{ page_id: string; name: string }>(`meta/pages/${metaPageId}/link`, { method: "POST", body: pageId ? { page_id: pageId } : {} }),
+  metaLogout: () => call("meta", { method: "DELETE" }),
   overview: () => call<{ accounts: FbAccount[]; pages: FbPage[] }>("overview"),
   syncAccounts: (provider: string, profiles: Array<{ external_id: string; name: string; proxy?: string; notes?: string }>) =>
     call<{ novas: number; atualizadas: number }>("accounts/sync", { method: "POST", body: { provider, profiles } }),
