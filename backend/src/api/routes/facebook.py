@@ -413,7 +413,7 @@ async def _map_profile(db: AsyncSession, user_id: str, who: str, account_id: str
             if mp["name"] not in out["novas"]:
                 out["conectadas"].append(hit["name"])
             try:
-                await meta.sync_page(db, {"id": hit["id"], "user_id": user_id, "meta_page_id": mp["id"], "meta_token_enc": encrypt_setting_value(mp["token"])}, client)
+                await meta.sync_page(db, {"id": hit["id"], "user_id": user_id, "meta_page_id": mp["id"], "meta_token_enc": encrypt_setting_value(mp["token"])}, client, fresh=mp["name"] in out["novas"])
             except Exception as exc:  # noqa: BLE001 - números e comentários são um extra; o login não falha por causa deles
                 logger.warning("Não li os números da página %s: %s", mp["id"], exc)
     return out

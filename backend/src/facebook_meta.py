@@ -122,25 +122,52 @@ async def pages_of(token: str) -> list[dict[str, str]]:
         return await list_pages(token, client)
 
 
-async def page_stats(page_id: str, token: str, client: httpx.AsyncClient) -> dict[str, int | None]:
-    """Números reais da página: seguidores, posts normais (texto e imagem), vídeos e programados."""
-    info = await _get(client, page_id, {"fields": "followers_count", "access_token": token})
+_LANG_WORDS = {
+    "pt-BR": {"que", "não", "nao", "você", "voce", "para", "com", "uma", "mais", "como", "isso", "seu", "sua", "está", "esta", "dos", "das", "muito", "também", "hoje", "nossa", "nosso", "pra", "são"},
+    "en": {"the", "and", "you", "your", "that", "this", "with", "for", "are", "why", "how", "what", "have", "from", "more", "will", "our", "can", "when", "about"},
+    "es": {"que", "los", "las", "una", "para", "con", "por", "más", "como", "pero", "sus", "muy", "también", "hoy", "nuestra", "nuestro", "usted", "está", "el", "del"},
+}
+
+
+def guess_language(texts: list[str]) -> str | None:
+    """Idioma mais provável dos posts da página (pt-BR, en ou es). None quando não dá para saber."""
+    words = "".join(c if c.isalpha() else " " for c in " ".join(texts).lower()).split()
+    if len(words) < 8:
+        return None
+    score = {lang: sum(1 for w in words if w in vocab) for lang, vocab in _LANG_WORDS.items()}
+    best = max(score, key=lambda k: score[k])
+    others = sorted(score.values(), reverse=True)
+    return best if score[best] >= 3 and score[best] > others[1] else None
+
+
+async def page_stats(page_id: str, token: str, client: httpx.AsyncClient) -> dict[str, Any]:
+    """Números reais da página: seguidores, posts normais (texto e imagem), vídeos e programados.
+
+    Traz também o que dá para ver sem ninguém preencher: se tem foto e capa, a categoria e o idioma dos posts."""
+    info = await _get(client, page_id, {"fields": "followers_count,category,cover,picture{is_silhouette}", "access_token": token})
     normal = video = 0
-    data = await _get(client, f"{page_id}/published_posts", {"fields": "status_type", "limit": "100", "access_token": token})
+    texts: list[str] = []
+    fields = {"fields": "status_type,message", "limit": "100", "access_token": token}
+    data = await _get(client, f"{page_id}/published_posts", fields)
     for _ in range(10):
         for item in data.get("data") or []:
             if item.get("status_type") == "added_video":
                 video += 1
             else:
                 normal += 1
+            if item.get("message") and len(texts) < 40:
+                texts.append(str(item["message"])[:400])
         after = ((data.get("paging") or {}).get("cursors") or {}).get("after")
         if not after or not (data.get("paging") or {}).get("next"):
             break
-        data = await _get(client, f"{page_id}/published_posts", {"fields": "status_type", "limit": "100", "after": after, "access_token": token})
+        data = await _get(client, f"{page_id}/published_posts", {**fields, "after": after})
     scheduled = await _get(client, f"{page_id}/scheduled_posts", {"fields": "id", "limit": "100", "access_token": token})
     followers = info.get("followers_count")
+    picture = (info.get("picture") or {}).get("data") or {}
     return {"followers": int(followers) if isinstance(followers, int) else None, "normal": normal, "video": video,
-            "scheduled": len(scheduled.get("data") or [])}
+            "scheduled": len(scheduled.get("data") or []),
+            "has_photo": bool(picture) and picture.get("is_silhouette") is False, "has_cover": bool(info.get("cover")),
+            "category": str(info.get("category") or "")[:80], "language": guess_language(texts)}
 
 
 def same_name(a: str, b: str) -> bool:
@@ -192,19 +219,32 @@ async def save_comments(db: AsyncSession, user_id: str, page_id: str, comments: 
     for c in comments:
         keyword, product = match_offer(c["message"], offers)
         result = await db.execute(text("""INSERT INTO fb_comments (id, user_id, page_id, fb_comment_id, fb_post_id, from_id, from_name, message, keyword, product, commented_at)
-            VALUES (:id, :u, :p, :cid, :pid, :fid, :fname, :msg, :k, :prod, :at) ON CONFLICT (fb_comment_id) DO NOTHING"""),
+            VALUES (:id, :u, :p, :cid, :pid, :fid, :fname, :msg, :k, :prod, :at) 
+            ON CONFLICT (fb_comment_id) DO UPDATE SET
+              from_id = CASE WHEN EXCLUDED.from_id <> '' THEN EXCLUDED.from_id ELSE fb_comments.from_id END,
+              from_name = CASE WHEN EXCLUDED.from_name <> '' THEN EXCLUDED.from_name ELSE fb_comments.from_name END,
+              keyword = CASE WHEN fb_comments.keyword = '' THEN EXCLUDED.keyword ELSE fb_comments.keyword END,
+              product = CASE WHEN fb_comments.keyword = '' THEN EXCLUDED.product ELSE fb_comments.product END
+            RETURNING (xmax = 0) AS inserted"""),
             {"id": str(uuid.uuid4()), "u": user_id, "p": page_id, "cid": c["id"][:80], "pid": c["post_id"][:80], "fid": c["from_id"][:40], "fname": c["from_name"][:160],
              "msg": c["message"][:1000], "k": keyword[:30], "prod": product[:200], "at": _when(c["created_time"])})
-        new += result.rowcount or 0
+        new += 1 if result.scalar() else 0
     return new
 
 
-async def sync_page(db: AsyncSession, row: Any, client: httpx.AsyncClient) -> None:
-    """Lê do Facebook os números e os comentários de uma página conectada."""
+async def sync_page(db: AsyncSession, row: Any, client: httpx.AsyncClient, fresh: bool = False) -> None:
+    """Lê do Facebook os números e os comentários de uma página conectada.
+
+    Marca sozinho a foto, a capa e o nicho quando o Facebook mostra; em página recém-mapeada (fresh) define o idioma."""
     token = decrypt_setting_value(row["meta_token_enc"])
     st = await page_stats(row["meta_page_id"], token, client)
-    await db.execute(text("UPDATE fb_pages SET fb_followers = :f, fb_posts_normal = :n, fb_posts_video = :v, fb_scheduled = :s, fb_synced_at = NOW() WHERE id = :id"),
-                     {"f": st["followers"], "n": st["normal"], "v": st["video"], "s": st["scheduled"], "id": row["id"]})
+    await db.execute(text("""UPDATE fb_pages SET fb_followers = :f, fb_posts_normal = :n, fb_posts_video = :v, fb_scheduled = :s, fb_synced_at = NOW(),
+        has_photo = has_photo OR :photo, has_cover = has_cover OR :cover,
+        niche = CASE WHEN niche = '' THEN :cat ELSE niche END WHERE id = :id"""),
+        {"f": st["followers"], "n": st["normal"], "v": st["video"], "s": st["scheduled"], "id": row["id"],
+         "photo": bool(st.get("has_photo")), "cover": bool(st.get("has_cover")), "cat": str(st.get("category") or "")[:80]})
+    if fresh:
+        await db.execute(text("UPDATE fb_pages SET language = :l WHERE id = :id"), {"l": st.get("language") or "pt-BR", "id": row["id"]})
     try:
         await save_comments(db, row["user_id"], row["id"], await page_comments(row["meta_page_id"], token, client))
     except ValueError:  # sem a permissão de ler comentários: os números seguem valendo

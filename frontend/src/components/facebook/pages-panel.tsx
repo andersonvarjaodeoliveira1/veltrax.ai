@@ -92,7 +92,14 @@ function PageCard({ page: p, onClips, onMeta, onChange }: { page: FbPage; onClip
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           {p.link ? <a href={p.link} target="_blank" rel="noopener noreferrer" className="truncate text-base font-bold text-white hover:underline">{p.name}</a> : <p className="truncate text-base font-bold text-white">{p.name}</p>}
-          <p className="text-xs text-white/60">{[p.account_name, p.niche, p.language === "en" ? "inglês" : p.language === "es" ? "espanhol" : "português"].filter(Boolean).join(", ")}</p>
+          <p className="flex flex-wrap items-center gap-x-1 text-xs text-white/60">
+            {[p.account_name, p.niche].filter(Boolean).map((part) => <span key={part}>{part},</span>)}
+            <select aria-label={`Idioma de ${p.name}`} value={["en", "es"].includes(p.language) ? p.language : "pt-BR"}
+              onChange={(e) => void run(() => fb.updatePage(p.id, { language: e.target.value }), "Idioma trocado")}
+              className="cursor-pointer rounded-[6px] bg-transparent py-0.5 text-xs text-white/60 hover:text-white [&>option]:text-black">
+              <option value="pt-BR">português</option><option value="en">inglês</option><option value="es">espanhol</option>
+            </select>
+          </p>
         </div>
         {p.status !== "ativa" ? <Pill tone="bad">{p.status === "restricao" ? "Com restrição" : "Bloqueada"}</Pill>
           : missing.length ? <Pill tone="warn">Falta {missing.join(" e ")}</Pill> : <Pill tone="ok">Página pronta</Pill>}

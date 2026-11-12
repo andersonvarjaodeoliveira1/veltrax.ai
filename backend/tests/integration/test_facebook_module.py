@@ -189,12 +189,16 @@ async def test_login_with_facebook_maps_profile_and_pages(client, db_session, au
         return fb_pages + [{"id": "444", "name": "Página Nova", "token": "PAGE-TOKEN-444", "can_post": True}]
 
     async def fake_stats(page_id, token, client):
-        return {"followers": 12, "normal": 9, "video": 2, "scheduled": 6}
+        return {"followers": 12, "normal": 9, "video": 2, "scheduled": 6, "has_photo": True, "has_cover": page_id == "222", "category": "Education",
+                "language": "en" if page_id == "222" else None}
+
+    names = {"on": False}
 
     async def fake_comments(page_id, token, client):
         if page_id != "111":
             return []
-        return [{"id": "c1", "post_id": "111_1", "from_id": "u1", "from_name": "Maria Souza", "message": "Quero! SONO", "created_time": "2026-11-11T10:00:00+0000"},
+        # na primeira leitura o Facebook não entrega o nome; depois entrega
+        return [{"id": "c1", "post_id": "111_1", "from_id": "u1" if names["on"] else "", "from_name": "Maria Souza" if names["on"] else "", "message": "Quero! SONO", "created_time": "2026-11-11T10:00:00+0000"},
                 {"id": "c2", "post_id": "111_1", "from_id": "u2", "from_name": "João Lima", "message": "muito bom", "created_time": "2026-11-11T11:00:00+0000"}]
 
     from sqlalchemy import text as sql
@@ -218,10 +222,14 @@ async def test_login_with_facebook_maps_profile_and_pages(client, db_session, au
     assert not pages["Só Leitura"]["meta_connected"]
     assert "TOKEN" not in str(ov)
 
+    # foto, capa, nicho e idioma vêm do Facebook; o que a pessoa já tinha escolhido fica
+    assert (pages["The Curious Mind"]["has_photo"], pages["The Curious Mind"]["has_cover"], pages["The Curious Mind"]["niche"], pages["The Curious Mind"]["language"]) == (True, True, "Education", "en")
+    assert (pages["Só Leitura"]["language"], pages["body explained"]["language"], pages["body explained"]["has_cover"]) == ("en", "en", False)
     got = (await client.get("/facebook/comments", headers=auth_headers)).json()
     assert got["total"] == 2 and got["products"] == [{"product": "Guia do Sono", "keyword": "sono", "total": 1, "people": 1}]
     lead = next(c for c in got["comments"] if c["keyword"])
-    assert (lead["from_name"], lead["page_name"], lead["account_name"], lead["product"]) == ("Maria Souza", "body explained", "Jaah Alves", "Guia do Sono")
+    assert (lead["from_name"], lead["page_name"], lead["account_name"], lead["product"]) == ("", "body explained", "Jaah Alves", "Guia do Sono")
+    names["on"] = True
 
     # entrar de novo não duplica; Atualizar traz a página nova
     await client.post("/facebook/meta/finish", headers=auth_headers, json={"code": "CODE", "state": state, "redirect_uri": back})
@@ -229,7 +237,9 @@ async def test_login_with_facebook_maps_profile_and_pages(client, db_session, au
     assert synced["novas"] == ["Página Nova"] and synced["expirados"] == []
     ov = (await client.get("/facebook/overview", headers=auth_headers)).json()
     assert len(ov["accounts"]) == 1 and len(ov["pages"]) == 4
-    assert (await client.get("/facebook/comments", headers=auth_headers)).json()["total"] == 2
+    got = (await client.get("/facebook/comments", headers=auth_headers)).json()
+    assert got["total"] == 2 and next(c for c in got["comments"] if c["keyword"])["from_name"] == "Maria Souza"
+    assert next(p for p in ov["pages"] if p["name"] == "Página Nova")["language"] == "pt-BR"
     status = (await client.get("/facebook/meta/status", headers=auth_headers)).json()
     assert [(p["name"], p["pages"]) for p in status["profiles"]] == [("Jaah Alves", 4)]
     assert (await client.delete(f"/facebook/meta/{status['profiles'][0]['id']}", headers=auth_headers)).status_code == 200
