@@ -186,7 +186,11 @@ export function renderCover(canvas: HTMLCanvasElement, page: FbPage, pal: Palett
   x.fillStyle = pal.bg; x.fillRect(0, 0, 1640, 624);
   drawDots(x, 1640, 624, pal.accent, page.id.length * 17 + 3, [360, 150, 1460, 480]);
   drawMark(x, 500, 312, 96, page, pal);
-  x.fillStyle = pal.text; x.font = `800 84px "Segoe UI", system-ui, sans-serif`; x.fillText(page.name, 640, 300);
+  // nome comprido encolhe até caber na área segura da capa
+  let size = 84;
+  x.font = `800 ${size}px "Segoe UI", system-ui, sans-serif`;
+  while (size > 44 && x.measureText(page.name).width > 900) { size -= 4; x.font = `800 ${size}px "Segoe UI", system-ui, sans-serif`; }
+  x.fillStyle = pal.text; x.fillText(page.name, 640, 300);
   x.fillStyle = pal.accent; x.font = `600 36px "Segoe UI", system-ui, sans-serif`; x.fillText(tagline, 644, 360);
   if (page.niche) { x.fillStyle = pal.muted; x.font = `400 28px "Segoe UI", system-ui, sans-serif`; x.fillText(page.niche, 644, 410); }
 }
@@ -201,17 +205,19 @@ function VisualDialog({ page, palette, onClose, onDone }: { page: FbPage; palett
   const [pal, setPal] = useState(palette);
   const lines = TAGLINES[page.language] ?? TAGLINES.en;
   const [tagline, setTagline] = useState(lines[page.id.length % lines.length]);
+  const [name, setName] = useState(page.name);
   const profileRef = useRef<HTMLCanvasElement>(null);
   const coverRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
-    if (profileRef.current) renderProfile(profileRef.current, page, pal);
-    if (coverRef.current) renderCover(coverRef.current, page, pal, tagline);
-  }, [page, pal, tagline]);
+    const shown = { ...page, name: name.trim() || page.name };
+    if (profileRef.current) renderProfile(profileRef.current, shown, pal);
+    if (coverRef.current) renderCover(coverRef.current, shown, pal, tagline);
+  }, [page, pal, tagline, name]);
   const download = (canvas: HTMLCanvasElement | null, name: string) => {
     if (!canvas) return;
     const a = document.createElement("a"); a.href = canvas.toDataURL("image/png"); a.download = name; a.click();
   };
-  const slug = page.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  const slug = (name.trim() || page.name).toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "pagina";
   const done = async () => {
     try { await fb.updatePage(page.id, { has_photo: true, has_cover: true }); toast.success("Foto e capa marcadas como colocadas"); onClose(); await onDone(); }
     catch (problem) { toast.error((problem as Error).message); }
@@ -224,6 +230,9 @@ function VisualDialog({ page, palette, onClose, onDone }: { page: FbPage; palett
             className={cn("size-7 rounded-full border-2", pl.name === pal.name ? "border-white" : "border-transparent")} style={{ background: `linear-gradient(135deg, ${pl.bg} 55%, ${pl.accent} 55%)` }} />
         ))}
       </div>
+      <label className="block space-y-1.5"><span className="text-xs font-medium text-white/80">Nome na arte</span>
+        <input className="block w-full rounded-[12px] border border-white/15 bg-black/30 px-3 py-2.5 text-sm text-white" value={name} maxLength={60} onChange={(e) => setName(e.target.value)} />
+        <span className="block text-xs text-white/50">Vai trocar o nome da página? Escreva aqui o nome novo.</span></label>
       <label className="block space-y-1.5"><span className="text-xs font-medium text-white/80">Frase da capa</span>
         <select className="block w-full rounded-[12px] border border-white/15 bg-black/30 px-3 py-2.5 text-sm text-white" value={tagline} onChange={(e) => setTagline(e.target.value)}>
           {lines.map((l) => <option key={l}>{l}</option>)}
