@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { brDateTime, fb, type FbAccount, type FbClip, type FbPage, type FbPost, type FbVideo } from "@/lib/facebook";
+import { ManualPostDialog, RegisterPostsDialog } from "./manual-post";
 import { goToFacebookLogin, MetaCard, MetaSetupDialog, useMetaStatus } from "./meta-connect";
 import { PagePlanSteps } from "./page-plan";
 import { cn } from "@/lib/utils";
@@ -33,7 +34,7 @@ export function PagesPanel({ pages, accounts, onChange }: { pages: FbPage[]; acc
       {pages.length === 0 && !creating ? <p className="rounded-[16px] border border-dashed border-white/15 p-4 text-sm text-white/70">Nenhuma página ainda. Clique em Nova página e cadastre a primeira.</p> : null}
       {pages.map((p) => <PageCard key={p.id} page={p} onClips={() => setClipsFor(p)} onMeta={() => setMetaFor(p)} onChange={onChange} />)}
 
-      {clipsFor ? <ClipsDialog page={clipsFor} onClose={() => setClipsFor(null)} onDone={onChange} /> : null}
+      {clipsFor ? <ClipsDialog page={clipsFor} pages={pages} onClose={() => setClipsFor(null)} onDone={onChange} /> : null}
       {metaFor ? <MetaDialog page={metaFor} onClose={() => setMetaFor(null)} onDone={onChange} /> : null}
     </div>
   );
@@ -76,6 +77,8 @@ function PageCard({ page: p, onClips, onMeta, onChange }: { page: FbPage; onClip
   const [note, setNote] = useState("");
   const [todo, setTodo] = useState("");
   const [posts, setPosts] = useState<FbPost[] | null>(null);
+  const [manual, setManual] = useState<FbPost | null>(null);
+  const [register, setRegister] = useState(false);
   const missing = [!p.has_photo && "foto", !p.has_cover && "capa"].filter(Boolean) as string[];
   const open = p.todos.filter((t) => !t.done_at);
 
@@ -108,8 +111,11 @@ function PageCard({ page: p, onClips, onMeta, onChange }: { page: FbPage; onClip
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" className={secondary} onClick={onClips}>Adicionar vídeos</button>
         {p.meta_connected ? <button type="button" className={secondary} onClick={onMeta}>Conectada à Meta</button> : null}
-        <span className="text-xs text-white/50">{p.meta_error ? p.meta_error : p.meta_connected ? "Posta sozinho no horário" : "Sem conexão, os posts ficam esperando"}</span>
+        {!p.meta_connected ? <button type="button" className={secondary} onClick={() => setRegister(true)}>Registrar posts feitos no Facebook</button> : null}
+        <span className="text-xs text-white/50">{p.meta_error ? p.meta_error : p.meta_connected ? "Posta sozinho no horário" : "Sem conexão: abra a Agenda e use Postar à mão"}</span>
       </div>
+      {manual ? <ManualPostDialog page={p} post={manual} onClose={() => setManual(null)} onDone={async () => { await loadPosts(); await onChange(); }} /> : null}
+      {register ? <RegisterPostsDialog page={p} onClose={() => setRegister(false)} onDone={onChange} /> : null}
 
       {open.length ? (
         <div className="space-y-1.5">
@@ -130,6 +136,7 @@ function PageCard({ page: p, onClips, onMeta, onChange }: { page: FbPage; onClip
               <span className="w-24 shrink-0 text-xs text-white/60">{brDateTime(x.scheduled_at)}</span>
               <span className="min-w-0 flex-1 truncate text-white">{x.title}</span>
               <Pill tone={x.status === "publicado" ? "ok" : x.status === "agendado" ? "off" : x.status === "falhou" ? "bad" : "warn"}>{{ pendente: "Esperando", agendado: "No Facebook", publicado: "Publicado", falhou: "Falhou" }[x.status]}</Pill>
+              {x.status === "pendente" && !p.meta_connected ? <button type="button" className="text-xs text-white underline" onClick={() => setManual(x)}>Postar à mão</button> : null}
               {x.status !== "publicado" ? <button type="button" className="text-xs text-white/50 hover:text-white" onClick={() => void run(async () => { await fb.removePost(x.id); await loadPosts(); }, "Tirado da agenda")}>Tirar</button> : null}
             </li>
           ))}
@@ -156,7 +163,9 @@ function PageCard({ page: p, onClips, onMeta, onChange }: { page: FbPage; onClip
   );
 }
 
-export function ClipsDialog({ page, onClose, onDone, preselect }: { page: FbPage; onClose: () => void; onDone: () => Promise<void> | void; preselect?: string[] }) {
+export function ClipsDialog({ page, pages = [], onClose, onDone, preselect }: { page: FbPage; pages?: FbPage[]; onClose: () => void; onDone: () => Promise<void> | void; preselect?: string[] }) {
+  const [also, setAlso] = useState<string[]>([]);
+  const others = pages.filter((x) => x.id !== page.id && x.status === "ativa");
   const [lib, setLib] = useState<{ clips: FbClip[]; videos: FbVideo[] } | null>(null);
   const [tab, setTab] = useState<"organicos" | "cortes">(preselect?.length ? "cortes" : "organicos");
   const [picked, setPicked] = useState<string[]>(preselect ?? []);
@@ -169,7 +178,9 @@ export function ClipsDialog({ page, onClose, onDone, preselect }: { page: FbPage
     try {
       const chosen = (lib?.videos ?? []).filter((v) => videos.includes(`${v.source}:${v.id}`)).map((v) => ({ id: v.id, source: v.source }));
       const r = await fb.addClips(page.id, picked, chosen);
-      toast.success(`${r.agendados} ${r.agendados === 1 ? "vídeo entrou" : "vídeos entraram"} na agenda de ${page.name}`); onClose(); await onDone();
+      // mesma seleção em outras páginas: cada uma recebe os próprios horários
+      for (const id of also) await fb.addClips(id, picked, chosen);
+      toast.success(`${r.agendados} ${r.agendados === 1 ? "vídeo entrou" : "vídeos entraram"} na agenda de ${also.length ? `${also.length + 1} páginas` : page.name}`); onClose(); await onDone();
     } catch (problem) { toast.error((problem as Error).message); } finally { setBusy(false); }
   };
   const row = (key: string, checked: boolean, toggle: (on: boolean) => void, title: string, meta: string) => (
@@ -212,6 +223,17 @@ export function ClipsDialog({ page, onClose, onDone, preselect }: { page: FbPage
               [c.source_title, `${Math.round(c.duration)}s`, c.used_in && `já em ${c.used_in}`].filter(Boolean).join(", ")))}
         </ul>
       )}
+      {others.length ? (
+        <details className="text-xs text-white/60"><summary className="cursor-pointer">Postar também em outras páginas{also.length ? ` (${also.length})` : ""}</summary>
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1.5">
+            {others.map((o) => (
+              <label key={o.id} className="flex cursor-pointer items-center gap-2 text-sm text-white">
+                <input type="checkbox" className="size-4 accent-violet-500" checked={also.includes(o.id)} onChange={(e) => setAlso((l) => (e.target.checked ? [...l, o.id] : l.filter((x) => x !== o.id)))} />{o.name}
+              </label>
+            ))}
+          </div>
+        </details>
+      ) : null}
       <div className="flex justify-end"><button type="button" className={primary} disabled={!total || busy} onClick={() => void save()}>{busy ? "Colocando…" : `Colocar na agenda (${total})`}</button></div>
     </Modal>
   );
@@ -237,7 +259,8 @@ function MetaDialog({ page, onClose, onDone }: { page: FbPage; onClose: () => vo
       ) : status ? (
         <button type="button" className={cn(secondary, "w-full")} onClick={() => setSetup(true)}>Ativar o Entrar com o Facebook</button>
       ) : null}
-      <p className="text-xs text-white/60">Você entra, marca as páginas e volta. A página {page.name} se conecta sozinha se tiver o mesmo nome no Facebook.</p>
+      <p className="text-xs text-white/60">Você entra, marca as páginas e volta. O perfil e todas as páginas dele ficam mapeados e conectados sozinhos.</p>
+      <p className="text-xs text-white/60">Sem conectar também funciona: na Agenda, use Postar à mão para baixar o vídeo, copiar a legenda e abrir o Facebook.</p>
       <details className="text-xs text-white/60"><summary className="cursor-pointer">Colar um token à mão</summary>
         <div className="mt-2 space-y-2">
           <input className={field} type="password" autoComplete="off" value={token} onChange={(e) => setToken(e.target.value)} placeholder="Token de acesso da página" aria-label="Token da página" />

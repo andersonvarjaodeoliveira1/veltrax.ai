@@ -25,12 +25,29 @@ export type FbPage = {
   status: "ativa" | "restricao" | "bloqueada"; has_photo: boolean; has_cover: boolean; posts_per_day: number;
   meta_connected: boolean; meta_error: string | null; published: number; upcoming: number; failed: number;
   next_at: string | null; until_at: string | null; todos: FbTodo[]; events: FbEvent[];
-  ideas: FbIdea[]; plan_seed: number;
+  ideas: FbIdea[]; plan_seed: number; meta_page_id: string | null;
+  // nossos registros: posts normais (texto e imagem), vídeos com CTA (Vídeo orgânico), cortes e vídeos feitos à mão
+  posts_normal: number; videos_cta: number; videos_cut: number; videos_manual: number;
+  // lidos do Facebook quando a página está conectada
+  fb_followers: number | null; fb_posts_normal: number | null; fb_posts_video: number | null; fb_scheduled: number | null; fb_synced_at: string | null;
 };
+/** Números de uma página: os do Facebook quando existem, senão os registrados aqui. */
+export function pageNumbers(p: FbPage) {
+  const synced = p.fb_synced_at !== null && p.fb_posts_normal !== null;
+  const clip = p.videos_cta + p.videos_cut;
+  return {
+    synced,
+    normal: synced ? (p.fb_posts_normal ?? 0) : p.posts_normal,
+    videos: synced ? (p.fb_posts_video ?? 0) : clip + p.videos_manual,
+    cta: p.videos_cta, cuts: p.videos_cut,
+    scheduled: Math.max(p.upcoming, synced ? (p.fb_scheduled ?? 0) : 0),
+    followers: p.fb_followers,
+  };
+}
 export type FbIdea = { id: string; title: string; script: string; caption: string; used: boolean };
 export type FbVideo = { id: string; source: "final" | "flow"; title: string; duration: number | null; created_at: string | null; used_in: string | null };
 export type FbClip = { id: string; task_id: string; hook_title: string | null; duration: number; virality_score: number | null; source_title: string | null; used_in: string | null };
-export type FbPost = { id: string; title: string; caption: string; scheduled_at: string; status: "pendente" | "agendado" | "publicado" | "falhou"; error: string | null };
+export type FbPost = { id: string; kind: "video" | "texto" | "imagem"; source: "corte" | "organico" | "manual"; title: string; caption: string; scheduled_at: string; status: "pendente" | "agendado" | "publicado" | "falhou"; error: string | null };
 
 async function call<T>(path: string, init?: { method?: string; body?: unknown }): Promise<T> {
   const response = await fetch(`/api/facebook/${path}`, {
@@ -44,18 +61,25 @@ async function call<T>(path: string, init?: { method?: string; body?: unknown })
   return data;
 }
 
-export type MetaStatus = { configured: boolean; connected: boolean; name: string | null; connected_at: string | null };
-export type MetaPage = { id: string; name: string; can_post: boolean; page_id: string | null };
+export type MetaProfile = { id: string; name: string; pages: number; connected_at: string | null };
+export type MetaStatus = { configured: boolean; profiles: MetaProfile[] };
+export type MapResult = { name?: string; conectadas: string[]; novas: string[]; sem_permissao: string[]; expirados?: string[] };
+export type CalendarPost = { id: string; page_id: string; page_name: string; kind: string; source: string; title: string; scheduled_at: string; status: FbPost["status"] };
+export type FbComment = { id: string; from_name: string; message: string; keyword: string; product: string; commented_at: string | null; page_id: string; page_name: string; account_name: string | null };
+export type CommentsData = { total: number; products: Array<{ product: string; keyword: string; total: number; people: number }>; comments: FbComment[] };
 export const metaCallbackUrl = () => `${window.location.origin}/facebook/meta`;
 
 export const fb = {
   metaStatus: () => call<MetaStatus>("meta/status"),
   metaStart: () => call<{ url: string }>("meta/start", { method: "POST", body: { redirect_uri: metaCallbackUrl() } }),
-  metaFinish: (code: string, state: string) =>
-    call<{ name: string; conectadas: string[]; outras: Array<{ id: string; name: string }> }>("meta/finish", { method: "POST", body: { code, state, redirect_uri: metaCallbackUrl() } }),
-  metaPages: () => call<{ pages: MetaPage[] }>("meta/pages").then((r) => r.pages),
-  metaLink: (metaPageId: string, pageId?: string) => call<{ page_id: string; name: string }>(`meta/pages/${metaPageId}/link`, { method: "POST", body: pageId ? { page_id: pageId } : {} }),
-  metaLogout: () => call("meta", { method: "DELETE" }),
+  metaFinish: (code: string, state: string) => call<MapResult>("meta/finish", { method: "POST", body: { code, state, redirect_uri: metaCallbackUrl() } }),
+  metaSync: () => call<MapResult>("meta/sync", { method: "POST", body: {} }),
+  metaForget: (id: string) => call("meta/" + id, { method: "DELETE" }),
+  calendar: (days = 7) => call<{ start: string; days: number; posts: CalendarPost[] }>(`calendar?days=${days}`),
+  comments: () => call<CommentsData>("comments"),
+  manualPosts: (pageId: string, kind: "texto" | "imagem" | "video", count: number) => call<{ registrados: number }>(`pages/${pageId}/posts/manual`, { method: "POST", body: { kind, count } }),
+  postDone: (postId: string) => call(`posts/${postId}/done`, { method: "POST", body: {} }),
+  postFileUrl: (postId: string) => `/api/facebook/posts/${postId}/file`,
   overview: () => call<{ accounts: FbAccount[]; pages: FbPage[] }>("overview"),
   syncAccounts: (provider: string, profiles: Array<{ external_id: string; name: string; proxy?: string; notes?: string }>) =>
     call<{ novas: number; atualizadas: number }>("accounts/sync", { method: "POST", body: { provider, profiles } }),

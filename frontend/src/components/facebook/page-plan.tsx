@@ -112,8 +112,8 @@ export function PagePlanSteps({ page: p, onChange, onVideos, onMeta }: { page: F
   const metaStep: Step = {
     key: "meta", done: p.meta_connected,
     title: "Postar sozinho",
-    text: "Conecte a página à Meta para o ClipGringa agendar os vídeos no horário.",
-    action: p.meta_connected ? undefined : <button type="button" className={secondary} onClick={onMeta}>Conectar à Meta</button>,
+    text: "Entre com o Facebook para o ClipGringa agendar os vídeos no horário. Sem conectar, use Postar à mão na Agenda.",
+    action: p.meta_connected ? undefined : <button type="button" className={secondary} onClick={onMeta}>Conectar o Facebook</button>,
   };
   const steps: Step[] = [
     { key: "pagina", title: "Página criada", text: p.link ? "Página cadastrada com o link." : "Cole o link da página para abrir direto daqui.", done: true },

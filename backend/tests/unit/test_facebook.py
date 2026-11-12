@@ -161,3 +161,32 @@ async def test_meta_exchange_gets_long_token_and_pages(monkeypatch):
     async with httpx.AsyncClient(transport=httpx.MockTransport(bad)) as client:
         with pytest.raises(ValueError, match="Invalid verification code"):
             await meta.exchange("CODE", "https://x.com/facebook/meta", client)
+
+
+@pytest.mark.asyncio
+async def test_meta_page_stats_counts_normal_and_video():
+    from src import facebook_meta as meta
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path, q = request.url.path, dict(request.url.params)
+        if path.endswith("/published_posts"):
+            if q.get("after"):
+                return httpx.Response(200, json={"data": [{"status_type": "added_video"}]})
+            return httpx.Response(200, json={"data": [{"status_type": "added_photos"}, {"status_type": "mobile_status_update"}, {"status_type": "added_video"}, {}],
+                                             "paging": {"cursors": {"after": "x"}, "next": "n"}})
+        if path.endswith("/scheduled_posts"):
+            return httpx.Response(200, json={"data": [{"id": "a"}, {"id": "b"}]})
+        return httpx.Response(200, json={"followers_count": 37, "id": "1"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        assert await meta.page_stats("1", "T", client) == {"followers": 37, "normal": 3, "video": 2, "scheduled": 2}
+
+
+def test_match_offer_finds_keyword_as_a_word():
+    from src.facebook_meta import match_offer
+
+    offers = [{"keyword": "SONO", "product": "Guia do Sono", "name": "x"}, {"keyword": "água", "product": "", "name": "Oferta água"}]
+    assert match_offer("eu quero, sono!", offers) == ("SONO", "Guia do Sono")
+    assert match_offer("AGUA por favor", offers) == ("água", "Oferta água")
+    assert match_offer("sonolento demais", offers) == ("", "")
+    assert match_offer("", offers) == ("", "")

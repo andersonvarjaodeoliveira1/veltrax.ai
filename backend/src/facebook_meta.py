@@ -10,16 +10,21 @@ import hashlib
 import hmac
 import secrets
 import time
+import unicodedata
+import uuid
+from datetime import datetime
 from typing import Any
 from urllib.parse import urlencode, urlparse
 
 import httpx
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from .config import Config
 from .facebook import GRAPH, GRAPH_VERSION, _graph_error
-from .runtime_settings import _get_encryption_secret
+from .runtime_settings import _get_encryption_secret, decrypt_setting_value
 
-SCOPES = ("pages_show_list", "pages_read_engagement", "pages_manage_posts", "business_management")
+SCOPES = ("pages_show_list", "pages_read_engagement", "pages_manage_posts", "pages_read_user_content", "business_management")
 STATE_TTL = 15 * 60
 CALLBACK_PATH = "/facebook/meta"
 
@@ -117,7 +122,108 @@ async def pages_of(token: str) -> list[dict[str, str]]:
         return await list_pages(token, client)
 
 
+async def page_stats(page_id: str, token: str, client: httpx.AsyncClient) -> dict[str, int | None]:
+    """Números reais da página: seguidores, posts normais (texto e imagem), vídeos e programados."""
+    info = await _get(client, page_id, {"fields": "followers_count", "access_token": token})
+    normal = video = 0
+    data = await _get(client, f"{page_id}/published_posts", {"fields": "status_type", "limit": "100", "access_token": token})
+    for _ in range(10):
+        for item in data.get("data") or []:
+            if item.get("status_type") == "added_video":
+                video += 1
+            else:
+                normal += 1
+        after = ((data.get("paging") or {}).get("cursors") or {}).get("after")
+        if not after or not (data.get("paging") or {}).get("next"):
+            break
+        data = await _get(client, f"{page_id}/published_posts", {"fields": "status_type", "limit": "100", "after": after, "access_token": token})
+    scheduled = await _get(client, f"{page_id}/scheduled_posts", {"fields": "id", "limit": "100", "access_token": token})
+    followers = info.get("followers_count")
+    return {"followers": int(followers) if isinstance(followers, int) else None, "normal": normal, "video": video,
+            "scheduled": len(scheduled.get("data") or [])}
+
+
 def same_name(a: str, b: str) -> bool:
     def norm(s: str) -> str:
         return " ".join((s or "").lower().split())
     return bool(norm(a)) and norm(a) == norm(b)
+
+
+
+def _plain(value: str) -> str:
+    base = unicodedata.normalize("NFKD", value or "")
+    return "".join(c for c in base if not unicodedata.combining(c)).lower()
+
+
+def match_offer(message: str, offers: list[dict[str, Any]]) -> tuple[str, str]:
+    """Acha a palavra-chave de uma oferta dentro do comentário. Devolve (palavra, produto)."""
+    words = set("".join(c if c.isalnum() else " " for c in _plain(message)).split())
+    for offer in offers:
+        key = _plain(str(offer.get("keyword") or "")).strip()
+        if key and key in words:
+            return str(offer["keyword"]).strip(), str(offer.get("product") or offer.get("name") or "").strip()
+    return "", ""
+
+
+async def page_comments(page_id: str, token: str, client: httpx.AsyncClient) -> list[dict[str, str]]:
+    """Comentários dos 25 posts mais recentes da página (até 100 por post)."""
+    data = await _get(client, f"{page_id}/published_posts", {"fields": "id,comments.limit(100){id,from,message,created_time}", "limit": "25", "access_token": token})
+    out: list[dict[str, str]] = []
+    for post in data.get("data") or []:
+        for c in ((post.get("comments") or {}).get("data") or []):
+            who = c.get("from") or {}
+            if not c.get("id") or str(who.get("id") or "") == str(page_id):
+                continue
+            out.append({"id": str(c["id"]), "post_id": str(post.get("id") or ""), "from_id": str(who.get("id") or ""), "from_name": str(who.get("name") or ""),
+                        "message": str(c.get("message") or ""), "created_time": str(c.get("created_time") or "")})
+    return out
+
+
+def _when(value: str) -> datetime | None:
+    try:
+        return datetime.strptime(value, "%Y-%m-%dT%H:%M:%S%z")
+    except ValueError:
+        return None
+
+
+async def save_comments(db: AsyncSession, user_id: str, page_id: str, comments: list[dict[str, str]]) -> int:
+    offers = [dict(r) for r in (await db.execute(text("SELECT name, product, keyword FROM offers WHERE user_id = :u AND keyword <> ''"), {"u": user_id})).mappings().all()]
+    new = 0
+    for c in comments:
+        keyword, product = match_offer(c["message"], offers)
+        result = await db.execute(text("""INSERT INTO fb_comments (id, user_id, page_id, fb_comment_id, fb_post_id, from_id, from_name, message, keyword, product, commented_at)
+            VALUES (:id, :u, :p, :cid, :pid, :fid, :fname, :msg, :k, :prod, :at) ON CONFLICT (fb_comment_id) DO NOTHING"""),
+            {"id": str(uuid.uuid4()), "u": user_id, "p": page_id, "cid": c["id"][:80], "pid": c["post_id"][:80], "fid": c["from_id"][:40], "fname": c["from_name"][:160],
+             "msg": c["message"][:1000], "k": keyword[:30], "prod": product[:200], "at": _when(c["created_time"])})
+        new += result.rowcount or 0
+    return new
+
+
+async def sync_page(db: AsyncSession, row: Any, client: httpx.AsyncClient) -> None:
+    """Lê do Facebook os números e os comentários de uma página conectada."""
+    token = decrypt_setting_value(row["meta_token_enc"])
+    st = await page_stats(row["meta_page_id"], token, client)
+    await db.execute(text("UPDATE fb_pages SET fb_followers = :f, fb_posts_normal = :n, fb_posts_video = :v, fb_scheduled = :s, fb_synced_at = NOW() WHERE id = :id"),
+                     {"f": st["followers"], "n": st["normal"], "v": st["video"], "s": st["scheduled"], "id": row["id"]})
+    try:
+        await save_comments(db, row["user_id"], row["id"], await page_comments(row["meta_page_id"], token, client))
+    except ValueError:  # sem a permissão de ler comentários: os números seguem valendo
+        pass
+
+
+async def refresh_stale_stats(db: AsyncSession, limit: int = 8, hours: int = 6) -> int:
+    """Roda no worker: relê números e comentários das páginas conectadas, a cada 6 horas."""
+    rows = (await db.execute(text("""SELECT id, user_id, meta_page_id, meta_token_enc FROM fb_pages
+        WHERE meta_token_enc IS NOT NULL AND meta_page_id IS NOT NULL
+          AND (fb_synced_at IS NULL OR fb_synced_at < NOW() - make_interval(hours => :h))
+        ORDER BY fb_synced_at NULLS FIRST LIMIT :n"""), {"h": hours, "n": limit})).mappings().all()
+    done = 0
+    async with httpx.AsyncClient(timeout=25) as client:
+        for row in rows:
+            try:
+                await sync_page(db, row, client)
+                done += 1
+            except Exception:  # noqa: BLE001 - tenta de novo daqui a 6 horas
+                await db.execute(text("UPDATE fb_pages SET fb_synced_at = NOW() WHERE id = :id"), {"id": row["id"]})
+    await db.commit()
+    return done
