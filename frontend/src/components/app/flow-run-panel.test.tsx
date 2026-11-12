@@ -79,3 +79,27 @@ describe("FlowRunPanel · só a geração atual", () => {
     expect(document.querySelector('video[src*="/novo/"]')).not.toBeNull();
   });
 });
+
+describe("FlowRunPanel · cena que não chegou", () => {
+  const finished = (at: number): FlowProgress => ({ ...progress(null), at, running: false, done: 2, startedAt: at - 600_000,
+    jobs: [{ key: "0-0", vi: 0, si: 0, file: "a.mp4", done: true, error: "" }, { key: "0-1", vi: 0, si: 1, file: "b.mp4", done: true, error: "" }] });
+
+  it("avisa quando o Flow terminou e uma cena não está no ClipGringa", async () => {
+    const at = Date.now() - 120_000;
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ videos: [{ id: "v1", file: "a.mp4", created_at: new Date(at - 60_000).toISOString() }] }))));
+    render(<FlowRunPanel onRetake={() => {}} />);
+    send(finished(at));
+    const box = await screen.findByTestId("flow-missing");
+    expect(box).toHaveTextContent("1 cena não chegou ao ClipGringa");
+    expect(box).toHaveTextContent("b.mp4");
+  });
+
+  it("não avisa quando todas as cenas chegaram", async () => {
+    const at = Date.now() - 120_000;
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ videos: [{ id: "v1", file: "a.mp4", created_at: new Date(at - 60_000).toISOString() }, { id: "v2", file: "b.mp4", created_at: new Date(at - 30_000).toISOString() }] }))));
+    render(<FlowRunPanel onRetake={() => {}} />);
+    send(finished(at));
+    expect(await screen.findByTestId("final-open")).toBeInTheDocument();
+    expect(screen.queryByTestId("flow-missing")).not.toBeInTheDocument();
+  });
+});

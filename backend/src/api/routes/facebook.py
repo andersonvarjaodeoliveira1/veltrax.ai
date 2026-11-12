@@ -642,7 +642,7 @@ async def recent_clips(request: Request, db: AsyncSession = Depends(get_db)):
     """), {"u": user_id})).mappings().all()
     flows = (await db.execute(text(f"""
         SELECT v.id, v.created_at, v.package, v.file, {used.format("v.id")} AS used_in FROM flow_videos v
-        WHERE v.user_id = :u AND v.deleted_at IS NULL AND v.mime LIKE 'video/%' ORDER BY v.created_at DESC LIMIT 60
+        WHERE v.user_id = :u AND v.deleted_at IS NULL AND lower(v.path) LIKE '%.mp4' ORDER BY v.created_at DESC LIMIT 60
     """), {"u": user_id})).mappings().all()
     videos = [{**_row(r), "source": "final", "title": "Vídeo final", "duration": r["duration"]} for r in finals]
     videos += [{"id": r["id"], "created_at": _iso(r["created_at"]), "used_in": r["used_in"], "source": "flow", "title": r["package"] or r["file"] or "Vídeo do Flow", "duration": None} for r in flows]

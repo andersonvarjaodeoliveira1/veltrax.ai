@@ -22,6 +22,7 @@ export function FlowRunPanel({ onRetake, onVariations }: { onRetake: (vbase: num
   const [flowImages, setFlowImages] = useState<Record<string, { file: string; data: string }>>({});
   const [watching, setWatching] = useState<string | null>(null);
   const [flowFiles, setFlowFiles] = useState<Record<string, string>>({}); // nome do arquivo -> id no ClipGringa
+  const [filesChecked, setFilesChecked] = useState(0); // quando a lista do servidor foi lida pela última vez
   useEffect(() => {
     const onImages = (event: MessageEvent) => {
       if (event.source !== window || event.data?.source !== "clipgringa-flow" || event.data?.type !== "images" || !event.data.data) return;
@@ -63,12 +64,16 @@ export function FlowRunPanel({ onRetake, onVariations }: { onRetake: (vbase: num
           if (since > 0 && (!v.created_at || Date.parse(v.created_at) < since)) continue;
           if (!(v.file in mine)) mine[v.file] = v.id;
         }
-        if (!stop) setFlowFiles(mine);
+if (!stop) { setFlowFiles(mine); setFilesChecked(Date.now()); }
       } catch { /* sem lista: o painel segue sem as setas */ }
     };
     void load();
-    const timer = flowActive ? window.setInterval(load, 6000) : 0;
-    return () => { stop = true; if (timer) window.clearInterval(timer); };
+    // Depois de terminar, segue olhando por 90 segundos: o envio da última cena pode chegar um pouco depois.
+    const timer = window.setInterval(() => {
+      if (!flowActive && Date.now() - flowProg.at > 90_000) { window.clearInterval(timer); return; }
+      void load();
+    }, 6000);
+    return () => { stop = true; window.clearInterval(timer); };
   }, [flowProg?.total, flowProg?.done, flowProg?.startedAt, flowActive]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const onMsg = (event: MessageEvent) => {
@@ -121,6 +126,18 @@ export function FlowRunPanel({ onRetake, onVariations }: { onRetake: (vbase: num
           );
         })()}
         <div className="h-2.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#A98BFF] transition-all duration-700" style={{ width: `${pct}%` }} /></div>
+        {(() => {
+          // O Flow terminou, mas a cena não chegou ao ClipGringa: sem isso a pessoa fica esperando um botão que não aparece.
+          const missing = flowProg.jobs.filter((j) => j.done && !flowFiles[j.file]);
+          if (flowProg.running || flowProg.done !== flowProg.total || missing.length === 0 || filesChecked < flowProg.at + 15_000) return null;
+          return (
+            <div role="alert" data-testid="flow-missing" className="space-y-1.5 rounded-[18px] border border-[#F5B454]/50 bg-[#F5B454]/10 p-4">
+              <p className="text-sm font-semibold text-[#F5B454]">{missing.length === 1 ? "1 cena não chegou ao ClipGringa" : `${missing.length} cenas não chegaram ao ClipGringa`}</p>
+              <p className="text-xs text-foreground/85">O Flow terminou, mas {missing.map((j) => j.file).join(", ")} não {missing.length === 1 ? "foi enviada" : "foram enviadas"}. Baixe {missing.length === 1 ? "essa cena" : "essas cenas"} no Flow e envie em “Já gerou no Flow? Envie os vídeos aqui”, logo abaixo.</p>
+              <p className="text-xs text-muted-foreground">Se acontecer de novo, atualize a extensão em <a className="underline" href="/conectar-flow">Conectar ao Flow</a>.</p>
+            </div>
+          );
+        })()}
         {onVariations && flowProg.done === flowProg.total && !flowProg.running && varAsked === "" && (
           <div data-testid="ask-variations" className="space-y-3 rounded-[18px] border border-[#5BD69A]/40 bg-[#5BD69A]/10 p-4">
             <p className="text-sm font-semibold">Terminou! Quer criar variações deste vídeo?</p>

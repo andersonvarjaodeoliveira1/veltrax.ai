@@ -377,3 +377,17 @@ async def test_private_reply_only_for_new_recent_keyword_comments(client, db_ses
     got = {c["message"]: (c["dm_status"], c["dm_error"]) for c in (await client.get("/facebook/comments", headers=auth_headers)).json()["comments"] if c["page_id"] == page["id"]}
     assert got["eu quero!"] == ("enviada", "") and got["QUERO"] == ("", "") and got["legal"] == ("", "")
     assert got["quero"][0] == "falhou" and "pages_messaging" in got["quero"][1]
+
+
+@pytest.mark.asyncio
+async def test_library_lists_only_flow_videos_not_images(client, db_session, auth_headers):
+    from sqlalchemy import text as sql
+
+    await create_user(db_session, user_id="user-1", is_admin=True)
+    await db_session.execute(sql("DELETE FROM flow_videos WHERE id IN ('fl-jpg', 'fl-mp4')"))
+    await db_session.execute(sql("""INSERT INTO flow_videos (id, user_id, package, file, path, size) VALUES
+        ('fl-jpg', 'user-1', 'Clonar vídeo', 'Video01_Cena02.jpg', '/tmp/x/fl-jpg.jpg', 2000),
+        ('fl-mp4', 'user-1', 'Clonar vídeo', 'Video01_Cena01.mp4', '/tmp/x/fl-mp4.mp4', 2000)"""))
+    await db_session.commit()
+    ids = {v["id"] for v in (await client.get("/facebook/clips", headers=auth_headers)).json()["videos"]}
+    assert "fl-mp4" in ids and "fl-jpg" not in ids

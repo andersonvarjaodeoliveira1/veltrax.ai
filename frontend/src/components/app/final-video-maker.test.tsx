@@ -58,3 +58,35 @@ it("lote: cria um vídeo final para cada vídeo, com as mesmas escolhas de ediç
   expect(bodies[0]).toMatchObject({ silence: "strong", transition: "slide", denoise: true });
   expect(await screen.findByText("Video02")).toBeInTheDocument();
 });
+
+it("vídeo que nasceu de um tema de página entra na agenda dela com um clique", async () => {
+  window.localStorage.setItem("cg_fb_target", JSON.stringify({ pageId: "p9", pageName: "Brasil Curioso", title: "O deserto cheio de lagoas", caption: "Legenda pronta", at: Date.now() }));
+  const posts: { url: string; body: Record<string, unknown> }[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+    if (init?.method === "POST") {
+      posts.push({ url, body: JSON.parse(String(init.body)) });
+      return new Response(JSON.stringify(url.includes("/api/facebook/") ? { agendados: 1 } : { id: "abc", status: "processing" }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ id: "abc", status: "done", step: "", error: null, warning: "", duration: 16 }), { status: 200 });
+  }));
+  const user = userEvent.setup();
+  render(<FinalVideoMaker items={[{ label: "Video01", videoIds: ["v1", "v2"] }]} />);
+  await user.click(screen.getByTestId("final-open"));
+  expect(screen.getByPlaceholderText(/Isso muda tudo/)).toHaveValue("O deserto cheio de lagoas");
+  await user.click(screen.getByRole("button", { name: "Criar o vídeo final" }));
+  await user.click(await screen.findByRole("button", { name: "Colocar na agenda de Brasil Curioso" }, { timeout: 8000 }));
+  expect(await screen.findByText(/Entrou na agenda de Brasil Curioso/)).toBeInTheDocument();
+  expect(posts[1]).toEqual({ url: "/api/facebook/pages/p9/clips", body: { clip_ids: [], videos: [{ source: "final", id: "abc" }], title: "O deserto cheio de lagoas", caption: "Legenda pronta" } });
+  window.localStorage.removeItem("cg_fb_target");
+});
+
+it("sem página de destino não oferece a agenda", async () => {
+  window.localStorage.removeItem("cg_fb_target");
+  vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => new Response(JSON.stringify(init?.method === "POST" ? { id: "abc", status: "processing" } : { id: "abc", status: "done", step: "", error: null, warning: "", duration: 9 }), { status: 200 })));
+  const user = userEvent.setup();
+  render(<FinalVideoMaker items={[{ label: "Video01", videoIds: ["v1"] }]} />);
+  await user.click(screen.getByTestId("final-open"));
+  await user.click(screen.getByRole("button", { name: "Criar o vídeo final" }));
+  await screen.findByTestId("final-done", {}, { timeout: 8000 });
+  expect(screen.queryByTestId("final-queue")).not.toBeInTheDocument();
+});

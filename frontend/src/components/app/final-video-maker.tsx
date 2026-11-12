@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Download, Film, Loader2 } from "lucide-react";
+import { readTarget, type FacebookTarget } from "@/lib/facebook-target";
 
 type Final = { id: string; status: "processing" | "done" | "error"; step: string; error: string | null; warning: string; duration: number | null };
 
@@ -23,6 +24,30 @@ export function FinalVideoMaker({ items, defaultTitle }: { items: FinalItem[]; d
   const [open, setOpen] = useState(false);
   const [style, setStyle] = useState("hormozi");
   const [title, setTitle] = useState(defaultTitle ?? "");
+  // Vídeo que nasceu de um tema de uma página do Facebook: ao terminar, um clique põe na agenda dela.
+  const [target, setTarget] = useState<FacebookTarget | null>(null);
+  const [queued, setQueued] = useState<Record<string, "busy" | "done" | string>>({});
+  useEffect(() => {
+    const t = items.length === 1 ? readTarget() : null;
+    setTarget(t);
+    if (t?.title) setTitle((current) => current || t.title.slice(0, 90));
+  }, [items.length]);
+
+  async function queue(finalId: string) {
+    if (!target) return;
+    setQueued((current) => ({ ...current, [finalId]: "busy" }));
+    try {
+      const response = await fetch(`/api/facebook/pages/${target.pageId}/clips`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clip_ids: [], videos: [{ source: "final", id: finalId }], title: target.title, caption: target.caption }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Não consegui colocar na agenda. Tente de novo.");
+      setQueued((current) => ({ ...current, [finalId]: "done" }));
+    } catch (problem) {
+      setQueued((current) => ({ ...current, [finalId]: (problem as Error).message }));
+    }
+  }
   const [aspect, setAspect] = useState<"9:16" | "16:9">("9:16");
   const [speed, setSpeed] = useState(1);
   const [captions, setCaptions] = useState(true);
@@ -163,6 +188,17 @@ export function FinalVideoMaker({ items, defaultTitle }: { items: FinalItem[]; d
                   {item.warning && <p className="text-xs text-[#F5B454]">{item.warning}</p>}
                   <video controls playsInline src={`/api/multiplier/final/${item.id}/file`} className="mx-auto max-h-[60vh] rounded-[12px] bg-black" aria-label={`Vídeo final ${item.label}`} />
                   <a href={`/api/multiplier/final/${item.id}/file?download=1`} download className="inline-flex items-center gap-2 rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-4 py-2 text-xs font-medium text-white"><Download className="size-3.5" />Baixar o vídeo</a>
+                  {target && (queued[item.id] === "done" ? (
+                    <p role="status" className="text-xs text-[#5BD69A]">Entrou na agenda de {target.pageName}. <a href="/facebook?aba=paginas" className="underline">Ver a agenda</a></p>
+                  ) : (
+                    <div className="space-y-1">
+                      <button type="button" disabled={queued[item.id] === "busy"} onClick={() => void queue(item.id)} data-testid="final-queue"
+                        className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-xs font-medium disabled:opacity-60">
+                        {queued[item.id] === "busy" ? "Colocando…" : `Colocar na agenda de ${target.pageName}`}
+                      </button>
+                      {queued[item.id] && queued[item.id] !== "busy" && <p role="alert" className="text-xs text-[#F0466B]">{queued[item.id]}</p>}
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
