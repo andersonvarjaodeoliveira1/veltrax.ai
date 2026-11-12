@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { brDateTime, fb, type FbAccount, type FbClip, type FbPage, type FbPost } from "@/lib/facebook";
+import { brDateTime, fb, type FbAccount, type FbClip, type FbPage, type FbPost, type FbVideo } from "@/lib/facebook";
+import { PagePlanSteps } from "./page-plan";
 import { cn } from "@/lib/utils";
 import { ACTOR, card, field, Modal, Pill, primary, secondary } from "./ui";
 
@@ -99,12 +101,11 @@ function PageCard({ page: p, onClips, onMeta, onChange }: { page: FbPage; onClip
         {p.failed ? <span className="text-[#F0466B]">{p.failed} {p.failed === 1 ? "falhou" : "falharam"}</span> : null}
       </p>
 
+      <PagePlanSteps page={p} onChange={onChange} onVideos={onClips} onMeta={onMeta} />
+
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" className={secondary} onClick={onClips}>Adicionar cortes do ClipGringa</button>
-        <button type="button" className={secondary} onClick={onMeta}>{p.meta_connected ? "Conectada à Meta" : "Conectar à Meta"}</button>
-        {missing.map((m) => (
-          <button key={m} type="button" className={secondary} onClick={() => void run(() => fb.updatePage(p.id, m === "foto" ? { has_photo: true } : { has_cover: true }), m === "foto" ? "Foto marcada como feita" : "Capa marcada como feita")}>Marcar {m} como feita</button>
-        ))}
+        <button type="button" className={secondary} onClick={onClips}>Adicionar vídeos</button>
+        {p.meta_connected ? <button type="button" className={secondary} onClick={onMeta}>Conectada à Meta</button> : null}
         <span className="text-xs text-white/50">{p.meta_error ? p.meta_error : p.meta_connected ? "Posta sozinho no horário" : "Sem conexão, os posts ficam esperando"}</span>
       </div>
 
@@ -122,7 +123,7 @@ function PageCard({ page: p, onClips, onMeta, onChange }: { page: FbPage; onClip
       <details onToggle={(e) => { if ((e.target as HTMLDetailsElement).open && posts === null) void loadPosts(); }}>
         <summary className="cursor-pointer text-sm text-white/60">Agenda</summary>
         <ul className="mt-2 space-y-1.5">
-          {posts === null ? <li className="text-xs text-white/50">Carregando…</li> : posts.length === 0 ? <li className="text-xs text-white/50">Nenhum post. Adicione cortes do ClipGringa.</li> : posts.map((x) => (
+          {posts === null ? <li className="text-xs text-white/50">Carregando…</li> : posts.length === 0 ? <li className="text-xs text-white/50">Nenhum post. Adicione vídeos.</li> : posts.map((x) => (
             <li key={x.id} className="flex items-center gap-3 text-sm">
               <span className="w-24 shrink-0 text-xs text-white/60">{brDateTime(x.scheduled_at)}</span>
               <span className="min-w-0 flex-1 truncate text-white">{x.title}</span>
@@ -154,33 +155,62 @@ function PageCard({ page: p, onClips, onMeta, onChange }: { page: FbPage; onClip
 }
 
 export function ClipsDialog({ page, onClose, onDone, preselect }: { page: FbPage; onClose: () => void; onDone: () => Promise<void> | void; preselect?: string[] }) {
-  const [clips, setClips] = useState<FbClip[] | null>(null);
+  const [lib, setLib] = useState<{ clips: FbClip[]; videos: FbVideo[] } | null>(null);
+  const [tab, setTab] = useState<"organicos" | "cortes">(preselect?.length ? "cortes" : "organicos");
   const [picked, setPicked] = useState<string[]>(preselect ?? []);
+  const [videos, setVideos] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  useEffect(() => { fb.clips().then(setClips).catch((problem) => { toast.error((problem as Error).message); setClips([]); }); }, []);
+  useEffect(() => { fb.library().then(setLib).catch((problem) => { toast.error((problem as Error).message); setLib({ clips: [], videos: [] }); }); }, []);
+  const total = picked.length + videos.length;
   const save = async () => {
     setBusy(true);
-    try { const r = await fb.addClips(page.id, picked); toast.success(`${r.agendados} ${r.agendados === 1 ? "corte entrou" : "cortes entraram"} na agenda de ${page.name}`); onClose(); await onDone(); }
-    catch (problem) { toast.error((problem as Error).message); } finally { setBusy(false); }
+    try {
+      const chosen = (lib?.videos ?? []).filter((v) => videos.includes(`${v.source}:${v.id}`)).map((v) => ({ id: v.id, source: v.source }));
+      const r = await fb.addClips(page.id, picked, chosen);
+      toast.success(`${r.agendados} ${r.agendados === 1 ? "vídeo entrou" : "vídeos entraram"} na agenda de ${page.name}`); onClose(); await onDone();
+    } catch (problem) { toast.error((problem as Error).message); } finally { setBusy(false); }
   };
+  const row = (key: string, checked: boolean, toggle: (on: boolean) => void, title: string, meta: string) => (
+    <li key={key}>
+      <label className="flex cursor-pointer items-center gap-3 rounded-[12px] border border-white/10 px-3 py-2.5">
+        <input type="checkbox" className="size-4 accent-violet-500" checked={checked} onChange={(e) => toggle(e.target.checked)} />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm text-white">{title}</span>
+          <span className="block truncate text-xs text-white/50">{meta}</span>
+        </span>
+      </label>
+    </li>
+  );
+  const list = tab === "organicos" ? lib?.videos ?? [] : lib?.clips ?? [];
   return (
-    <Modal open onClose={onClose} title={`Cortes para ${page.name}`} description={`Entram na agenda em ${page.posts_per_day} ${page.posts_per_day === 1 ? "horário" : "horários"} por dia, manhã, tarde e noite, com minutos variados.`}>
-      {clips === null ? <p className="text-sm text-white/60">Carregando…</p> : clips.length === 0 ? <p className="text-sm text-white/70">Nenhum corte pronto ainda. Gere cortes em Novos cortes.</p> : (
+    <Modal open onClose={onClose} title={`Vídeos para ${page.name}`} description={`Entram na agenda em ${page.posts_per_day} ${page.posts_per_day === 1 ? "horário" : "horários"} por dia, com minutos variados.`}>
+      <div className="flex gap-1.5" role="tablist">
+        {([["organicos", "Vídeos orgânicos", lib?.videos.length], ["cortes", "Cortes", lib?.clips.length]] as const).map(([key, label, n]) => (
+          <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => setTab(key)}
+            className={cn("rounded-[8px] border px-3 py-1.5 text-xs", tab === key ? "border-white/30 bg-white/10 text-white" : "border-white/10 text-white/60 hover:text-white")}>
+            {label}{n !== undefined ? <span className="text-white/50"> {n}</span> : null}
+          </button>
+        ))}
+      </div>
+      {lib === null ? <p className="text-sm text-white/60">Carregando…</p> : list.length === 0 ? (
+        <div className="space-y-2 text-sm text-white/70">
+          {tab === "organicos"
+            ? <><p>Nenhum vídeo orgânico pronto ainda.</p><Link className={secondary} href="/automacao">Criar no Vídeo orgânico</Link></>
+            : <><p>Nenhum corte pronto ainda.</p><Link className={secondary} href="/">Gerar cortes</Link></>}
+        </div>
+      ) : (
         <ul className="max-h-[50dvh] space-y-1.5 overflow-y-auto pr-1">
-          {clips.map((c) => (
-            <li key={c.id}>
-              <label className="flex cursor-pointer items-center gap-3 rounded-[12px] border border-white/10 px-3 py-2.5">
-                <input type="checkbox" className="size-4 accent-violet-500" checked={picked.includes(c.id)} onChange={(e) => setPicked((p) => (e.target.checked ? [...p, c.id] : p.filter((x) => x !== c.id)))} />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm text-white">{c.hook_title || "Corte sem título"}</span>
-                  <span className="block truncate text-xs text-white/50">{[c.source_title, `${Math.round(c.duration)}s`, c.used_in && `já em ${c.used_in}`].filter(Boolean).join(", ")}</span>
-                </span>
-              </label>
-            </li>
-          ))}
+          {tab === "organicos"
+            ? lib.videos.map((v) => {
+              const key = `${v.source}:${v.id}`;
+              return row(key, videos.includes(key), (on) => setVideos((p) => (on ? [...p, key] : p.filter((x) => x !== key))), v.title || "Vídeo sem título",
+                [v.source === "flow" ? "Google Flow" : "Vídeo final", v.duration ? `${Math.round(v.duration)}s` : "", v.created_at ? brDateTime(v.created_at) : "", v.used_in && `já em ${v.used_in}`].filter(Boolean).join(", "));
+            })
+            : lib.clips.map((c) => row(c.id, picked.includes(c.id), (on) => setPicked((p) => (on ? [...p, c.id] : p.filter((x) => x !== c.id))), c.hook_title || "Corte sem título",
+              [c.source_title, `${Math.round(c.duration)}s`, c.used_in && `já em ${c.used_in}`].filter(Boolean).join(", ")))}
         </ul>
       )}
-      <div className="flex justify-end"><button type="button" className={primary} disabled={!picked.length || busy} onClick={() => void save()}>{busy ? "Colocando…" : `Colocar na agenda (${picked.length})`}</button></div>
+      <div className="flex justify-end"><button type="button" className={primary} disabled={!total || busy} onClick={() => void save()}>{busy ? "Colocando…" : `Colocar na agenda (${total})`}</button></div>
     </Modal>
   );
 }

@@ -99,3 +99,11 @@ async def test_send_post_missing_file():
     async with httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(200, json={}))) as client:
         with pytest.raises(ValueError, match="arquivo"):
             await send_post(client, page_id="1", token="t", kind="video", file_path="/nao/existe.mp4", caption="", when=None)
+
+
+def test_protection_map():
+    assert routes.protection_of("manual", "") == "navegador"
+    assert routes.protection_of("manual", "br:8000") == "navegador"
+    assert routes.protection_of("dolphin", "br:8000") == "antidetect_proxy"
+    assert routes.protection_of("adspower", "  ") == "antidetect"
+    assert routes.protection_of("multilogin", "") == "antidetect"

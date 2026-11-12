@@ -100,3 +100,58 @@ async def test_failed_posts_stop_after_three_tries(db_session, auth_headers, cli
             await facebook.publish_due(db_session, user_id="user-1", client=http)
     row = (await db_session.execute(text("SELECT status, attempts, error FROM fb_posts WHERE page_id = :p"), {"p": page["id"]})).mappings().first()
     assert row["status"] == "falhou" and row["attempts"] == 3 and "pages_manage_posts" in row["error"]
+
+
+@pytest.mark.asyncio
+async def test_ideas_plan_seed_and_organic_videos(client, db_session, auth_headers, tmp_path, monkeypatch):
+    await create_user(db_session, user_id="user-1", is_admin=True)
+    page = (await client.post("/facebook/pages", headers=auth_headers, json={"name": "Body Explained", "niche": "Saúde", "language": "en"})).json()
+
+    from src.api.routes import clone_plan
+
+    async def fake_run(system, output_type, prompt, model=None):
+        assert "English" in system and "Saúde" in prompt
+        return output_type(items=[{"title": "Why we yawn", "script": "Yawning cools the brain " * 5, "caption": "Did you know? #sleep #brain #body"}])
+
+    monkeypatch.setattr(clone_plan, "_run", fake_run)
+    r = await client.post(f"/facebook/pages/{page['id']}/ideas", headers=auth_headers)
+    assert r.status_code == 200, r.text
+    idea = r.json()["ideas"][0]
+    assert idea["title"] == "Why we yawn" and idea["used"] is False
+    r = await client.patch(f"/facebook/pages/{page['id']}/ideas/{idea['id']}", headers=auth_headers, json={"used": True})
+    assert r.json()["ideas"][0]["used"] is True
+    assert (await client.patch(f"/facebook/pages/{page['id']}", headers=auth_headers, json={"plan_seed": 3})).status_code == 200
+    ov = (await client.get("/facebook/overview", headers=auth_headers)).json()["pages"][0]
+    assert ov["plan_seed"] == 3 and ov["ideas"][0]["used"] is True
+
+    video = tmp_path / "final.mp4"
+    video.write_bytes(b"x")
+    await db_session.execute(text("DELETE FROM final_videos WHERE id = 'fv-1'"))
+    await db_session.execute(text("INSERT INTO final_videos (id, user_id, status, path, duration) VALUES ('fv-1', 'user-1', 'done', :p, 30)"), {"p": str(video)})
+    await db_session.commit()
+    listed = (await client.get("/facebook/clips", headers=auth_headers)).json()
+    assert any(v["id"] == "fv-1" and v["source"] == "final" for v in listed["videos"])
+    r = await client.post(f"/facebook/pages/{page['id']}/clips", headers=auth_headers,
+                          json={"videos": [{"source": "final", "id": "fv-1"}], "title": "Why we yawn", "caption": "Did you know? #sleep"})
+    assert r.json()["agendados"] == 1
+    post = (await client.get(f"/facebook/pages/{page['id']}/posts", headers=auth_headers)).json()["posts"][0]
+    assert post["title"] == "Why we yawn" and post["caption"] == "Did you know? #sleep"
+
+
+@pytest.mark.asyncio
+async def test_accounts_report_where_they_open_and_protection(client, db_session, auth_headers):
+    await create_user(db_session, user_id="user-1", is_admin=True)
+    await client.post("/facebook/accounts", headers=auth_headers, json={"name": "Jaah Alves"})
+    await client.post("/facebook/accounts", headers=auth_headers, json={"name": "Perfil AdsPower", "provider": "adspower", "proxy": "us:9000"})
+    assert (await client.post("/facebook/accounts", headers=auth_headers, json={"name": "X", "provider": "opera"})).status_code == 400
+    await client.post("/facebook/accounts/sync", headers=auth_headers, json={"provider": "dolphin", "profiles": [{"external_id": "77", "name": "Dolphin sem proxy"}]})
+    accounts = {a["name"]: a for a in (await client.get("/facebook/overview", headers=auth_headers)).json()["accounts"]}
+    assert accounts["Jaah Alves"]["protection"] == "navegador"
+    assert accounts["Perfil AdsPower"]["protection"] == "antidetect_proxy"
+    assert accounts["Dolphin sem proxy"]["protection"] == "antidetect"
+    # conta à mão pode mudar de navegador; a espelhada não
+    await client.patch(f"/facebook/accounts/{accounts['Jaah Alves']['id']}", headers=auth_headers, json={"provider": "dicloak"})
+    await client.patch(f"/facebook/accounts/{accounts['Dolphin sem proxy']['id']}", headers=auth_headers, json={"provider": "manual"})
+    accounts = {a["name"]: a for a in (await client.get("/facebook/overview", headers=auth_headers)).json()["accounts"]}
+    assert accounts["Jaah Alves"]["provider"] == "dicloak"
+    assert accounts["Dolphin sem proxy"]["provider"] == "dolphin"

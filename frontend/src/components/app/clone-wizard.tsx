@@ -219,6 +219,30 @@ function fresh(): Project {
   };
 }
 
+const FOLLOW_CTA: Record<string, string> = {
+  "pt-BR": "Siga {PAGE} para mais", en: "Follow {PAGE} for more", es: "Sigue a {PAGE} para más",
+  fr: "Suis {PAGE} pour en savoir plus", de: "Folge {PAGE} für mehr", it: "Segui {PAGE} per altri video",
+};
+
+/** Vindo do passo a passo de uma página do Facebook (/automacao?roteiro=…): projeto novo já com o tema. */
+export function projectFromLink(search: string, base: Project): Project | null {
+  const q = new URLSearchParams(search);
+  const script = (q.get("roteiro") ?? "").trim();
+  if (script.length < 20) return null;
+  const lang = LANGUAGES.find((item) => item.value === q.get("idioma")) ?? LANGUAGES.find((item) => item.value === base.language) ?? LANGUAGES[0];
+  const theme = (q.get("tema") ?? "").trim();
+  const page = (q.get("nome") ?? "").trim();
+  return {
+    ...base,
+    reference: script.slice(0, 4000),
+    copySource: "own",
+    ownCopy: script.slice(0, 4000),
+    language: lang.value,
+    cta: page ? FOLLOW_CTA[lang.value].replace("{PAGE}", page) : lang.cta,
+    notes: [theme && `Tema: ${theme}.`, page && `Vídeo educativo para a página ${page}.`].filter(Boolean).join(" "),
+  };
+}
+
 function load(): Project {
   try {
     const raw = window.localStorage.getItem(KEY);
@@ -481,8 +505,10 @@ export function CloneWizard() {
 
   const savedRef = useRef<string | null>(null);
   useEffect(() => {
-    const loaded = load();
-    savedRef.current = JSON.stringify(loaded);
+    const linked = projectFromLink(window.location.search, fresh());
+    if (linked) window.history.replaceState(null, "", window.location.pathname);
+    const loaded = linked ?? load();
+    savedRef.current = linked ? null : JSON.stringify(loaded);
     setP(loaded);
     setReady(true);
   }, []);
