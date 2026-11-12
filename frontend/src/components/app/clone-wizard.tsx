@@ -13,6 +13,7 @@ import { defaultKeyword, keywordsFor, translateKeyword } from "@/lib/clone-langu
 import { JoinGuide } from "@/components/app/join-guide";
 import { takeKind, takeTag, withTake, type TakeKind } from "@/lib/take-kinds";
 import { FlowRunPanel } from "@/components/app/flow-run-panel";
+import { clearTarget, saveTarget, targetFromLink } from "@/lib/facebook-target";
 import { QuestChat } from "./clone-quest-chat";
 import { OfferPicker } from "./offer-picker";
 import { ArrowUp, Check, ClipboardCopy, Download, ExternalLink, Loader2, Lock, Pencil, Plus, RefreshCw, Sparkles, Trash2, Unlock, Upload, X } from "lucide-react";
@@ -506,7 +507,11 @@ export function CloneWizard() {
   const savedRef = useRef<string | null>(null);
   useEffect(() => {
     const linked = projectFromLink(window.location.search, fresh());
-    if (linked) window.history.replaceState(null, "", window.location.pathname);
+    if (linked) {
+      const target = targetFromLink(window.location.search);
+      if (target) saveTarget(target); else clearTarget();
+      window.history.replaceState(null, "", window.location.pathname);
+    }
     const loaded = linked ?? load();
     savedRef.current = linked ? null : JSON.stringify(loaded);
     setP(loaded);
@@ -1169,6 +1174,7 @@ export function CloneWizard() {
     setRedirectIn(null);
     setRedirectBlocked(false);
     try { window.sessionStorage.removeItem("gv-flow-redirected"); } catch { /* storage unavailable */ }
+clearTarget();
     setP(fresh());
   }
   resetRef.current = reset;

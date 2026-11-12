@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { PagePlanSteps, planFor } from "./page-plan";
 import { organicVideoUrl, type FbPage } from "@/lib/facebook";
 import { projectFromLink } from "@/components/app/clone-wizard";
+import { targetFromLink } from "@/lib/facebook-target";
 
 const page = (over: Partial<FbPage> = {}): FbPage => ({
   id: "p1", account_id: null, account_name: null, name: "Body Explained", link: "", niche: "Saúde", language: "en",
@@ -47,5 +48,8 @@ describe("criar vídeo a partir de um tema", () => {
     expect(p.cta).toBe("Follow Body Explained for more");
     expect(p.notes).toMatch(/Why we yawn/);
     expect(projectFromLink("?roteiro=curto", base)).toBeNull();
+    const target = targetFromLink(organicVideoUrl(page(), { title: "Why we yawn", script: "Yawning cools the brain. Here is how it works in three steps.", caption: "Follow for more" }).split("?")[1]);
+    expect(target).toEqual({ pageId: "p1", pageName: "Body Explained", title: "Why we yawn", caption: "Follow for more" });
+    expect(targetFromLink("roteiro=curto&pagina=p1")).toBeNull();
   });
 });

@@ -144,7 +144,7 @@ export function brDateTime(iso: string | null): string {
 }
 
 /** Link para o Vídeo orgânico já com o roteiro do tema e a página de destino. */
-export function organicVideoUrl(page: Pick<FbPage, "id" | "language" | "name">, idea: Pick<FbIdea, "title" | "script">): string {
-  const q = new URLSearchParams({ roteiro: idea.script, idioma: page.language || "en", tema: idea.title, pagina: page.id, nome: page.name });
+export function organicVideoUrl(page: Pick<FbPage, "id" | "language" | "name">, idea: Pick<FbIdea, "title" | "script"> & { caption?: string }): string {
+  const q = new URLSearchParams({ roteiro: idea.script, idioma: page.language || "en", tema: idea.title, pagina: page.id, nome: page.name, legenda: idea.caption ?? "" });
   return `/automacao?${q.toString()}`;
 }
