@@ -12,7 +12,7 @@ import secrets
 import time
 import unicodedata
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urlencode, urlparse
 
@@ -25,6 +25,14 @@ from .facebook import GRAPH, GRAPH_VERSION, _graph_error
 from .runtime_settings import _get_encryption_secret, decrypt_setting_value
 
 SCOPES = ("pages_show_list", "pages_read_engagement", "pages_manage_posts", "pages_read_user_content", "business_management")
+DM_WINDOW_HOURS = 24  # só responde em privado comentário recente; comentário antigo nunca recebe mensagem
+DM_PER_RUN = 20
+
+
+def scopes() -> tuple[str, ...]:
+    """Permissões pedidas no login. A de mensagens só entra depois de ligada no Admin (o app da Meta precisa tê-la)."""
+    on = (Config._get_runtime_setting("META_MESSAGING") or "").strip().lower() in {"1", "sim", "true", "on"}
+    return (*SCOPES, "pages_messaging") if on else SCOPES
 STATE_TTL = 15 * 60
 CALLBACK_PATH = "/facebook/meta"
 
@@ -66,7 +74,7 @@ def check_state(state: str, user_id: str, now: float | None = None) -> bool:
 
 def login_url(app_id: str, redirect_uri: str, state: str) -> str:
     query = urlencode({"client_id": app_id, "redirect_uri": redirect_uri, "state": state,
-                       "scope": ",".join(SCOPES), "response_type": "code", "auth_type": "rerequest"})
+                       "scope": ",".join(scopes()), "response_type": "code", "auth_type": "rerequest"})
     return f"https://www.facebook.com/{GRAPH_VERSION}/dialog/oauth?{query}"
 
 
@@ -187,14 +195,31 @@ def _plain(value: str) -> str:
     return "".join(c for c in base if not unicodedata.combining(c)).lower()
 
 
-def match_offer(message: str, offers: list[dict[str, Any]]) -> tuple[str, str]:
-    """Acha a palavra-chave de uma oferta dentro do comentário. Devolve (palavra, produto)."""
+def find_offer(message: str, offers: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """A oferta cuja palavra-chave aparece no comentário, como palavra inteira."""
     words = set("".join(c if c.isalnum() else " " for c in _plain(message)).split())
     for offer in offers:
         key = _plain(str(offer.get("keyword") or "")).strip()
         if key and key in words:
-            return str(offer["keyword"]).strip(), str(offer.get("product") or offer.get("name") or "").strip()
-    return "", ""
+            return offer
+    return None
+
+
+def match_offer(message: str, offers: list[dict[str, Any]]) -> tuple[str, str]:
+    """Acha a palavra-chave de uma oferta dentro do comentário. Devolve (palavra, produto)."""
+    offer = find_offer(message, offers)
+    if not offer:
+        return "", ""
+    return str(offer["keyword"]).strip(), str(offer.get("product") or offer.get("name") or "").strip()
+
+
+async def send_private_reply(page_id: str, token: str, comment_id: str, message: str, client: httpx.AsyncClient) -> None:
+    """Resposta privada da Página a um comentário (uma por comentário, recurso oficial do Messenger)."""
+    r = await client.post(f"{GRAPH}/{GRAPH_VERSION}/{page_id}/messages", params={"access_token": token},
+                          json={"recipient": {"comment_id": comment_id}, "message": {"text": message}, "messaging_type": "RESPONSE"})
+    data = r.json() if r.content else {}
+    if r.status_code >= 400 or (isinstance(data, dict) and "error" in data):
+        raise ValueError(_graph_error(data, r.status_code))
 
 
 async def page_comments(page_id: str, token: str, client: httpx.AsyncClient) -> list[dict[str, str]]:
@@ -218,23 +243,43 @@ def _when(value: str) -> datetime | None:
         return None
 
 
-async def save_comments(db: AsyncSession, user_id: str, page_id: str, comments: list[dict[str, str]]) -> int:
-    offers = [dict(r) for r in (await db.execute(text("SELECT name, product, keyword FROM offers WHERE user_id = :u AND keyword <> ''"), {"u": user_id})).mappings().all()]
+async def save_comments(db: AsyncSession, user_id: str, page_id: str, comments: list[dict[str, str]], outbox: list[dict[str, str]] | None = None) -> int:
+    """Guarda os comentários. Em outbox entram os novos e recentes cuja oferta tem mensagem privada."""
+    offers = [dict(r) for r in (await db.execute(text("SELECT name, product, keyword, dm_message FROM offers WHERE user_id = :u AND keyword <> ''"), {"u": user_id})).mappings().all()]
     new = 0
+    now = datetime.now(UTC)
     for c in comments:
-        keyword, product = match_offer(c["message"], offers)
+        offer = find_offer(c["message"], offers)
+        keyword = str(offer["keyword"]).strip() if offer else ""
+        product = str(offer.get("product") or offer.get("name") or "").strip() if offer else ""
+        when = _when(c["created_time"])
+        row_id = str(uuid.uuid4())
         result = await db.execute(text("""INSERT INTO fb_comments (id, user_id, page_id, fb_comment_id, fb_post_id, from_id, from_name, message, keyword, product, commented_at)
-            VALUES (:id, :u, :p, :cid, :pid, :fid, :fname, :msg, :k, :prod, :at) 
+            VALUES (:id, :u, :p, :cid, :pid, :fid, :fname, :msg, :k, :prod, :at)
             ON CONFLICT (fb_comment_id) DO UPDATE SET
               from_id = CASE WHEN EXCLUDED.from_id <> '' THEN EXCLUDED.from_id ELSE fb_comments.from_id END,
               from_name = CASE WHEN EXCLUDED.from_name <> '' THEN EXCLUDED.from_name ELSE fb_comments.from_name END,
               keyword = CASE WHEN fb_comments.keyword = '' THEN EXCLUDED.keyword ELSE fb_comments.keyword END,
               product = CASE WHEN fb_comments.keyword = '' THEN EXCLUDED.product ELSE fb_comments.product END
             RETURNING (xmax = 0) AS inserted"""),
-            {"id": str(uuid.uuid4()), "u": user_id, "p": page_id, "cid": c["id"][:80], "pid": c["post_id"][:80], "fid": c["from_id"][:40], "fname": c["from_name"][:160],
-             "msg": c["message"][:1000], "k": keyword[:30], "prod": product[:200], "at": _when(c["created_time"])})
-        new += 1 if result.scalar() else 0
+            {"id": row_id, "u": user_id, "p": page_id, "cid": c["id"][:80], "pid": c["post_id"][:80], "fid": c["from_id"][:40], "fname": c["from_name"][:160],
+             "msg": c["message"][:1000], "k": keyword[:30], "prod": product[:200], "at": when})
+        if not result.scalar():
+            continue
+        new += 1
+        dm = str(offer.get("dm_message") or "").strip() if offer else ""
+        if outbox is not None and dm and when and (now - when).total_seconds() <= DM_WINDOW_HOURS * 3600:
+            outbox.append({"id": row_id, "comment_id": c["id"], "message": dm})
     return new
+
+
+async def send_outbox(db: AsyncSession, page_fb_id: str, token: str, outbox: list[dict[str, str]], client: httpx.AsyncClient) -> None:
+    for item in outbox[:DM_PER_RUN]:
+        try:
+            await send_private_reply(page_fb_id, token, item["comment_id"], item["message"], client)
+            await db.execute(text("UPDATE fb_comments SET dm_status = 'enviada', dm_error = '', dm_at = NOW() WHERE id = :id"), {"id": item["id"]})
+        except Exception as exc:  # noqa: BLE001 - uma mensagem que falha não derruba a leitura da página
+            await db.execute(text("UPDATE fb_comments SET dm_status = 'falhou', dm_error = :e, dm_at = NOW() WHERE id = :id"), {"e": str(exc)[:300], "id": item["id"]})
 
 
 async def sync_page(db: AsyncSession, row: Any, client: httpx.AsyncClient, fresh: bool = False) -> None:
@@ -251,13 +296,16 @@ async def sync_page(db: AsyncSession, row: Any, client: httpx.AsyncClient, fresh
     if fresh:
         await db.execute(text("UPDATE fb_pages SET language = :l WHERE id = :id"), {"l": st.get("language") or "pt-BR", "id": row["id"]})
     try:
-        await save_comments(db, row["user_id"], row["id"], await page_comments(row["meta_page_id"], token, client))
+        outbox: list[dict[str, str]] = []
+        # página recém-mapeada: os comentários que já existiam entram só para o histórico, sem mensagem
+        await save_comments(db, row["user_id"], row["id"], await page_comments(row["meta_page_id"], token, client), None if fresh else outbox)
+        await send_outbox(db, row["meta_page_id"], token, outbox, client)
     except ValueError:  # sem a permissão de ler comentários: os números seguem valendo
         pass
 
 
-async def refresh_stale_stats(db: AsyncSession, limit: int = 8, hours: int = 6) -> int:
-    """Roda no worker: relê números e comentários das páginas conectadas, a cada 6 horas."""
+async def refresh_stale_stats(db: AsyncSession, limit: int = 8, hours: int = 1) -> int:
+    """Roda no worker: relê números e comentários das páginas conectadas, a cada hora."""
     rows = (await db.execute(text("""SELECT id, user_id, meta_page_id, meta_token_enc FROM fb_pages
         WHERE meta_token_enc IS NOT NULL AND meta_page_id IS NOT NULL
           AND (fb_synced_at IS NULL OR fb_synced_at < NOW() - make_interval(hours => :h))

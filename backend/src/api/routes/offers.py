@@ -26,6 +26,7 @@ FIELDS = {
     "approved_copy": 6000,
     "notes": 1500,
     "reference_url": 500,
+    "dm_message": 900,
 }
 COLUMNS = ", ".join(["id", *FIELDS, "created_at", "updated_at"])
 
@@ -68,8 +69,8 @@ async def create_offer(request: Request, db: AsyncSession = Depends(get_db)):
     offer_id = str(uuid.uuid4())
     await db.execute(
         text(
-            "INSERT INTO offers (id, user_id, name, product, keyword, language, approved_copy, notes, reference_url) "
-            "VALUES (:id, :u, :name, :product, :keyword, :language, :approved_copy, :notes, :reference_url)"
+            "INSERT INTO offers (id, user_id, name, product, keyword, language, approved_copy, notes, reference_url, dm_message) "
+            "VALUES (:id, :u, :name, :product, :keyword, :language, :approved_copy, :notes, :reference_url, :dm_message)"
         ),
         {"id": offer_id, "u": user_id, **values},
     )
@@ -84,7 +85,7 @@ async def update_offer(offer_id: str, request: Request, db: AsyncSession = Depen
     result = await db.execute(
         text(
             "UPDATE offers SET name=:name, product=:product, keyword=:keyword, language=:language, "
-            "approved_copy=:approved_copy, notes=:notes, reference_url=:reference_url, updated_at=CURRENT_TIMESTAMP "
+            "approved_copy=:approved_copy, notes=:notes, reference_url=:reference_url, dm_message=:dm_message, updated_at=CURRENT_TIMESTAMP "
             "WHERE id=:id AND user_id=:u"
         ),
         {"id": offer_id, "u": user_id, **values},

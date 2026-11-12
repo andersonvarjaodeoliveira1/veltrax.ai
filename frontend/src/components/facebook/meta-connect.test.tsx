@@ -73,7 +73,7 @@ describe("Resumo e comentários", () => {
 
   it("mostra quem comentou, a página, o perfil e o produto", async () => {
     server.use(http.get("/api/facebook/comments", () => HttpResponse.json({ total: 2, products: [{ product: "Guia do Sono", keyword: "SONO", total: 1, people: 1 }], comments: [
-      { id: "1", from_name: "Maria Souza", message: "quero SONO", keyword: "SONO", product: "Guia do Sono", commented_at: "2026-11-11T10:00:00Z", page_id: "p1", page_name: "Body Explained", account_name: "Jaah Alves" },
+      { id: "1", from_name: "Maria Souza", message: "quero SONO", keyword: "SONO", product: "Guia do Sono", commented_at: "2026-11-11T10:00:00Z", page_id: "p1", page_name: "Body Explained", account_name: "Jaah Alves", dm_status: "enviada", dm_error: "" },
       { id: "2", from_name: "João Lima", message: "legal", keyword: "", product: "", commented_at: null, page_id: "p1", page_name: "Body Explained", account_name: "Jaah Alves" }] })));
     render(<CommentsPanel />);
     expect(await screen.findByText("Maria Souza")).toBeInTheDocument();
@@ -81,5 +81,6 @@ describe("Resumo e comentários", () => {
     await userEvent.click(screen.getByRole("button", { name: "Só com palavra-chave" }));
     expect(screen.queryByText("João Lima")).not.toBeInTheDocument();
     expect(screen.getAllByText("Guia do Sono").length).toBeGreaterThan(0);
+    expect(screen.getByText("Enviada")).toBeInTheDocument();
   });
 });

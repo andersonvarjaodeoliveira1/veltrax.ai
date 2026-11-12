@@ -203,3 +203,13 @@ def test_match_offer_finds_keyword_as_a_word():
     assert match_offer("AGUA por favor", offers) == ("água", "Oferta água")
     assert match_offer("sonolento demais", offers) == ("", "")
     assert match_offer("", offers) == ("", "")
+
+
+def test_messaging_scope_only_when_enabled(monkeypatch):
+    from src import facebook_meta as meta
+    from src.config import Config
+
+    monkeypatch.setattr(Config, "_get_runtime_setting", staticmethod(lambda key: ""))
+    assert "pages_messaging" not in meta.scopes() and "pages_messaging" not in meta.login_url("1", "https://x.com/facebook/meta", "s")
+    monkeypatch.setattr(Config, "_get_runtime_setting", staticmethod(lambda key: "1" if key == "META_MESSAGING" else ""))
+    assert meta.scopes()[-1] == "pages_messaging" and "pages_messaging" in meta.login_url("1", "https://x.com/facebook/meta", "s")

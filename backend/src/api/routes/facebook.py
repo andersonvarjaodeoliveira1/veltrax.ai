@@ -718,7 +718,7 @@ async def edit_post(post_id: str, request: Request, db: AsyncSession = Depends(g
 async def comments(request: Request, db: AsyncSession = Depends(get_db)):
     """Quem comentou, em qual página e perfil, e de qual produto (pela palavra-chave da oferta)."""
     user_id = await _admin(request, db)
-    rows = (await db.execute(text("""SELECT c.id, c.from_name, c.message, c.keyword, c.product, c.commented_at, c.fb_post_id, c.page_id,
+    rows = (await db.execute(text("""SELECT c.id, c.from_name, c.message, c.keyword, c.product, c.commented_at, c.fb_post_id, c.page_id, c.dm_status, c.dm_error, c.dm_at,
             g.name AS page_name, a.name AS account_name
         FROM fb_comments c JOIN fb_pages g ON g.id = c.page_id LEFT JOIN fb_accounts a ON a.id = g.account_id
         WHERE c.user_id = :u ORDER BY c.commented_at DESC NULLS LAST LIMIT 500"""), {"u": user_id})).mappings().all()
