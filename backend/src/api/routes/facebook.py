@@ -6,12 +6,14 @@ manda a lista de perfis para cá; o resto (agenda, publicação pela Meta) roda 
 """
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 from datetime import UTC, date, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,7 +36,15 @@ from ...runtime_settings import decrypt_setting_value, encrypt_setting_value
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/facebook", tags=["facebook"])
 
-PROVIDERS = ("dolphin", "adspower", "dicloak", "manual")
+PROVIDERS = ("dolphin", "adspower", "dicloak", "multilogin", "manual")
+ANTIDETECT = PROVIDERS[:4]  # "manual" = navegador comum (Chrome, Edge…), sem antidetect
+
+
+def protection_of(provider: str, proxy: str) -> str:
+    """Como o perfil está protegido: navegador comum, antidetect com proxy ou antidetect sem proxy."""
+    if provider not in ANTIDETECT:
+        return "navegador"
+    return "antidetect_proxy" if (proxy or "").strip() else "antidetect"
 STATUS_LABEL = {"ativa": "ativa", "confirmacao": "pedindo confirmação", "restricao": "com restrição", "bloqueada": "bloqueada"}
 MAX_ACCOUNTS = 300
 MAX_PAGES = 300
@@ -117,6 +127,7 @@ async def overview(request: Request, db: AsyncSession = Depends(get_db)):
     for p in pages:
         item = _row(p, drop=("meta_token_enc",))
         item["meta_connected"] = bool(p["meta_token_enc"])
+        item["ideas"] = _ideas_of(p)
         item["todos"] = [_row(t) for t in todos if t["page_id"] == p["id"]]
         item["events"] = [_row(e) for e in events if e["page_id"] == p["id"]][:15]
         out_pages.append(item)
@@ -124,6 +135,7 @@ async def overview(request: Request, db: AsyncSession = Depends(get_db)):
     for a in accounts:
         item = _row(a)
         item["age"] = account_age(a["account_created_on"])
+        item["protection"] = protection_of(a["provider"], a["proxy"])
         item["events"] = [_row(e) for e in events if e["account_id"] == a["id"]][:8]
         out_accounts.append(item)
     return {"accounts": out_accounts, "pages": out_pages}
@@ -140,10 +152,13 @@ async def create_account(request: Request, db: AsyncSession = Depends(get_db)):
     total = (await db.execute(text("SELECT COUNT(*) FROM fb_accounts WHERE user_id = :u"), {"u": user_id})).scalar() or 0
     if total >= MAX_ACCOUNTS:
         raise HTTPException(status_code=409, detail=f"Limite de {MAX_ACCOUNTS} contas")
+    provider = _s(body.get("provider"), 20) or "manual"
+    if provider not in PROVIDERS:
+        raise HTTPException(status_code=400, detail="Navegador inválido")
     account_id = str(uuid.uuid4())
     await db.execute(text("""INSERT INTO fb_accounts (id, user_id, provider, name, proxy, email, account_created_on, notes)
-        VALUES (:id, :u, 'manual', :name, :proxy, :email, :created, :notes)"""),
-        {"id": account_id, "u": user_id, "name": name, "proxy": _s(body.get("proxy"), 200), "email": _s(body.get("email"), 200),
+        VALUES (:id, :u, :provider, :name, :proxy, :email, :created, :notes)"""),
+        {"id": account_id, "u": user_id, "provider": provider, "name": name, "proxy": _s(body.get("proxy"), 200), "email": _s(body.get("email"), 200),
          "created": _date(body.get("account_created_on")), "notes": _s(body.get("notes"), 1000)})
     await add_event(db, user_id, f"Conta {name} adicionada", account_id=account_id, actor="voce")
     await db.commit()
@@ -156,7 +171,7 @@ async def sync_accounts(request: Request, db: AsyncSession = Depends(get_db)):
     user_id = await _admin(request, db)
     body = await request.json()
     provider = _s(body.get("provider"), 20)
-    if provider not in PROVIDERS[:3]:
+    if provider not in ANTIDETECT:
         raise HTTPException(status_code=400, detail="Navegador inválido")
     profiles = body.get("profiles") if isinstance(body.get("profiles"), list) else []
     added = updated = 0
@@ -191,6 +206,13 @@ async def update_account(account_id: str, request: Request, db: AsyncSession = D
         if key in body:
             sets.append(f"{key} = :{key}")
             params[key] = _s(body[key], limit)
+    if "provider" in body and not current["external_id"]:
+        # só contas cadastradas à mão trocam de navegador; as espelhadas seguem o perfil de origem
+        provider = _s(body["provider"], 20)
+        if provider not in PROVIDERS:
+            raise HTTPException(status_code=400, detail="Navegador inválido")
+        sets.append("provider = :provider")
+        params["provider"] = provider
     if "account_created_on" in body:
         sets.append("account_created_on = :created")
         params["created"] = _date(body["account_created_on"])
@@ -233,6 +255,11 @@ def _page_values(body: dict[str, Any]) -> dict[str, Any]:
     for key in ("has_photo", "has_cover"):
         if key in body:
             out[key] = bool(body[key])
+    if "plan_seed" in body:
+        try:
+            out["plan_seed"] = max(0, min(10_000, int(body["plan_seed"])))
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Sugestão inválida")
     if "status" in body:
         if body["status"] not in PAGE_STATUS:
             raise HTTPException(status_code=400, detail="Situação inválida")
@@ -361,6 +388,91 @@ async def toggle_todo(todo_id: str, request: Request, db: AsyncSession = Depends
     return {"ok": True}
 
 
+# ---------- ideias de temas (IA) ----------
+LANG_NAME = {"en": "English", "pt-BR": "Brazilian Portuguese", "es": "Spanish", "fr": "French", "de": "German", "it": "Italian"}
+MAX_IDEAS = 40
+
+
+class _Idea(BaseModel):
+    title: str = Field(description="Short theme title, 3 to 8 words")
+    script: str = Field(description="What the narrator says in the video, 45 to 80 words, simple and accurate")
+    caption: str = Field(description="Facebook caption: 1 or 2 sentences, a question to the audience and 3 hashtags")
+
+
+class _Ideas(BaseModel):
+    items: list[_Idea]
+
+
+def _ideas_of(row: Any) -> list[dict[str, Any]]:
+    try:
+        raw = row["ideas"]
+    except (KeyError, TypeError):
+        raw = None
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except ValueError:
+            raw = []
+    return raw if isinstance(raw, list) else []
+
+
+def ideas_prompt(page: dict[str, Any], count: int) -> tuple[str, str]:
+    lang = LANG_NAME.get(page.get("language") or "en", "English")
+    used = [i.get("title", "") for i in _ideas_of(page)][-30:]
+    system = (
+        "You plan educational short videos for a Facebook page. Every fact must be true and widely accepted; "
+        "never give medical, legal or financial advice, never promise results, and avoid controversial claims. "
+        f"Write everything in {lang}."
+    )
+    prompt = (
+        f"Page name: {page.get('name')}\nNiche: {page.get('niche') or 'curiosities'}\n"
+        f"Give {count} different video themes that would make people stop scrolling, mixing subtopics of the niche. "
+        "Each script opens with a hook in the first sentence and ends with one surprising detail."
+        + (f"\nDo not repeat these themes: {'; '.join(used)}" if used else "")
+    )
+    return system, prompt
+
+
+@router.post("/pages/{page_id}/ideas")
+async def generate_ideas(page_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    user_id = await _admin(request, db)
+    page = await _own(db, "fb_pages", page_id, user_id)
+    from ...integrations import load_user_keys
+    from ...usage import get_balance, set_server_blocked, set_usage_user
+    from .clone_plan import _run
+
+    await load_user_keys(db, user_id)
+    set_usage_user(user_id)
+    set_server_blocked((await get_balance(db, user_id))["exhausted"])
+    system, prompt = ideas_prompt(page, 12)
+    result = await _run(system, _Ideas, prompt)
+    new = [{"id": uuid.uuid4().hex[:10], "title": _s(i.title, 120), "script": _s(i.script, 1200), "caption": _s(i.caption, 600), "used": False}
+           for i in result.items if i.title and i.script][:15]
+    ideas = (_ideas_of(page) + new)[-MAX_IDEAS:]
+    await db.execute(text("UPDATE fb_pages SET ideas = CAST(:i AS JSONB), updated_at = NOW() WHERE id = :id"), {"i": json.dumps(ideas, ensure_ascii=False), "id": page_id})
+    await add_event(db, user_id, f"{len(new)} ideias de temas geradas", page_id=page_id)
+    await db.commit()
+    return {"ideas": ideas}
+
+
+@router.patch("/pages/{page_id}/ideas/{idea_id}")
+async def mark_idea(page_id: str, idea_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    user_id = await _admin(request, db)
+    page = await _own(db, "fb_pages", page_id, user_id)
+    body = await request.json()
+    ideas = _ideas_of(page)
+    found = next((i for i in ideas if i.get("id") == idea_id), None)
+    if not found:
+        raise HTTPException(status_code=404, detail="Ideia não encontrada")
+    if body.get("remove"):
+        ideas = [i for i in ideas if i.get("id") != idea_id]
+    else:
+        found["used"] = bool(body.get("used", True))
+    await db.execute(text("UPDATE fb_pages SET ideas = CAST(:i AS JSONB), updated_at = NOW() WHERE id = :id"), {"i": json.dumps(ideas, ensure_ascii=False), "id": page_id})
+    await db.commit()
+    return {"ideas": ideas}
+
+
 # ---------- cortes do ClipGringa -> página ----------
 @router.get("/clips")
 async def recent_clips(request: Request, db: AsyncSession = Depends(get_db)):
@@ -372,7 +484,18 @@ async def recent_clips(request: Request, db: AsyncSession = Depends(get_db)):
         FROM generated_clips c JOIN tasks t ON t.id = c.task_id LEFT JOIN sources s ON s.id = t.source_id
         WHERE t.user_id = :u ORDER BY c.created_at DESC, c.clip_order LIMIT 120
     """), {"u": user_id})).mappings().all()
-    return {"clips": [_row(r) for r in rows]}
+    used = "(SELECT string_agg(DISTINCT g.name, ', ') FROM fb_posts x JOIN fb_pages g ON g.id = x.page_id WHERE x.clip_id = {} AND x.user_id = :u)"
+    finals = (await db.execute(text(f"""
+        SELECT f.id, f.created_at, f.duration, {used.format("f.id")} AS used_in FROM final_videos f
+        WHERE f.user_id = :u AND f.status = 'done' AND f.path IS NOT NULL ORDER BY f.created_at DESC LIMIT 60
+    """), {"u": user_id})).mappings().all()
+    flows = (await db.execute(text(f"""
+        SELECT v.id, v.created_at, v.package, v.file, {used.format("v.id")} AS used_in FROM flow_videos v
+        WHERE v.user_id = :u AND v.deleted_at IS NULL AND v.mime LIKE 'video/%' ORDER BY v.created_at DESC LIMIT 60
+    """), {"u": user_id})).mappings().all()
+    videos = [{**_row(r), "source": "final", "title": "Vídeo final", "duration": r["duration"]} for r in finals]
+    videos += [{"id": r["id"], "created_at": _iso(r["created_at"]), "used_in": r["used_in"], "source": "flow", "title": r["package"] or r["file"] or "Vídeo do Flow", "duration": None} for r in flows]
+    return {"clips": [_row(r) for r in rows], "videos": videos}
 
 
 @router.post("/pages/{page_id}/clips")
@@ -381,14 +504,24 @@ async def add_clips(page_id: str, request: Request, db: AsyncSession = Depends(g
     page = await _own(db, "fb_pages", page_id, user_id)
     body = await request.json()
     ids = [str(x) for x in (body.get("clip_ids") or []) if x][:60]
-    if not ids:
-        raise HTTPException(status_code=400, detail="Escolha pelo menos um corte")
-    clips = (await db.execute(text("""
+    vids = [v for v in (body.get("videos") or []) if isinstance(v, dict) and v.get("id")][:60]
+    if not ids and not vids:
+        raise HTTPException(status_code=400, detail="Escolha pelo menos um vídeo")
+    clips = [dict(c) for c in (await db.execute(text("""
         SELECT c.id, c.task_id, c.file_path, c.hook_title, c.text FROM generated_clips c JOIN tasks t ON t.id = c.task_id
         WHERE t.user_id = :u AND c.id = ANY(:ids)
-    """), {"u": user_id, "ids": ids})).mappings().all()
+    """), {"u": user_id, "ids": ids or [""]})).mappings().all()]
     order = {cid: i for i, cid in enumerate(ids)}
     clips = sorted(clips, key=lambda c: order.get(c["id"], 0))
+    caption = _s(body.get("caption"), 3000)
+    title = _s(body.get("title"), 200)
+    for v in vids:
+        if v.get("source") == "final":
+            row = (await db.execute(text("SELECT id, path FROM final_videos WHERE id = :id AND user_id = :u AND status = 'done'"), {"id": str(v["id"]), "u": user_id})).mappings().first()
+        else:
+            row = (await db.execute(text("SELECT id, path, package FROM flow_videos WHERE id = :id AND user_id = :u AND deleted_at IS NULL"), {"id": str(v["id"]), "u": user_id})).mappings().first()
+        if row:
+            clips.append({"id": row["id"], "task_id": None, "file_path": row["path"], "hook_title": title or _s(row.get("package"), 200) or "Vídeo orgânico", "text": None, "caption": caption})
     if not clips:
         raise HTTPException(status_code=404, detail="Cortes não encontrados")
     now = datetime.now(UTC)
@@ -400,10 +533,10 @@ async def add_clips(page_id: str, request: Request, db: AsyncSession = Depends(g
         await db.execute(text("""INSERT INTO fb_posts (id, user_id, page_id, kind, task_id, clip_id, file_path, title, caption, scheduled_at)
             VALUES (:id, :u, :p, 'video', :t, :c, :f, :title, :cap, :w)"""),
             {"id": str(uuid.uuid4()), "u": user_id, "p": page_id, "t": clip["task_id"], "c": clip["id"], "f": clip["file_path"],
-             "title": _s(clip["hook_title"], 200) or "Corte", "cap": caption_for(clip["hook_title"], clip["text"]), "w": when})
+             "title": _s(clip["hook_title"], 200) or "Corte", "cap": clip.get("caption") or caption_for(clip["hook_title"], clip["text"]), "w": when})
     if times:
         last = times[len(clips) - 1 if len(times) >= len(clips) else -1].astimezone(BR).strftime("%d/%m")
-        await add_event(db, user_id, f"{len(times)} {'corte do ClipGringa entrou' if len(times) == 1 else 'cortes do ClipGringa entraram'} na agenda, até {last}", page_id=page_id)
+        await add_event(db, user_id, f"{len(times)} {'vídeo entrou' if len(times) == 1 else 'vídeos entraram'} na agenda, até {last}", page_id=page_id)
     await db.commit()
     return {"agendados": len(times), "primeiro": times[0].isoformat() if times else None}
 
