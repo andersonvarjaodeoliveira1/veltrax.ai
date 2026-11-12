@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { brDateTime, fb, type FbAccount, type FbClip, type FbPage, type FbPost, type FbVideo } from "@/lib/facebook";
+import { ManualPostDialog, RegisterPostsDialog } from "./manual-post";
+import { goToFacebookLogin, MetaCard, MetaSetupDialog, useMetaStatus } from "./meta-connect";
 import { PagePlanSteps } from "./page-plan";
 import { cn } from "@/lib/utils";
 import { ACTOR, card, field, Modal, Pill, primary, secondary } from "./ui";
@@ -26,12 +28,13 @@ export function PagesPanel({ pages, accounts, onChange }: { pages: FbPage[]; acc
         <button type="button" className={primary} onClick={() => setCreating((v) => !v)}>{creating ? "Fechar" : "Nova página"}</button>
         {pages.some((p) => p.meta_connected) ? <button type="button" className={secondary} disabled={sending} onClick={() => void sendNow()}>{sending ? "Enviando…" : "Enviar agora para o Facebook"}</button> : null}
       </div>
+      <MetaCard onChange={onChange} />
       {creating ? <NewPage accounts={accounts} onDone={async () => { setCreating(false); await onChange(); }} /> : null}
 
       {pages.length === 0 && !creating ? <p className="rounded-[16px] border border-dashed border-white/15 p-4 text-sm text-white/70">Nenhuma página ainda. Clique em Nova página e cadastre a primeira.</p> : null}
       {pages.map((p) => <PageCard key={p.id} page={p} onClips={() => setClipsFor(p)} onMeta={() => setMetaFor(p)} onChange={onChange} />)}
 
-      {clipsFor ? <ClipsDialog page={clipsFor} onClose={() => setClipsFor(null)} onDone={onChange} /> : null}
+      {clipsFor ? <ClipsDialog page={clipsFor} pages={pages} onClose={() => setClipsFor(null)} onDone={onChange} /> : null}
       {metaFor ? <MetaDialog page={metaFor} onClose={() => setMetaFor(null)} onDone={onChange} /> : null}
     </div>
   );
@@ -74,6 +77,8 @@ function PageCard({ page: p, onClips, onMeta, onChange }: { page: FbPage; onClip
   const [note, setNote] = useState("");
   const [todo, setTodo] = useState("");
   const [posts, setPosts] = useState<FbPost[] | null>(null);
+  const [manual, setManual] = useState<FbPost | null>(null);
+  const [register, setRegister] = useState(false);
   const missing = [!p.has_photo && "foto", !p.has_cover && "capa"].filter(Boolean) as string[];
   const open = p.todos.filter((t) => !t.done_at);
 
@@ -106,8 +111,11 @@ function PageCard({ page: p, onClips, onMeta, onChange }: { page: FbPage; onClip
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" className={secondary} onClick={onClips}>Adicionar vídeos</button>
         {p.meta_connected ? <button type="button" className={secondary} onClick={onMeta}>Conectada à Meta</button> : null}
-        <span className="text-xs text-white/50">{p.meta_error ? p.meta_error : p.meta_connected ? "Posta sozinho no horário" : "Sem conexão, os posts ficam esperando"}</span>
+        {!p.meta_connected ? <button type="button" className={secondary} onClick={() => setRegister(true)}>Registrar posts feitos no Facebook</button> : null}
+        <span className="text-xs text-white/50">{p.meta_error ? p.meta_error : p.meta_connected ? "Posta sozinho no horário" : "Sem conexão: abra a Agenda e use Postar à mão"}</span>
       </div>
+      {manual ? <ManualPostDialog page={p} post={manual} onClose={() => setManual(null)} onDone={async () => { await loadPosts(); await onChange(); }} /> : null}
+      {register ? <RegisterPostsDialog page={p} onClose={() => setRegister(false)} onDone={onChange} /> : null}
 
       {open.length ? (
         <div className="space-y-1.5">
@@ -128,6 +136,7 @@ function PageCard({ page: p, onClips, onMeta, onChange }: { page: FbPage; onClip
               <span className="w-24 shrink-0 text-xs text-white/60">{brDateTime(x.scheduled_at)}</span>
               <span className="min-w-0 flex-1 truncate text-white">{x.title}</span>
               <Pill tone={x.status === "publicado" ? "ok" : x.status === "agendado" ? "off" : x.status === "falhou" ? "bad" : "warn"}>{{ pendente: "Esperando", agendado: "No Facebook", publicado: "Publicado", falhou: "Falhou" }[x.status]}</Pill>
+              {x.status === "pendente" && !p.meta_connected ? <button type="button" className="text-xs text-white underline" onClick={() => setManual(x)}>Postar à mão</button> : null}
               {x.status !== "publicado" ? <button type="button" className="text-xs text-white/50 hover:text-white" onClick={() => void run(async () => { await fb.removePost(x.id); await loadPosts(); }, "Tirado da agenda")}>Tirar</button> : null}
             </li>
           ))}
@@ -154,7 +163,9 @@ function PageCard({ page: p, onClips, onMeta, onChange }: { page: FbPage; onClip
   );
 }
 
-export function ClipsDialog({ page, onClose, onDone, preselect }: { page: FbPage; onClose: () => void; onDone: () => Promise<void> | void; preselect?: string[] }) {
+export function ClipsDialog({ page, pages = [], onClose, onDone, preselect }: { page: FbPage; pages?: FbPage[]; onClose: () => void; onDone: () => Promise<void> | void; preselect?: string[] }) {
+  const [also, setAlso] = useState<string[]>([]);
+  const others = pages.filter((x) => x.id !== page.id && x.status === "ativa");
   const [lib, setLib] = useState<{ clips: FbClip[]; videos: FbVideo[] } | null>(null);
   const [tab, setTab] = useState<"organicos" | "cortes">(preselect?.length ? "cortes" : "organicos");
   const [picked, setPicked] = useState<string[]>(preselect ?? []);
@@ -167,7 +178,9 @@ export function ClipsDialog({ page, onClose, onDone, preselect }: { page: FbPage
     try {
       const chosen = (lib?.videos ?? []).filter((v) => videos.includes(`${v.source}:${v.id}`)).map((v) => ({ id: v.id, source: v.source }));
       const r = await fb.addClips(page.id, picked, chosen);
-      toast.success(`${r.agendados} ${r.agendados === 1 ? "vídeo entrou" : "vídeos entraram"} na agenda de ${page.name}`); onClose(); await onDone();
+      // mesma seleção em outras páginas: cada uma recebe os próprios horários
+      for (const id of also) await fb.addClips(id, picked, chosen);
+      toast.success(`${r.agendados} ${r.agendados === 1 ? "vídeo entrou" : "vídeos entraram"} na agenda de ${also.length ? `${also.length + 1} páginas` : page.name}`); onClose(); await onDone();
     } catch (problem) { toast.error((problem as Error).message); } finally { setBusy(false); }
   };
   const row = (key: string, checked: boolean, toggle: (on: boolean) => void, title: string, meta: string) => (
@@ -210,6 +223,17 @@ export function ClipsDialog({ page, onClose, onDone, preselect }: { page: FbPage
               [c.source_title, `${Math.round(c.duration)}s`, c.used_in && `já em ${c.used_in}`].filter(Boolean).join(", ")))}
         </ul>
       )}
+      {others.length ? (
+        <details className="text-xs text-white/60"><summary className="cursor-pointer">Postar também em outras páginas{also.length ? ` (${also.length})` : ""}</summary>
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1.5">
+            {others.map((o) => (
+              <label key={o.id} className="flex cursor-pointer items-center gap-2 text-sm text-white">
+                <input type="checkbox" className="size-4 accent-violet-500" checked={also.includes(o.id)} onChange={(e) => setAlso((l) => (e.target.checked ? [...l, o.id] : l.filter((x) => x !== o.id)))} />{o.name}
+              </label>
+            ))}
+          </div>
+        </details>
+      ) : null}
       <div className="flex justify-end"><button type="button" className={primary} disabled={!total || busy} onClick={() => void save()}>{busy ? "Colocando…" : `Colocar na agenda (${total})`}</button></div>
     </Modal>
   );
@@ -218,6 +242,8 @@ export function ClipsDialog({ page, onClose, onDone, preselect }: { page: FbPage
 function MetaDialog({ page, onClose, onDone }: { page: FbPage; onClose: () => void; onDone: () => Promise<void> }) {
   const [token, setToken] = useState("");
   const [busy, setBusy] = useState(false);
+  const { status } = useMetaStatus();
+  const [setup, setSetup] = useState(false);
   const connect = async () => {
     setBusy(true);
     try { const r = await fb.connectMeta(page.id, token); toast.success(`Conectada: ${r.page}`); onClose(); await onDone(); }
@@ -227,19 +253,22 @@ function MetaDialog({ page, onClose, onDone }: { page: FbPage; onClose: () => vo
     try { await fb.disconnectMeta(page.id); toast.success("Desconectada"); onClose(); await onDone(); } catch (problem) { toast.error((problem as Error).message); }
   };
   return (
-    <Modal open onClose={onClose} title={`Meta, ${page.name}`} description="Com o token da página, o ClipGringa agenda os cortes direto no Facebook, no horário da agenda. O token fica criptografado e nunca volta para a tela.">
-      <label className="block space-y-1.5"><span className="text-xs font-medium text-white/80">Token da página</span>
-        <input className={field} type="password" autoComplete="off" value={token} onChange={(e) => setToken(e.target.value)} placeholder="Cole o token de acesso da página" /></label>
-      <details className="text-xs text-white/60"><summary className="cursor-pointer">Como gerar o token</summary>
-        <ol className="mt-2 list-decimal space-y-1 pl-4">
-          <li>Em developers.facebook.com, crie um app do tipo Empresa.</li>
-          <li>No Explorador da Graph API, escolha o app e peça pages_show_list, pages_read_engagement e pages_manage_posts.</li>
-          <li>Em Token de acesso da página, escolha esta página e copie. Troque por um de longa duração no Depurador de token.</li>
-        </ol></details>
-      <div className="flex justify-end gap-2">
-        {page.meta_connected ? <button type="button" className={secondary} onClick={() => void disconnect()}>Desconectar</button> : null}
-        <button type="button" className={primary} disabled={token.trim().length < 20 || busy} onClick={() => void connect()}>{busy ? "Conferindo…" : "Conectar"}</button>
-      </div>
+    <Modal open onClose={onClose} title={`Meta, ${page.name}`} description="Conectada, o ClipGringa agenda os vídeos direto no Facebook, no horário da agenda.">
+      {status?.configured ? (
+        <button type="button" className={cn(primary, "w-full")} onClick={() => void goToFacebookLogin()}>Entrar com o Facebook</button>
+      ) : status ? (
+        <button type="button" className={cn(secondary, "w-full")} onClick={() => setSetup(true)}>Ativar o Entrar com o Facebook</button>
+      ) : null}
+      <p className="text-xs text-white/60">Você entra, marca as páginas e volta. O perfil e todas as páginas dele ficam mapeados e conectados sozinhos.</p>
+      <p className="text-xs text-white/60">Sem conectar também funciona: na Agenda, use Postar à mão para baixar o vídeo, copiar a legenda e abrir o Facebook.</p>
+      <details className="text-xs text-white/60"><summary className="cursor-pointer">Colar um token à mão</summary>
+        <div className="mt-2 space-y-2">
+          <input className={field} type="password" autoComplete="off" value={token} onChange={(e) => setToken(e.target.value)} placeholder="Token de acesso da página" aria-label="Token da página" />
+          <div className="flex justify-end"><button type="button" className={secondary} disabled={token.trim().length < 20 || busy} onClick={() => void connect()}>{busy ? "Conferindo…" : "Conectar com o token"}</button></div>
+        </div>
+      </details>
+      {page.meta_connected ? <div className="flex justify-end"><button type="button" className={secondary} onClick={() => void disconnect()}>Desconectar</button></div> : null}
+      {setup ? <MetaSetupDialog onClose={() => setSetup(false)} /> : null}
     </Modal>
   );
 }

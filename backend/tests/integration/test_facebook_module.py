@@ -155,3 +155,161 @@ async def test_accounts_report_where_they_open_and_protection(client, db_session
     accounts = {a["name"]: a for a in (await client.get("/facebook/overview", headers=auth_headers)).json()["accounts"]}
     assert accounts["Jaah Alves"]["provider"] == "dicloak"
     assert accounts["Dolphin sem proxy"]["provider"] == "dolphin"
+
+
+@pytest.mark.asyncio
+async def test_login_with_facebook_maps_profile_and_pages(client, db_session, auth_headers, monkeypatch):
+    from urllib.parse import unquote
+
+    from src import facebook_meta
+
+    await create_user(db_session, user_id="user-1", is_admin=True)
+    monkeypatch.setattr(facebook_meta, "meta_app", lambda: None)
+    assert (await client.get("/facebook/meta/status", headers=auth_headers)).json() == {"configured": False, "profiles": []}
+    assert (await client.post("/facebook/meta/start", headers=auth_headers, json={"redirect_uri": "https://x.com/facebook/meta"})).status_code == 409
+
+    monkeypatch.setattr(facebook_meta, "meta_app", lambda: ("123", "s3cret"))
+    back = "https://clipgringa.gringatools.com/facebook/meta"
+    assert (await client.post("/facebook/meta/start", headers=auth_headers, json={"redirect_uri": "https://evil.com/steal"})).status_code == 400
+    url = (await client.post("/facebook/meta/start", headers=auth_headers, json={"redirect_uri": back})).json()["url"]
+    assert "client_id=123" in url and "pages_manage_posts" in url and "s3cret" not in url
+    state = unquote(url.split("state=")[1].split("&")[0])
+
+    mine = (await client.post("/facebook/pages", headers=auth_headers, json={"name": "body explained"})).json()
+    fb_pages = [{"id": "111", "name": "Body Explained", "token": "PAGE-TOKEN-111", "can_post": True},
+                {"id": "222", "name": "The Curious Mind", "token": "PAGE-TOKEN-222", "can_post": True},
+                {"id": "333", "name": "Só Leitura", "token": "PAGE-TOKEN-333", "can_post": False}]
+
+    async def fake_exchange(code, redirect_uri, client=None):
+        assert code == "CODE" and redirect_uri == back
+        return {"user": {"id": "9", "name": "Jaah Alves"}, "token": "USER-TOKEN", "pages": fb_pages}
+
+    async def fake_pages(token):
+        assert token == "USER-TOKEN"
+        return fb_pages + [{"id": "444", "name": "Página Nova", "token": "PAGE-TOKEN-444", "can_post": True}]
+
+    async def fake_stats(page_id, token, client):
+        return {"followers": 12, "normal": 9, "video": 2, "scheduled": 6}
+
+    async def fake_comments(page_id, token, client):
+        if page_id != "111":
+            return []
+        return [{"id": "c1", "post_id": "111_1", "from_id": "u1", "from_name": "Maria Souza", "message": "Quero! SONO", "created_time": "2026-11-11T10:00:00+0000"},
+                {"id": "c2", "post_id": "111_1", "from_id": "u2", "from_name": "João Lima", "message": "muito bom", "created_time": "2026-11-11T11:00:00+0000"}]
+
+    from sqlalchemy import text as sql
+    await db_session.execute(sql("DELETE FROM offers WHERE id = 'of-1'"))
+    await db_session.execute(sql("INSERT INTO offers (id, user_id, name, product, keyword) VALUES ('of-1', 'user-1', 'Oferta sono', 'Guia do Sono', 'sono')"))
+    await db_session.commit()
+    monkeypatch.setattr(facebook_meta, "page_comments", fake_comments)
+    monkeypatch.setattr(facebook_meta, "exchange", fake_exchange)
+    monkeypatch.setattr(facebook_meta, "pages_of", fake_pages)
+    monkeypatch.setattr(facebook_meta, "page_stats", fake_stats)
+    assert (await client.post("/facebook/meta/finish", headers=auth_headers, json={"code": "CODE", "state": "1.2.3", "redirect_uri": back})).status_code == 400
+    r = (await client.post("/facebook/meta/finish", headers=auth_headers, json={"code": "CODE", "state": state, "redirect_uri": back})).json()
+    assert r == {"name": "Jaah Alves", "conectadas": ["body explained"], "novas": ["The Curious Mind", "Só Leitura"], "sem_permissao": ["Só Leitura"]}
+
+    ov = (await client.get("/facebook/overview", headers=auth_headers)).json()
+    assert [a["name"] for a in ov["accounts"]] == ["Jaah Alves"] and ov["accounts"][0]["pages"] == 3
+    pages = {p["name"]: p for p in ov["pages"]}
+    assert pages["body explained"]["id"] == mine["id"] and pages["body explained"]["meta_connected"]
+    assert pages["body explained"]["account_name"] == "Jaah Alves"
+    assert (pages["The Curious Mind"]["fb_posts_normal"], pages["The Curious Mind"]["fb_posts_video"], pages["The Curious Mind"]["fb_followers"]) == (9, 2, 12)
+    assert not pages["Só Leitura"]["meta_connected"]
+    assert "TOKEN" not in str(ov)
+
+    got = (await client.get("/facebook/comments", headers=auth_headers)).json()
+    assert got["total"] == 2 and got["products"] == [{"product": "Guia do Sono", "keyword": "sono", "total": 1, "people": 1}]
+    lead = next(c for c in got["comments"] if c["keyword"])
+    assert (lead["from_name"], lead["page_name"], lead["account_name"], lead["product"]) == ("Maria Souza", "body explained", "Jaah Alves", "Guia do Sono")
+
+    # entrar de novo não duplica; Atualizar traz a página nova
+    await client.post("/facebook/meta/finish", headers=auth_headers, json={"code": "CODE", "state": state, "redirect_uri": back})
+    synced = (await client.post("/facebook/meta/sync", headers=auth_headers)).json()
+    assert synced["novas"] == ["Página Nova"] and synced["expirados"] == []
+    ov = (await client.get("/facebook/overview", headers=auth_headers)).json()
+    assert len(ov["accounts"]) == 1 and len(ov["pages"]) == 4
+    assert (await client.get("/facebook/comments", headers=auth_headers)).json()["total"] == 2
+    status = (await client.get("/facebook/meta/status", headers=auth_headers)).json()
+    assert [(p["name"], p["pages"]) for p in status["profiles"]] == [("Jaah Alves", 4)]
+    assert (await client.delete(f"/facebook/meta/{status['profiles'][0]['id']}", headers=auth_headers)).status_code == 200
+    assert (await client.post("/facebook/meta/sync", headers=auth_headers)).status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_manual_posting_without_meta(client, db_session, auth_headers, tmp_path):
+    from sqlalchemy import text as sql
+
+    await create_user(db_session, user_id="user-1", is_admin=True)
+    page = (await client.post("/facebook/pages", headers=auth_headers, json={"name": "Sem Meta"})).json()
+    video = tmp_path / "v.mp4"
+    video.write_bytes(b"video-bytes")
+    await db_session.execute(sql("""INSERT INTO fb_posts (id, user_id, page_id, file_path, title, caption, scheduled_at)
+        VALUES ('post-m', 'user-1', :p, :f, 'Meu vídeo', 'legenda', NOW())"""), {"p": page["id"], "f": str(video)})
+    await db_session.commit()
+    r = await client.get("/facebook/posts/post-m/file", headers=auth_headers)
+    assert r.status_code == 200 and r.content == b"video-bytes" and "attachment" in r.headers["content-disposition"]
+    assert (await client.post("/facebook/posts/post-m/done", headers=auth_headers)).status_code == 200
+    assert (await client.post("/facebook/posts/post-m/done", headers=auth_headers)).status_code == 409
+    ov = (await client.get("/facebook/overview", headers=auth_headers)).json()["pages"][0]
+    assert ov["published"] == 1 and "postado à mão" in ov["events"][0]["text"]
+
+
+@pytest.mark.asyncio
+async def test_counts_by_kind_and_source(client, db_session, auth_headers, tmp_path):
+    from sqlalchemy import text as sql
+
+    await create_user(db_session, user_id="user-1", is_admin=True)
+    page = (await client.post("/facebook/pages", headers=auth_headers, json={"name": "Números"})).json()
+    await db_session.execute(sql("""INSERT INTO final_videos (id, user_id, status, path) VALUES ('fv-n', 'user-1', 'done', :f)
+        ON CONFLICT (id) DO NOTHING"""), {"f": str(tmp_path / "x.mp4")})
+    await db_session.commit()
+    assert (await client.post(f"/facebook/pages/{page['id']}/clips", headers=auth_headers, json={"videos": [{"source": "final", "id": "fv-n"}]})).status_code == 200
+    assert (await client.post(f"/facebook/pages/{page['id']}/posts/manual", headers=auth_headers, json={"kind": "imagem", "count": 9})).json() == {"registrados": 9}
+    await client.post(f"/facebook/pages/{page['id']}/posts/manual", headers=auth_headers, json={"kind": "texto", "count": 2})
+    assert (await client.post(f"/facebook/pages/{page['id']}/posts/manual", headers=auth_headers, json={"kind": "story"})).status_code == 400
+    ov = (await client.get("/facebook/overview", headers=auth_headers)).json()["pages"][0]
+    assert (ov["posts_normal"], ov["videos_cta"], ov["videos_cut"], ov["videos_manual"]) == (11, 1, 0, 0)
+    assert ov["published"] == 11 and ov["upcoming"] == 1
+
+
+@pytest.mark.asyncio
+async def test_worker_refreshes_stale_page_numbers(client, db_session, auth_headers, monkeypatch):
+    from sqlalchemy import text as sql
+
+    from src import facebook_meta
+    from src.runtime_settings import encrypt_setting_value
+
+    await create_user(db_session, user_id="user-1", is_admin=True)
+    page = (await client.post("/facebook/pages", headers=auth_headers, json={"name": "Com números"})).json()
+    await db_session.execute(sql("UPDATE fb_pages SET meta_page_id = '77', meta_token_enc = :t WHERE id = :id"), {"t": encrypt_setting_value("TOK"), "id": page["id"]})
+    await db_session.commit()
+
+    async def fake_stats(page_id, token, client):
+        assert (page_id, token) == ("77", "TOK")
+        return {"followers": 5, "normal": 3, "video": 1, "scheduled": 0}
+
+    async def no_comments(page_id, token, client):
+        return []
+
+    monkeypatch.setattr(facebook_meta, "page_stats", fake_stats)
+    monkeypatch.setattr(facebook_meta, "page_comments", no_comments)
+    assert await facebook_meta.refresh_stale_stats(db_session) >= 1
+    assert await facebook_meta.refresh_stale_stats(db_session) == 0
+    ov = next(p for p in (await client.get("/facebook/overview", headers=auth_headers)).json()["pages"] if p["id"] == page["id"])
+    assert (ov["fb_posts_normal"], ov["fb_posts_video"], ov["fb_followers"]) == (3, 1, 5)
+
+
+@pytest.mark.asyncio
+async def test_week_calendar_lists_scheduled_posts(client, db_session, auth_headers):
+    from sqlalchemy import text as sql
+
+    await create_user(db_session, user_id="user-1", is_admin=True)
+    page = (await client.post("/facebook/pages", headers=auth_headers, json={"name": "Calendário"})).json()
+    await db_session.execute(sql("""INSERT INTO fb_posts (id, user_id, page_id, title, scheduled_at) VALUES
+        ('cal-1', 'user-1', :p, 'Hoje', NOW() + interval '1 minute'), ('cal-2', 'user-1', :p, 'Longe', NOW() + interval '40 days')"""), {"p": page["id"]})
+    await db_session.commit()
+    await client.post(f"/facebook/pages/{page['id']}/posts/manual", headers=auth_headers, json={"kind": "texto", "count": 2})
+    cal = (await client.get("/facebook/calendar?days=7", headers=auth_headers)).json()
+    assert [(p["title"], p["page_name"]) for p in cal["posts"] if p["page_id"] == page["id"]] in ([("Hoje", "Calendário")], [])
+    assert cal["days"] == 7

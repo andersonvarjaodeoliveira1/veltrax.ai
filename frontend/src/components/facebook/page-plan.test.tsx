@@ -6,7 +6,8 @@ import { projectFromLink } from "@/components/app/clone-wizard";
 const page = (over: Partial<FbPage> = {}): FbPage => ({
   id: "p1", account_id: null, account_name: null, name: "Body Explained", link: "", niche: "Saúde", language: "en",
   status: "ativa", has_photo: false, has_cover: false, posts_per_day: 3, meta_connected: false, meta_error: null,
-  published: 0, upcoming: 0, failed: 0, next_at: null, until_at: null, todos: [], events: [], ideas: [], plan_seed: 0, ...over,
+  published: 0, upcoming: 0, failed: 0, next_at: null, until_at: null, todos: [], events: [], ideas: [], plan_seed: 0, meta_page_id: null,
+  posts_normal: 0, videos_cta: 0, videos_cut: 0, videos_manual: 0, fb_followers: null, fb_posts_normal: null, fb_posts_video: null, fb_scheduled: null, fb_synced_at: null, ...over,
 });
 
 describe("plano por página", () => {

@@ -8,15 +8,19 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ... import facebook_meta as meta
 from ...admin_auth import require_admin_user
 from ...config import get_config
 from ...database import get_db
@@ -115,6 +119,10 @@ async def overview(request: Request, db: AsyncSession = Depends(get_db)):
           (SELECT COUNT(*) FROM fb_posts x WHERE x.page_id = p.id AND (x.status = 'publicado' OR (x.status = 'agendado' AND x.scheduled_at <= :now))) AS published,
           (SELECT COUNT(*) FROM fb_posts x WHERE x.page_id = p.id AND x.status IN ('pendente', 'agendado') AND x.scheduled_at > :now) AS upcoming,
           (SELECT COUNT(*) FROM fb_posts x WHERE x.page_id = p.id AND x.status = 'falhou') AS failed,
+          (SELECT COUNT(*) FROM fb_posts x WHERE x.page_id = p.id AND x.status <> 'falhou' AND x.kind <> 'video') AS posts_normal,
+          (SELECT COUNT(*) FROM fb_posts x WHERE x.page_id = p.id AND x.status <> 'falhou' AND x.kind = 'video' AND x.source = 'organico') AS videos_cta,
+          (SELECT COUNT(*) FROM fb_posts x WHERE x.page_id = p.id AND x.status <> 'falhou' AND x.kind = 'video' AND x.source = 'corte') AS videos_cut,
+          (SELECT COUNT(*) FROM fb_posts x WHERE x.page_id = p.id AND x.status <> 'falhou' AND x.kind = 'video' AND x.source = 'manual') AS videos_manual,
           (SELECT MIN(x.scheduled_at) FROM fb_posts x WHERE x.page_id = p.id AND x.status IN ('pendente', 'agendado') AND x.scheduled_at > :now) AS next_at,
           (SELECT MAX(x.scheduled_at) FROM fb_posts x WHERE x.page_id = p.id AND x.status IN ('pendente', 'agendado')) AS until_at
         FROM fb_pages p LEFT JOIN fb_accounts a ON a.id = p.account_id
@@ -352,6 +360,144 @@ async def disconnect_meta(page_id: str, request: Request, db: AsyncSession = Dep
     return {"ok": True}
 
 
+# ---------- entrar com o Facebook ----------
+# Um clique: a pessoa entra, e o perfil e todas as páginas dele são mapeados e conectados sozinhos.
+async def _attach_meta_page(db: AsyncSession, user_id: str, page_id: str, mp: dict[str, Any], who: str) -> None:
+    await db.execute(text("""UPDATE fb_pages SET meta_page_id = :mid, meta_token_enc = :tok, meta_connected_at = NOW(), meta_error = NULL,
+        link = CASE WHEN link = '' THEN :link ELSE link END, updated_at = NOW() WHERE id = :id"""),
+        {"mid": mp["id"], "tok": encrypt_setting_value(mp["token"]), "link": f"https://www.facebook.com/{mp['id']}", "id": page_id})
+    await add_event(db, user_id, f"Conectada à Meta pelo login de {who}. A partir de agora o app agenda os posts sozinho", page_id=page_id, actor="voce")
+
+
+async def _account_for(db: AsyncSession, user_id: str, name: str) -> str:
+    """Conta (perfil) com esse nome; se não existe, cria como navegador comum."""
+    rows = (await db.execute(text("SELECT id, name FROM fb_accounts WHERE user_id = :u"), {"u": user_id})).mappings().all()
+    found = next((r["id"] for r in rows if meta.same_name(r["name"], name)), None)
+    if found:
+        return found
+    account_id = str(uuid.uuid4())
+    await db.execute(text("INSERT INTO fb_accounts (id, user_id, provider, name) VALUES (:id, :u, 'manual', :n)"), {"id": account_id, "u": user_id, "n": name[:160]})
+    await add_event(db, user_id, f"Perfil {name} mapeado pelo login do Facebook", account_id=account_id, actor="voce")
+    return account_id
+
+
+async def _map_profile(db: AsyncSession, user_id: str, who: str, account_id: str, fb_pages: list[dict[str, Any]]) -> dict[str, list[str]]:
+    """Traz todas as páginas do perfil: liga as que já existem aqui, cria as que faltam e lê os números."""
+    ours = [dict(r) for r in (await db.execute(text("SELECT id, name, meta_page_id, account_id, meta_token_enc FROM fb_pages WHERE user_id = :u"), {"u": user_id})).mappings().all()]
+    out: dict[str, list[str]] = {"conectadas": [], "novas": [], "sem_permissao": []}
+    total = len(ours)
+    async with httpx.AsyncClient(timeout=25) as client:
+        for mp in fb_pages:
+            hit = next((p for p in ours if p["meta_page_id"] == mp["id"]), None) or next((p for p in ours if not p["meta_page_id"] and meta.same_name(p["name"], mp["name"])), None)
+            if not hit:
+                if total >= MAX_PAGES:
+                    continue
+                hit = {"id": str(uuid.uuid4()), "name": mp["name"], "meta_page_id": None, "account_id": account_id, "meta_token_enc": None}
+                await db.execute(text("INSERT INTO fb_pages (id, user_id, account_id, name, language) VALUES (:id, :u, :a, :n, 'en')"),
+                                 {"id": hit["id"], "u": user_id, "a": account_id, "n": mp["name"][:160]})
+                await add_event(db, user_id, f"Página mapeada pelo login de {who}", page_id=hit["id"], actor="voce")
+                ours.append(hit)
+                total += 1
+                out["novas"].append(mp["name"])
+            if hit["account_id"] != account_id:
+                await db.execute(text("UPDATE fb_pages SET account_id = :a WHERE id = :id"), {"a": account_id, "id": hit["id"]})
+            if not mp["can_post"]:
+                await db.execute(text("UPDATE fb_pages SET meta_page_id = :m WHERE id = :id"), {"m": mp["id"], "id": hit["id"]})
+                out["sem_permissao"].append(mp["name"])
+                continue
+            if hit["meta_page_id"] != mp["id"] or not hit["meta_token_enc"]:
+                await _attach_meta_page(db, user_id, hit["id"], mp, who)
+            else:
+                await db.execute(text("UPDATE fb_pages SET meta_token_enc = :t, meta_error = NULL WHERE id = :id"), {"t": encrypt_setting_value(mp["token"]), "id": hit["id"]})
+            hit["meta_page_id"] = mp["id"]
+            if mp["name"] not in out["novas"]:
+                out["conectadas"].append(hit["name"])
+            try:
+                await meta.sync_page(db, {"id": hit["id"], "user_id": user_id, "meta_page_id": mp["id"], "meta_token_enc": encrypt_setting_value(mp["token"])}, client)
+            except Exception as exc:  # noqa: BLE001 - números e comentários são um extra; o login não falha por causa deles
+                logger.warning("Não li os números da página %s: %s", mp["id"], exc)
+    return out
+
+
+@router.get("/meta/status")
+async def meta_status(request: Request, db: AsyncSession = Depends(get_db)):
+    user_id = await _admin(request, db)
+    rows = (await db.execute(text("""SELECT m.id, m.fb_user_name, m.connected_at, (SELECT COUNT(*) FROM fb_pages p WHERE p.account_id = m.account_id) AS pages
+        FROM fb_meta_auth m WHERE m.user_id = :u ORDER BY m.connected_at"""), {"u": user_id})).mappings().all()
+    return {"configured": meta.meta_app() is not None,
+            "profiles": [{"id": r["id"], "name": r["fb_user_name"], "pages": r["pages"], "connected_at": _iso(r["connected_at"])} for r in rows]}
+
+
+@router.post("/meta/start")
+async def meta_start(request: Request, db: AsyncSession = Depends(get_db)):
+    """Devolve o endereço do login do Facebook. A pessoa autoriza e volta para /facebook/meta."""
+    user_id = await _admin(request, db)
+    app = meta.meta_app()
+    if not app:
+        raise HTTPException(status_code=409, detail="O login com o Facebook ainda não está ativo")
+    redirect_uri = _s((await request.json()).get("redirect_uri"), 300)
+    if not meta.valid_redirect(redirect_uri):
+        raise HTTPException(status_code=400, detail="Endereço de retorno inválido")
+    return {"url": meta.login_url(app[0], redirect_uri, meta.make_state(user_id))}
+
+
+@router.post("/meta/finish")
+async def meta_finish(request: Request, db: AsyncSession = Depends(get_db)):
+    """Recebe o código do login, guarda o acesso do perfil e mapeia o perfil e as páginas dele."""
+    user_id = await _admin(request, db)
+    body = await request.json()
+    code, state, redirect_uri = _s(body.get("code"), 1000), _s(body.get("state"), 200), _s(body.get("redirect_uri"), 300)
+    if not code or not meta.check_state(state, user_id):
+        raise HTTPException(status_code=400, detail="O login expirou. Clique em Entrar com o Facebook de novo.")
+    if not meta.valid_redirect(redirect_uri):
+        raise HTTPException(status_code=400, detail="Endereço de retorno inválido")
+    try:
+        got = await meta.exchange(code, redirect_uri)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    who = (got["user"]["name"] or "Facebook")[:160]
+    account_id = await _account_for(db, user_id, who)
+    await db.execute(text("""INSERT INTO fb_meta_auth (id, user_id, fb_user_id, fb_user_name, account_id, token_enc, connected_at)
+        VALUES (:id, :u, :fid, :fname, :a, :tok, NOW())
+        ON CONFLICT (user_id, fb_user_id) DO UPDATE SET fb_user_name = :fname, account_id = :a, token_enc = :tok, connected_at = NOW()"""),
+        {"id": str(uuid.uuid4()), "u": user_id, "fid": got["user"]["id"], "fname": who, "a": account_id, "tok": encrypt_setting_value(got["token"])})
+    mapped = await _map_profile(db, user_id, who, account_id, got["pages"])
+    await db.commit()
+    return {"name": who, **mapped}
+
+
+@router.post("/meta/sync")
+async def meta_sync(request: Request, db: AsyncSession = Depends(get_db)):
+    """Atualiza tudo: páginas novas de cada perfil conectado e os números de cada página."""
+    user_id = await _admin(request, db)
+    auths = (await db.execute(text("SELECT * FROM fb_meta_auth WHERE user_id = :u"), {"u": user_id})).mappings().all()
+    if not auths:
+        raise HTTPException(status_code=409, detail="Entre com o Facebook primeiro")
+    total: dict[str, list[str]] = {"conectadas": [], "novas": [], "sem_permissao": []}
+    expired: list[str] = []
+    for auth in auths:
+        try:
+            pages = await meta.pages_of(decrypt_setting_value(auth["token_enc"]))
+        except ValueError:
+            expired.append(auth["fb_user_name"])
+            continue
+        account_id = auth["account_id"] or await _account_for(db, user_id, auth["fb_user_name"])
+        part = await _map_profile(db, user_id, auth["fb_user_name"], account_id, pages)
+        for key in total:
+            total[key] += part[key]
+    await db.commit()
+    return {**total, "expirados": expired}
+
+
+@router.delete("/meta/{auth_id}")
+async def meta_forget(auth_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    """Esquece o login de um perfil. As páginas já conectadas continuam com o próprio token."""
+    user_id = await _admin(request, db)
+    await db.execute(text("DELETE FROM fb_meta_auth WHERE id = :id AND user_id = :u"), {"id": auth_id, "u": user_id})
+    await db.commit()
+    return {"ok": True}
+
+
 @router.post("/pages/{page_id}/events")
 async def note_event(page_id: str, request: Request, db: AsyncSession = Depends(get_db)):
     user_id = await _admin(request, db)
@@ -521,7 +667,7 @@ async def add_clips(page_id: str, request: Request, db: AsyncSession = Depends(g
         else:
             row = (await db.execute(text("SELECT id, path, package FROM flow_videos WHERE id = :id AND user_id = :u AND deleted_at IS NULL"), {"id": str(v["id"]), "u": user_id})).mappings().first()
         if row:
-            clips.append({"id": row["id"], "task_id": None, "file_path": row["path"], "hook_title": title or _s(row.get("package"), 200) or "Vídeo orgânico", "text": None, "caption": caption})
+            clips.append({"source": "organico", "id": row["id"], "task_id": None, "file_path": row["path"], "hook_title": title or _s(row.get("package"), 200) or "Vídeo orgânico", "text": None, "caption": caption})
     if not clips:
         raise HTTPException(status_code=404, detail="Cortes não encontrados")
     now = datetime.now(UTC)
@@ -530,9 +676,9 @@ async def add_clips(page_id: str, request: Request, db: AsyncSession = Depends(g
     per_day = int(body.get("posts_per_day") or page["posts_per_day"])
     times = plan_times(page_id, max(1, min(4, per_day)), len(clips), taken, now)
     for clip, when in zip(clips, times):
-        await db.execute(text("""INSERT INTO fb_posts (id, user_id, page_id, kind, task_id, clip_id, file_path, title, caption, scheduled_at)
-            VALUES (:id, :u, :p, 'video', :t, :c, :f, :title, :cap, :w)"""),
-            {"id": str(uuid.uuid4()), "u": user_id, "p": page_id, "t": clip["task_id"], "c": clip["id"], "f": clip["file_path"],
+        await db.execute(text("""INSERT INTO fb_posts (id, user_id, page_id, kind, source, task_id, clip_id, file_path, title, caption, scheduled_at)
+            VALUES (:id, :u, :p, 'video', :src, :t, :c, :f, :title, :cap, :w)"""),
+            {"src": clip.get("source") or "corte", "id": str(uuid.uuid4()), "u": user_id, "p": page_id, "t": clip["task_id"], "c": clip["id"], "f": clip["file_path"],
              "title": _s(clip["hook_title"], 200) or "Corte", "cap": clip.get("caption") or caption_for(clip["hook_title"], clip["text"]), "w": when})
     if times:
         last = times[len(clips) - 1 if len(times) >= len(clips) else -1].astimezone(BR).strftime("%d/%m")
@@ -545,7 +691,7 @@ async def add_clips(page_id: str, request: Request, db: AsyncSession = Depends(g
 async def page_posts(page_id: str, request: Request, db: AsyncSession = Depends(get_db)):
     user_id = await _admin(request, db)
     await _own(db, "fb_pages", page_id, user_id)
-    rows = (await db.execute(text("""SELECT id, kind, task_id, clip_id, title, caption, scheduled_at, status, fb_post_id, error, attempts
+    rows = (await db.execute(text("""SELECT id, kind, source, task_id, clip_id, title, caption, scheduled_at, status, fb_post_id, error, attempts
         FROM fb_posts WHERE page_id = :p ORDER BY scheduled_at DESC LIMIT 200"""), {"p": page_id})).mappings().all()
     return {"posts": [_row(r) for r in rows]}
 
@@ -559,6 +705,84 @@ async def edit_post(post_id: str, request: Request, db: AsyncSession = Depends(g
     body = await request.json()
     if "caption" in body:
         await db.execute(text("UPDATE fb_posts SET caption = :c, updated_at = NOW() WHERE id = :id"), {"c": _s(body["caption"], 5000), "id": post_id})
+    await db.commit()
+    return {"ok": True}
+
+
+@router.get("/comments")
+async def comments(request: Request, db: AsyncSession = Depends(get_db)):
+    """Quem comentou, em qual página e perfil, e de qual produto (pela palavra-chave da oferta)."""
+    user_id = await _admin(request, db)
+    rows = (await db.execute(text("""SELECT c.id, c.from_name, c.message, c.keyword, c.product, c.commented_at, c.fb_post_id, c.page_id,
+            g.name AS page_name, a.name AS account_name
+        FROM fb_comments c JOIN fb_pages g ON g.id = c.page_id LEFT JOIN fb_accounts a ON a.id = g.account_id
+        WHERE c.user_id = :u ORDER BY c.commented_at DESC NULLS LAST LIMIT 500"""), {"u": user_id})).mappings().all()
+    products = (await db.execute(text("""SELECT product, keyword, COUNT(*) AS total, COUNT(DISTINCT from_id) AS people FROM fb_comments
+        WHERE user_id = :u AND keyword <> '' GROUP BY product, keyword ORDER BY total DESC"""), {"u": user_id})).mappings().all()
+    total = (await db.execute(text("SELECT COUNT(*) FROM fb_comments WHERE user_id = :u"), {"u": user_id})).scalar() or 0
+    return {"total": total, "products": [dict(p) for p in products], "comments": [_row(r) for r in rows]}
+
+
+@router.get("/calendar")
+async def calendar(request: Request, db: AsyncSession = Depends(get_db), days: int = 7):
+    """Calendário da semana: o que vai sair em cada dia, em todas as páginas."""
+    user_id = await _admin(request, db)
+    days = max(1, min(31, days))
+    start = datetime.now(BR).replace(hour=0, minute=0, second=0, microsecond=0)
+    rows = (await db.execute(text("""SELECT x.id, x.page_id, g.name AS page_name, x.kind, x.source, x.title, x.scheduled_at, x.status
+        FROM fb_posts x JOIN fb_pages g ON g.id = x.page_id
+        WHERE x.user_id = :u AND x.scheduled_at >= :a AND x.scheduled_at < :b AND NOT (x.source = 'manual')
+        ORDER BY x.scheduled_at LIMIT 600"""), {"u": user_id, "a": start, "b": start + timedelta(days=days)})).mappings().all()
+    return {"start": start.date().isoformat(), "days": days, "posts": [_row(r) for r in rows]}
+
+
+MANUAL_KINDS = {"texto": "só com texto", "imagem": "com imagem", "video": "em vídeo"}
+
+
+@router.post("/pages/{page_id}/posts/manual")
+async def register_manual_posts(page_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    """Registra posts feitos direto no Facebook, para os números da página baterem com a realidade."""
+    user_id = await _admin(request, db)
+    await _own(db, "fb_pages", page_id, user_id)
+    body = await request.json()
+    kind = _s(body.get("kind"), 10)
+    if kind not in MANUAL_KINDS:
+        raise HTTPException(status_code=400, detail="Tipo de post inválido")
+    try:
+        count = max(1, min(100, int(body.get("count") or 1)))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Quantidade inválida")
+    now = datetime.now(UTC)
+    for _ in range(count):
+        await db.execute(text("""INSERT INTO fb_posts (id, user_id, page_id, kind, source, title, scheduled_at, status)
+            VALUES (:id, :u, :p, :k, 'manual', :t, :w, 'publicado')"""),
+            {"id": str(uuid.uuid4()), "u": user_id, "p": page_id, "k": kind, "t": f"Post {MANUAL_KINDS[kind]}, feito no Facebook", "w": now})
+    await add_event(db, user_id, f"{count} {'post' if count == 1 else 'posts'} {MANUAL_KINDS[kind]} {'registrado' if count == 1 else 'registrados'}, feitos direto no Facebook", page_id=page_id, actor="voce")
+    await db.commit()
+    return {"registrados": count}
+
+
+@router.get("/posts/{post_id}/file")
+async def post_file(post_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    """Baixa o vídeo do post, para quem posta à mão (sem conectar à Meta)."""
+    user_id = await _admin(request, db)
+    post = await _own(db, "fb_posts", post_id, user_id)
+    path = post["file_path"] or ""
+    if not path or not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="O arquivo desse post não está mais disponível")
+    ext = os.path.splitext(path)[1] or ".mp4"
+    return FileResponse(path, filename=f"post-{post_id[:8]}{ext}")
+
+
+@router.post("/posts/{post_id}/done")
+async def post_done(post_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    """Postar à mão: a pessoa publicou ou programou direto no Facebook e marca aqui."""
+    user_id = await _admin(request, db)
+    post = await _own(db, "fb_posts", post_id, user_id)
+    if post["status"] != "pendente":
+        raise HTTPException(status_code=409, detail="Esse post já foi para o Facebook")
+    await db.execute(text("UPDATE fb_posts SET status = 'publicado', error = NULL, updated_at = NOW() WHERE id = :id"), {"id": post_id})
+    await add_event(db, user_id, f"Post \"{(post['title'] or 'sem título')[:80]}\" postado à mão no Facebook", page_id=post["page_id"], actor="voce")
     await db.commit()
     return {"ok": True}
 

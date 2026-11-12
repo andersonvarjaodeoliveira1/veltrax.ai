@@ -135,10 +135,17 @@ async def publish_facebook(ctx: Dict[str, Any]) -> Dict[str, int]:
 
     async with AsyncSessionLocal() as db:
         try:
-            return await publish_due(db)
+            result = await publish_due(db)
         except Exception:  # noqa: BLE001 - tabela ainda não criada ou Meta fora do ar: tenta no próximo ciclo
             logger.exception("Falha ao publicar no Facebook")
-            return {"enviados": 0, "falharam": 0}
+            result = {"enviados": 0, "falharam": 0}
+        try:
+            from ..facebook_meta import refresh_stale_stats
+
+            await refresh_stale_stats(db)
+        except Exception:  # noqa: BLE001 - os números são um extra
+            logger.exception("Falha ao atualizar os números das páginas")
+        return result
 
 # Worker configuration for arq
 class WorkerSettings:

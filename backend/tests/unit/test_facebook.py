@@ -107,3 +107,86 @@ def test_protection_map():
     assert routes.protection_of("dolphin", "br:8000") == "antidetect_proxy"
     assert routes.protection_of("adspower", "  ") == "antidetect"
     assert routes.protection_of("multilogin", "") == "antidetect"
+
+
+def test_meta_state_and_redirect(monkeypatch):
+    from src import facebook_meta as meta
+
+    monkeypatch.setenv("APP_SETTINGS_ENCRYPTION_KEY", "test-key-1234567890abcdef")
+    st = meta.make_state("u1", now=1000)
+    assert meta.check_state(st, "u1", now=1100)
+    assert not meta.check_state(st, "u2", now=1100)
+    assert not meta.check_state(st, "u1", now=1000 + meta.STATE_TTL + 1)
+    assert not meta.check_state("lixo", "u1")
+    assert meta.valid_redirect("https://clipgringa.gringatools.com/facebook/meta")
+    assert meta.valid_redirect("http://localhost:3107/facebook/meta")
+    assert not meta.valid_redirect("http://evil.com/facebook/meta")
+    assert not meta.valid_redirect("https://evil.com/outra")
+    assert not meta.valid_redirect("https://x.com/facebook/meta?next=1")
+
+
+@pytest.mark.asyncio
+async def test_meta_exchange_gets_long_token_and_pages(monkeypatch):
+    from src import facebook_meta as meta
+
+    monkeypatch.setattr(meta, "meta_app", lambda: ("APP", "SECRET"))
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.path + "?" + str(request.url.query, "utf-8") if isinstance(request.url.query, bytes) else request.url.path)
+        q = dict(request.url.params)
+        if request.url.path.endswith("oauth/access_token") and q.get("code"):
+            return httpx.Response(200, json={"access_token": "SHORT"})
+        if request.url.path.endswith("oauth/access_token"):
+            assert q["fb_exchange_token"] == "SHORT" and q["client_secret"] == "SECRET"
+            return httpx.Response(200, json={"access_token": "LONG"})
+        if request.url.path.endswith("/me"):
+            return httpx.Response(200, json={"id": "9", "name": "Jaah"})
+        if request.url.path.endswith("me/accounts"):
+            assert q["access_token"] == "LONG"
+            if q.get("after"):
+                return httpx.Response(200, json={"data": [{"id": "2", "name": "B", "access_token": "T2", "tasks": ["ANALYZE"]}]})
+            return httpx.Response(200, json={"data": [{"id": "1", "name": "A", "access_token": "T1", "tasks": ["CREATE_CONTENT"]}],
+                                             "paging": {"cursors": {"after": "x"}, "next": "https://graph/next"}})
+        return httpx.Response(404)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        got = await meta.exchange("CODE", "https://x.com/facebook/meta", client)
+    assert got["token"] == "LONG" and got["user"]["name"] == "Jaah"
+    assert [(p["id"], p["can_post"]) for p in got["pages"]] == [("1", True), ("2", False)]
+
+    def bad(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"error": {"code": 100, "message": "Invalid verification code"}})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(bad)) as client:
+        with pytest.raises(ValueError, match="Invalid verification code"):
+            await meta.exchange("CODE", "https://x.com/facebook/meta", client)
+
+
+@pytest.mark.asyncio
+async def test_meta_page_stats_counts_normal_and_video():
+    from src import facebook_meta as meta
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path, q = request.url.path, dict(request.url.params)
+        if path.endswith("/published_posts"):
+            if q.get("after"):
+                return httpx.Response(200, json={"data": [{"status_type": "added_video"}]})
+            return httpx.Response(200, json={"data": [{"status_type": "added_photos"}, {"status_type": "mobile_status_update"}, {"status_type": "added_video"}, {}],
+                                             "paging": {"cursors": {"after": "x"}, "next": "n"}})
+        if path.endswith("/scheduled_posts"):
+            return httpx.Response(200, json={"data": [{"id": "a"}, {"id": "b"}]})
+        return httpx.Response(200, json={"followers_count": 37, "id": "1"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        assert await meta.page_stats("1", "T", client) == {"followers": 37, "normal": 3, "video": 2, "scheduled": 2}
+
+
+def test_match_offer_finds_keyword_as_a_word():
+    from src.facebook_meta import match_offer
+
+    offers = [{"keyword": "SONO", "product": "Guia do Sono", "name": "x"}, {"keyword": "água", "product": "", "name": "Oferta água"}]
+    assert match_offer("eu quero, sono!", offers) == ("SONO", "Guia do Sono")
+    assert match_offer("AGUA por favor", offers) == ("água", "Oferta água")
+    assert match_offer("sonolento demais", offers) == ("", "")
+    assert match_offer("", offers) == ("", "")
