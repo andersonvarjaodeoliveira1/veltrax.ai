@@ -117,6 +117,11 @@ SETTING_METADATA = {
         "description": "Em Configurações do app, Básico. Fica criptografada e nunca volta para a tela.",
         "input_type": "password",
     },
+    "META_MESSAGING": {
+        "label": "Mensagem privada para quem comenta (opcional)",
+        "description": "Escreva 1 só depois de adicionar a permissão pages_messaging no app da Meta. O login passa a pedir essa permissão.",
+        "input_type": "text",
+    },
 }
 
 

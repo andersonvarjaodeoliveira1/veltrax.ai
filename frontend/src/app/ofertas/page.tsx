@@ -32,7 +32,7 @@ export default function OffersPage() {
 
   const edit = (offer: Offer) => {
     setEditing(offer.id);
-    setDraft({ name: offer.name, product: offer.product, keyword: offer.keyword, language: offer.language, approved_copy: offer.approved_copy, notes: offer.notes, reference_url: offer.reference_url });
+    setDraft({ name: offer.name, product: offer.product, keyword: offer.keyword, language: offer.language, approved_copy: offer.approved_copy, notes: offer.notes, reference_url: offer.reference_url, dm_message: offer.dm_message ?? "" });
     window.scrollTo?.({ top: 0, behavior: "smooth" });
   };
 
@@ -57,6 +57,9 @@ export default function OffersPage() {
           <label className="block space-y-1.5"><span className="text-xs font-medium text-white/80">Idioma</span>
             <select className={field} value={draft.language} onChange={(e) => set({ language: e.target.value })}>{LANGUAGES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         </div>
+        <label className="block space-y-1.5"><span className="text-xs font-medium text-white/80">Mensagem privada para quem comentar a palavra (opcional)</span>
+          <textarea className={`${field} min-h-20`} value={draft.dm_message ?? ""} maxLength={900} onChange={(e) => set({ dm_message: e.target.value })} placeholder="Ex.: Oi! Aqui está o link que você pediu: https://…" />
+          <span className="block text-xs text-white/50">A Página envia uma vez, só para comentário novo, nas páginas conectadas pelo Entrar com o Facebook. Deixe vazio para não enviar.</span></label>
         <label className="block space-y-1.5"><span className="text-xs font-medium text-white/80">Copy aprovada (o que é dito no vídeo)</span>
           <textarea className={`${field} min-h-32`} value={draft.approved_copy} maxLength={6000} onChange={(e) => set({ approved_copy: e.target.value })} placeholder="Cole a copy que já funcionou. O assistente usa como base." /></label>
         <label className="block space-y-1.5"><span className="text-xs font-medium text-white/80">Link da referência (opcional)</span>

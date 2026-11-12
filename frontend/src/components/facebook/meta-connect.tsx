@@ -50,7 +50,7 @@ export function MetaCard({ onChange }: { onChange: () => Promise<void> }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-medium text-white">{has ? "Facebook conectado" : "Conecte o Facebook"}</p>
-          <p className="text-xs text-white/60">{has ? "Perfis, páginas, números e comentários são atualizados sozinhos a cada 6 horas." : "Entre uma vez. O perfil e todas as páginas dele aparecem aqui, já prontos para postar."}</p>
+          <p className="text-xs text-white/60">{has ? "Perfis, páginas, números e comentários são atualizados sozinhos a cada hora." : "Entre uma vez. O perfil e todas as páginas dele aparecem aqui, já prontos para postar."}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {has ? <button type="button" className={secondary} disabled={busy} onClick={() => void sync()}>{busy ? "Atualizando…" : "Atualizar agora"}</button> : null}

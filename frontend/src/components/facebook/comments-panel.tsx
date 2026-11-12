@@ -41,9 +41,9 @@ export function CommentsPanel() {
         {data.products.map((p) => <button key={p.product + p.keyword} type="button" className={chip(product === p.product)} aria-pressed={product === p.product} onClick={() => setProduct(product === p.product ? null : p.product)}>{p.product || p.keyword} <span className="text-white/50">{p.total}</span></button>)}
       </div>
       <section className={cn(card, "overflow-x-auto")}>
-        <table className="w-full min-w-[640px] text-sm">
+        <table className="w-full min-w-[760px] text-sm">
           <thead><tr className="text-left text-xs text-white/50">
-            <th className="py-1.5 font-normal">Quem</th><th className="py-1.5 font-normal">Comentário</th><th className="py-1.5 font-normal">Produto</th><th className="py-1.5 font-normal">Página</th><th className="py-1.5 font-normal">Perfil</th><th className="py-1.5 font-normal">Quando</th>
+            <th className="py-1.5 font-normal">Quem</th><th className="py-1.5 font-normal">Comentário</th><th className="py-1.5 font-normal">Produto</th><th className="py-1.5 font-normal">Mensagem privada</th><th className="py-1.5 font-normal">Página</th><th className="py-1.5 font-normal">Perfil</th><th className="py-1.5 font-normal">Quando</th>
           </tr></thead>
           <tbody>
             {shown.map((c) => (
@@ -51,6 +51,7 @@ export function CommentsPanel() {
                 <td className="py-2 pr-3 text-white">{c.from_name || "Sem nome"}</td>
                 <td className="max-w-[240px] py-2 pr-3 text-white/70"><span className="line-clamp-2">{c.message}</span></td>
                 <td className="py-2 pr-3 text-white">{c.keyword ? (c.product || c.keyword) : <span className="text-white/40">Sem palavra-chave</span>}</td>
+                <td className="py-2 pr-3 text-xs">{c.dm_status === "enviada" ? <span className="text-emerald-300">Enviada</span> : c.dm_status === "falhou" ? <span className="text-[#E5484D]" title={c.dm_error}>Não foi enviada</span> : <span className="text-white/40">Sem mensagem</span>}</td>
                 <td className="py-2 pr-3 text-white/70">{c.page_name}</td>
                 <td className="py-2 pr-3 text-white/70">{c.account_name ?? "Sem perfil"}</td>
                 <td className="py-2 text-xs text-white/60">{c.commented_at ? brDateTime(c.commented_at) : ""}</td>

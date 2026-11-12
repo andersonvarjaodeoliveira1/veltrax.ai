@@ -32,6 +32,7 @@ RUNTIME_SETTING_KEYS: tuple[str, ...] = (
     "SMTP_PORT",
     "META_APP_ID",
     "META_APP_SECRET",
+    "META_MESSAGING",
 )
 
 PROCESS_ENV_SETTING_KEYS = frozenset(

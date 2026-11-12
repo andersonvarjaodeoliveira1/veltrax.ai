@@ -65,7 +65,8 @@ export type MetaProfile = { id: string; name: string; pages: number; connected_a
 export type MetaStatus = { configured: boolean; profiles: MetaProfile[] };
 export type MapResult = { name?: string; conectadas: string[]; novas: string[]; sem_permissao: string[]; expirados?: string[] };
 export type CalendarPost = { id: string; page_id: string; page_name: string; kind: string; source: string; title: string; scheduled_at: string; status: FbPost["status"] };
-export type FbComment = { id: string; from_name: string; message: string; keyword: string; product: string; commented_at: string | null; page_id: string; page_name: string; account_name: string | null };
+export type FbComment = { id: string; from_name: string; message: string; keyword: string; product: string; commented_at: string | null; page_id: string; page_name: string; account_name: string | null;
+  dm_status?: "" | "enviada" | "falhou"; dm_error?: string };
 export type CommentsData = { total: number; products: Array<{ product: string; keyword: string; total: number; people: number }>; comments: FbComment[] };
 export const metaCallbackUrl = () => `${window.location.origin}/facebook/meta`;
 

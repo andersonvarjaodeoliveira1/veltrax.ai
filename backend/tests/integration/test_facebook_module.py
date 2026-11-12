@@ -325,3 +325,55 @@ async def test_week_calendar_lists_scheduled_posts(client, db_session, auth_head
     cal = (await client.get("/facebook/calendar?days=7", headers=auth_headers)).json()
     assert [(p["title"], p["page_name"]) for p in cal["posts"] if p["page_id"] == page["id"]] in ([("Hoje", "Calendário")], [])
     assert cal["days"] == 7
+
+
+@pytest.mark.asyncio
+async def test_private_reply_only_for_new_recent_keyword_comments(client, db_session, auth_headers, monkeypatch):
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import text as sql
+
+    from src import facebook_meta
+    from src.runtime_settings import encrypt_setting_value
+
+    await create_user(db_session, user_id="user-1", is_admin=True)
+    page = (await client.post("/facebook/pages", headers=auth_headers, json={"name": "Com DM"})).json()
+    await db_session.execute(sql("UPDATE fb_pages SET meta_page_id = '88', meta_token_enc = :t WHERE id = :id"), {"t": encrypt_setting_value("TOK"), "id": page["id"]})
+    await db_session.execute(sql("UPDATE fb_pages SET fb_synced_at = NOW() WHERE id <> :id"), {"id": page["id"]})
+    await db_session.execute(sql("DELETE FROM offers WHERE id = 'of-dm'"))
+    await db_session.execute(sql("DELETE FROM fb_comments WHERE fb_comment_id IN ('dm-new', 'dm-old', 'dm-nokey', 'dm-fail')"))
+    await db_session.execute(sql("""INSERT INTO offers (id, user_id, name, product, keyword, dm_message)
+        VALUES ('of-dm', 'user-1', 'Oferta', 'Guia', 'QUERO', 'Aqui está o link: https://exemplo.com')"""))
+    await db_session.commit()
+    stamp = lambda delta: (datetime.now(UTC) - delta).strftime("%Y-%m-%dT%H:%M:%S+0000")  # noqa: E731
+    batch = [{"id": "dm-new", "post_id": "88_1", "from_id": "u1", "from_name": "Ana", "message": "eu quero!", "created_time": stamp(timedelta(minutes=5))},
+             {"id": "dm-old", "post_id": "88_1", "from_id": "u2", "from_name": "Bia", "message": "QUERO", "created_time": stamp(timedelta(days=3))},
+             {"id": "dm-nokey", "post_id": "88_1", "from_id": "u3", "from_name": "Caio", "message": "legal", "created_time": stamp(timedelta(minutes=5))}]
+    sent = []
+
+    async def fake_stats(page_id, token, client):
+        return {"followers": 1, "normal": 1, "video": 0, "scheduled": 0}
+
+    async def fake_comments(page_id, token, client):
+        return batch
+
+    async def fake_send(page_id, token, comment_id, message, client):
+        if comment_id == "dm-fail":
+            raise ValueError("(#10) pages_messaging não liberada")
+        sent.append((page_id, token, comment_id, message))
+
+    monkeypatch.setattr(facebook_meta, "page_stats", fake_stats)
+    monkeypatch.setattr(facebook_meta, "page_comments", fake_comments)
+    monkeypatch.setattr(facebook_meta, "send_private_reply", fake_send)
+    assert await facebook_meta.refresh_stale_stats(db_session) == 1
+    assert sent == [("88", "TOK", "dm-new", "Aqui está o link: https://exemplo.com")]
+
+    # na leitura seguinte ninguém recebe de novo; comentário novo que falha fica marcado
+    batch.append({"id": "dm-fail", "post_id": "88_1", "from_id": "u4", "from_name": "Davi", "message": "quero", "created_time": stamp(timedelta(minutes=1))})
+    await db_session.execute(sql("UPDATE fb_pages SET fb_synced_at = NULL WHERE id = :id"), {"id": page["id"]})
+    await db_session.commit()
+    await facebook_meta.refresh_stale_stats(db_session)
+    assert len(sent) == 1
+    got = {c["message"]: (c["dm_status"], c["dm_error"]) for c in (await client.get("/facebook/comments", headers=auth_headers)).json()["comments"] if c["page_id"] == page["id"]}
+    assert got["eu quero!"] == ("enviada", "") and got["QUERO"] == ("", "") and got["legal"] == ("", "")
+    assert got["quero"][0] == "falhou" and "pages_messaging" in got["quero"][1]

@@ -7,12 +7,14 @@ export type Offer = {
   approved_copy: string;
   notes: string;
   reference_url: string;
+  /** Mensagem privada que a Página manda para quem comenta a palavra-chave. Vazio = não manda. */
+  dm_message?: string;
   updated_at: string | null;
 };
 
 export type OfferDraft = Omit<Offer, "id" | "updated_at">;
 
-export const EMPTY_OFFER: OfferDraft = { name: "", product: "", keyword: "", language: "pt-BR", approved_copy: "", notes: "", reference_url: "" };
+export const EMPTY_OFFER: OfferDraft = { name: "", product: "", keyword: "", language: "pt-BR", approved_copy: "", notes: "", reference_url: "", dm_message: "" };
 
 async function parse<T>(response: Response): Promise<T> {
   const data = (await response.json().catch(() => ({}))) as T & { detail?: string };
