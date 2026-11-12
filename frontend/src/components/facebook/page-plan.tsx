@@ -67,7 +67,7 @@ export function planFor(page: Pick<FbPage, "id" | "plan_seed">): PagePlan {
   };
 }
 
-type Step = { key: string; title: string; text: string; done: boolean; action?: React.ReactNode };
+type Step = { key: string; title: string; text: string; done: boolean; action?: React.ReactNode; redo?: { label: string; onClick: () => void } };
 
 export function PagePlanSteps({ page: p, onChange, onVideos, onMeta }: { page: FbPage; onChange: () => Promise<void>; onVideos: () => void; onMeta: () => void }) {
   const plan = planFor(p);
@@ -82,15 +82,17 @@ export function PagePlanSteps({ page: p, onChange, onVideos, onMeta }: { page: F
 
   const visualStep: Step = {
     key: "visual", done: visualDone,
-    title: plan.coverFirst ? "Capa e foto do perfil" : "Foto do perfil e capa",
-    text: `Visual sugerido: ${plan.palette.name.toLowerCase()}. ${plan.coverFirst ? "Coloque a capa primeiro e depois a foto." : "Coloque a foto primeiro e depois a capa."}`,
-    action: <button type="button" className={secondary} onClick={() => setVisual(true)}>{visualDone ? "Ver de novo" : "Gerar foto e capa"}</button>,
+    title: visualDone ? "Foto e capa no ar" : p.has_photo ? "Foto no ar, falta a capa" : p.has_cover ? "Capa no ar, falta a foto" : plan.coverFirst ? "Capa e foto do perfil" : "Foto do perfil e capa",
+    text: `Visual sugerido: ${plan.palette.name.toLowerCase()}. ${p.has_photo ? "A foto já está na página; gere a capa no mesmo visual." : p.has_cover ? "A capa já está na página; gere a foto no mesmo visual." : plan.coverFirst ? "Coloque a capa primeiro e depois a foto." : "Coloque a foto primeiro e depois a capa."}`,
+    action: <button type="button" className={secondary} onClick={() => setVisual(true)}>{p.has_photo ? "Gerar a capa" : p.has_cover ? "Gerar a foto" : "Gerar foto e capa"}</button>,
+    redo: { label: "Trocar foto ou capa", onClick: () => setVisual(true) },
   };
   const contentStep: Step = {
     key: "conteudo", done: usedIdeas > 0 || p.published + p.upcoming > 0,
     title: plan.first.title,
     text: `${plan.first.text} Mistura sugerida: ${plan.mix.images}% imagem e ${plan.mix.videos}% vídeo.`,
     action: <button type="button" className={secondary} onClick={() => setIdeasOpen(true)}>{p.ideas.length ? `Ideias de temas (${p.ideas.length - usedIdeas})` : "Gerar ideias de temas"}</button>,
+    redo: { label: "Ver ideias de temas", onClick: () => setIdeasOpen(true) },
   };
   const videoStep: Step = {
     key: "videos", done: p.published + p.upcoming > 0,
@@ -102,6 +104,7 @@ export function PagePlanSteps({ page: p, onChange, onVideos, onMeta }: { page: F
         <button type="button" className={secondary} onClick={onVideos}>Adicionar vídeos prontos</button>
       </div>
     ),
+    redo: { label: "Adicionar mais vídeos", onClick: onVideos },
   };
   const rhythmStep: Step = {
     key: "ritmo", done: p.posts_per_day === plan.rhythm.perDay,
@@ -138,7 +141,10 @@ export function PagePlanSteps({ page: p, onChange, onVideos, onMeta }: { page: F
               {st.done ? <Check className="size-3" /> : i + 1}
             </span>
             <div className="min-w-0 flex-1 space-y-1.5">
-              <p className={cn("text-sm", st.done ? "text-white/50" : "text-white")}>{st.title}</p>
+              <div className="flex flex-wrap items-center justify-between gap-x-3">
+                <p className={cn("text-sm", st.done ? "text-emerald-300" : "text-white")}>{st.title}</p>
+                {st.done && st.redo ? <button type="button" className="text-xs text-white/50 underline-offset-2 hover:text-white hover:underline" onClick={st.redo.onClick}>{st.redo.label}</button> : null}
+              </div>
               {i === current || (!st.done && i < current + 2) ? <p className="text-xs text-white/60">{st.text}</p> : null}
               {!st.done && st.action && i <= current + 1 ? st.action : null}
             </div>

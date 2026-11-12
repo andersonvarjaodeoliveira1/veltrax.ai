@@ -25,6 +25,15 @@ describe("plano por página", () => {
     expect(screen.getByRole("button", { name: "Gerar foto e capa" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Outra sugestão" })).toBeInTheDocument();
   });
+
+  it("o que já está na página fica verde e continua trocável", () => {
+    const { rerender } = render(<PagePlanSteps page={page({ has_photo: true, has_cover: true })} onChange={async () => {}} onVideos={() => {}} onMeta={() => {}} />);
+    expect(screen.getByText("Foto e capa no ar")).toHaveClass("text-emerald-300");
+    expect(screen.getByRole("button", { name: "Trocar foto ou capa" })).toBeInTheDocument();
+    rerender(<PagePlanSteps page={page({ has_photo: true })} onChange={async () => {}} onVideos={() => {}} onMeta={() => {}} />);
+    expect(screen.getByText("Foto no ar, falta a capa")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Gerar a capa" })).toBeInTheDocument();
+  });
 });
 
 describe("criar vídeo a partir de um tema", () => {
