@@ -399,6 +399,11 @@ async def _map_profile(db: AsyncSession, user_id: str, who: str, account_id: str
                 ours.append(hit)
                 total += 1
                 out["novas"].append(mp["name"])
+            if hit["meta_page_id"] == mp["id"] and mp["name"] and hit["name"] != mp["name"]:
+                # o nome foi trocado no Facebook: o painel acompanha
+                await db.execute(text("UPDATE fb_pages SET name = :n, updated_at = NOW() WHERE id = :id"), {"n": mp["name"][:160], "id": hit["id"]})
+                await add_event(db, user_id, f"Nome trocado no Facebook: de {hit['name']} para {mp['name']}", page_id=hit["id"], actor="app")
+                hit["name"] = mp["name"][:160]
             if hit["account_id"] != account_id:
                 await db.execute(text("UPDATE fb_pages SET account_id = :a WHERE id = :id"), {"a": account_id, "id": hit["id"]})
             if not mp["can_post"]:
@@ -413,7 +418,7 @@ async def _map_profile(db: AsyncSession, user_id: str, who: str, account_id: str
             if mp["name"] not in out["novas"]:
                 out["conectadas"].append(hit["name"])
             try:
-                await meta.sync_page(db, {"id": hit["id"], "user_id": user_id, "meta_page_id": mp["id"], "meta_token_enc": encrypt_setting_value(mp["token"])}, client)
+                await meta.sync_page(db, {"id": hit["id"], "user_id": user_id, "meta_page_id": mp["id"], "meta_token_enc": encrypt_setting_value(mp["token"])}, client, fresh=mp["name"] in out["novas"])
             except Exception as exc:  # noqa: BLE001 - números e comentários são um extra; o login não falha por causa deles
                 logger.warning("Não li os números da página %s: %s", mp["id"], exc)
     return out

@@ -176,10 +176,20 @@ async def test_meta_page_stats_counts_normal_and_video():
                                              "paging": {"cursors": {"after": "x"}, "next": "n"}})
         if path.endswith("/scheduled_posts"):
             return httpx.Response(200, json={"data": [{"id": "a"}, {"id": "b"}]})
-        return httpx.Response(200, json={"followers_count": 37, "id": "1"})
+        return httpx.Response(200, json={"followers_count": 37, "id": "1", "category": "Health", "cover": {"id": "c"}, "picture": {"data": {"is_silhouette": False}}})
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        assert await meta.page_stats("1", "T", client) == {"followers": 37, "normal": 3, "video": 2, "scheduled": 2}
+        assert await meta.page_stats("1", "T", client) == {"followers": 37, "normal": 3, "video": 2, "scheduled": 2,
+                                                           "has_photo": True, "has_cover": True, "category": "Health", "language": None}
+
+
+def test_guess_language_from_posts():
+    from src.facebook_meta import guess_language
+
+    assert guess_language(["Você sabia que o coração não para? Hoje vamos falar como isso funciona para você."]) == "pt-BR"
+    assert guess_language(["Why do you yawn? This is how your brain cools down, and what you can do about it."]) == "en"
+    assert guess_language(["oi"]) is None
+    assert guess_language([]) is None
 
 
 def test_match_offer_finds_keyword_as_a_word():
