@@ -186,7 +186,8 @@ async def test_login_with_facebook_maps_profile_and_pages(client, db_session, au
 
     async def fake_pages(token):
         assert token == "USER-TOKEN"
-        return fb_pages + [{"id": "444", "name": "Página Nova", "token": "PAGE-TOKEN-444", "can_post": True}]
+        renamed = [{**p, "name": "Mente Curiosa"} if p["id"] == "222" else p for p in fb_pages]
+        return renamed + [{"id": "444", "name": "Página Nova", "token": "PAGE-TOKEN-444", "can_post": True}]
 
     async def fake_stats(page_id, token, client):
         return {"followers": 12, "normal": 9, "video": 2, "scheduled": 6, "has_photo": True, "has_cover": page_id == "222", "category": "Education",
@@ -237,6 +238,7 @@ async def test_login_with_facebook_maps_profile_and_pages(client, db_session, au
     assert synced["novas"] == ["Página Nova"] and synced["expirados"] == []
     ov = (await client.get("/facebook/overview", headers=auth_headers)).json()
     assert len(ov["accounts"]) == 1 and len(ov["pages"]) == 4
+    assert "Mente Curiosa" in {p["name"] for p in ov["pages"]} and "The Curious Mind" not in {p["name"] for p in ov["pages"]}
     got = (await client.get("/facebook/comments", headers=auth_headers)).json()
     assert got["total"] == 2 and next(c for c in got["comments"] if c["keyword"])["from_name"] == "Maria Souza"
     assert next(p for p in ov["pages"] if p["name"] == "Página Nova")["language"] == "pt-BR"

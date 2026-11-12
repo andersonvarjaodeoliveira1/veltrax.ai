@@ -399,6 +399,11 @@ async def _map_profile(db: AsyncSession, user_id: str, who: str, account_id: str
                 ours.append(hit)
                 total += 1
                 out["novas"].append(mp["name"])
+            if hit["meta_page_id"] == mp["id"] and mp["name"] and hit["name"] != mp["name"]:
+                # o nome foi trocado no Facebook: o painel acompanha
+                await db.execute(text("UPDATE fb_pages SET name = :n, updated_at = NOW() WHERE id = :id"), {"n": mp["name"][:160], "id": hit["id"]})
+                await add_event(db, user_id, f"Nome trocado no Facebook: de {hit['name']} para {mp['name']}", page_id=hit["id"], actor="app")
+                hit["name"] = mp["name"][:160]
             if hit["account_id"] != account_id:
                 await db.execute(text("UPDATE fb_pages SET account_id = :a WHERE id = :id"), {"a": account_id, "id": hit["id"]})
             if not mp["can_post"]:

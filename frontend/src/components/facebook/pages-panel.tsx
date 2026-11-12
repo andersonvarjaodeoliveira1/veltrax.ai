@@ -78,6 +78,7 @@ function PageCard({ page: p, onClips, onMeta, onChange }: { page: FbPage; onClip
   const [todo, setTodo] = useState("");
   const [posts, setPosts] = useState<FbPost[] | null>(null);
   const [manual, setManual] = useState<FbPost | null>(null);
+  const [editing, setEditing] = useState(false);
   const [register, setRegister] = useState(false);
   const missing = [!p.has_photo && "foto", !p.has_cover && "capa"].filter(Boolean) as string[];
   const open = p.todos.filter((t) => !t.done_at);
@@ -118,10 +119,12 @@ function PageCard({ page: p, onClips, onMeta, onChange }: { page: FbPage; onClip
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" className={secondary} onClick={onClips}>Adicionar vídeos</button>
         {p.meta_connected ? <button type="button" className={secondary} onClick={onMeta}>Conectada à Meta</button> : null}
+        <button type="button" className={secondary} onClick={() => setEditing(true)}>Editar assunto</button>
         {!p.meta_connected ? <button type="button" className={secondary} onClick={() => setRegister(true)}>Registrar posts feitos no Facebook</button> : null}
         <span className="text-xs text-white/50">{p.meta_error ? p.meta_error : p.meta_connected ? "Posta sozinho no horário" : "Sem conexão: abra a Agenda e use Postar à mão"}</span>
       </div>
       {manual ? <ManualPostDialog page={p} post={manual} onClose={() => setManual(null)} onDone={async () => { await loadPosts(); await onChange(); }} /> : null}
+      {editing ? <EditPageDialog page={p} onClose={() => setEditing(false)} onDone={onChange} /> : null}
       {register ? <RegisterPostsDialog page={p} onClose={() => setRegister(false)} onDone={onChange} /> : null}
 
       {open.length ? (
@@ -242,6 +245,25 @@ export function ClipsDialog({ page, pages = [], onClose, onDone, preselect }: { 
         </details>
       ) : null}
       <div className="flex justify-end"><button type="button" className={primary} disabled={!total || busy} onClick={() => void save()}>{busy ? "Colocando…" : `Colocar na agenda (${total})`}</button></div>
+    </Modal>
+  );
+}
+
+/** Assunto da página: é o que guia as ideias de temas e a prévia de viralização. */
+function EditPageDialog({ page, onClose, onDone }: { page: FbPage; onClose: () => void; onDone: () => Promise<void> }) {
+  const [niche, setNiche] = useState(page.niche);
+  const [language, setLanguage] = useState(["en", "es"].includes(page.language) ? page.language : "pt-BR");
+  const save = async () => {
+    try { await fb.updatePage(page.id, { niche: niche.trim(), language }); toast.success("Assunto salvo"); onClose(); await onDone(); }
+    catch (problem) { toast.error((problem as Error).message); }
+  };
+  return (
+    <Modal open onClose={onClose} title={`Assunto, ${page.name}`} description="As ideias de temas e os vídeos seguem este assunto e este idioma. O nome é o do Facebook e acompanha quando você troca lá.">
+      <label className="block space-y-1.5"><span className="text-xs font-medium text-white/80">Assunto da página</span>
+        <input className={field} value={niche} maxLength={80} onChange={(e) => setNiche(e.target.value)} placeholder="Ex.: curiosidades do Brasil" /></label>
+      <label className="block space-y-1.5"><span className="text-xs font-medium text-white/80">Idioma dos conteúdos</span>
+        <select className={field} value={language} onChange={(e) => setLanguage(e.target.value)}><option value="pt-BR">Português</option><option value="en">Inglês</option><option value="es">Espanhol</option></select></label>
+      <div className="flex justify-end"><button type="button" className={primary} onClick={() => void save()}>Salvar assunto</button></div>
     </Modal>
   );
 }
