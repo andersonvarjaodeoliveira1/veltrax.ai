@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Check, ClipboardCopy, Film, Loader2, Sparkles } from "lucide-react";
+import { ViralityPreview } from "@/components/app/virality-map";
 
 type Frame = { t: number; src: string };
 type Meta = { duration: number; width: number; height: number };
@@ -159,6 +160,7 @@ export function ReferenceSummary({ file, transcript, reading = false, noSpeech =
             </button>
           )}
           {methodState === "failed" && <p role="alert" className="text-xs text-[#F0466B]">Não foi possível analisar agora. Tente de novo em instantes.</p>}
+          <ViralityPreview script={text} />
           {method && (
             <dl data-testid="method" className="space-y-2 rounded-[14px] border border-border p-3 text-sm">
               {([["Gancho", "hook"], ["Ângulo", "angle"], ["Mecanismo", "mechanism"], ["Chamada", "cta"], ["Por que funciona", "why_it_works"]] as const).map(([label, key]) => method[key] ? (
