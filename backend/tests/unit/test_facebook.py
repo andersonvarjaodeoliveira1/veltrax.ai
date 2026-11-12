@@ -176,7 +176,10 @@ async def test_meta_page_stats_counts_normal_and_video():
                                              "paging": {"cursors": {"after": "x"}, "next": "n"}})
         if path.endswith("/scheduled_posts"):
             return httpx.Response(200, json={"data": [{"id": "a"}, {"id": "b"}]})
-        return httpx.Response(200, json={"followers_count": 37, "id": "1", "category": "Health", "cover": {"id": "c"}, "picture": {"data": {"is_silhouette": False}}})
+        if path.endswith("/photos"):
+            assert q["type"] == "profile"
+            return httpx.Response(200, json={"data": [{"id": "ph"}]})
+        return httpx.Response(200, json={"followers_count": 37, "id": "1", "category": "Health", "cover": {"id": "c"}})
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         assert await meta.page_stats("1", "T", client) == {"followers": 37, "normal": 3, "video": 2, "scheduled": 2,

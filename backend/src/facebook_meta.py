@@ -144,7 +144,13 @@ async def page_stats(page_id: str, token: str, client: httpx.AsyncClient) -> dic
     """Números reais da página: seguidores, posts normais (texto e imagem), vídeos e programados.
 
     Traz também o que dá para ver sem ninguém preencher: se tem foto e capa, a categoria e o idioma dos posts."""
-    info = await _get(client, page_id, {"fields": "followers_count,category,cover,picture{is_silhouette}", "access_token": token})
+    info = await _get(client, page_id, {"fields": "followers_count,category,cover", "locale": "pt_BR", "access_token": token})
+    try:
+        # página sem foto enviada mostra só a letra do nome; o que conta é ter uma foto de perfil publicada
+        photos = await _get(client, f"{page_id}/photos", {"type": "profile", "fields": "id", "limit": "1", "access_token": token})
+        has_photo: bool | None = bool(photos.get("data"))
+    except ValueError:
+        has_photo = None
     normal = video = 0
     texts: list[str] = []
     fields = {"fields": "status_type,message", "limit": "100", "access_token": token}
@@ -163,10 +169,9 @@ async def page_stats(page_id: str, token: str, client: httpx.AsyncClient) -> dic
         data = await _get(client, f"{page_id}/published_posts", {**fields, "after": after})
     scheduled = await _get(client, f"{page_id}/scheduled_posts", {"fields": "id", "limit": "100", "access_token": token})
     followers = info.get("followers_count")
-    picture = (info.get("picture") or {}).get("data") or {}
     return {"followers": int(followers) if isinstance(followers, int) else None, "normal": normal, "video": video,
             "scheduled": len(scheduled.get("data") or []),
-            "has_photo": bool(picture) and picture.get("is_silhouette") is False, "has_cover": bool(info.get("cover")),
+            "has_photo": has_photo, "has_cover": bool(info.get("cover")),
             "category": str(info.get("category") or "")[:80], "language": guess_language(texts)}
 
 
@@ -239,10 +244,10 @@ async def sync_page(db: AsyncSession, row: Any, client: httpx.AsyncClient, fresh
     token = decrypt_setting_value(row["meta_token_enc"])
     st = await page_stats(row["meta_page_id"], token, client)
     await db.execute(text("""UPDATE fb_pages SET fb_followers = :f, fb_posts_normal = :n, fb_posts_video = :v, fb_scheduled = :s, fb_synced_at = NOW(),
-        has_photo = has_photo OR :photo, has_cover = has_cover OR :cover,
+        has_photo = COALESCE(CAST(:photo AS BOOLEAN), has_photo), has_cover = COALESCE(CAST(:cover AS BOOLEAN), has_cover),
         niche = CASE WHEN niche = '' THEN :cat ELSE niche END WHERE id = :id"""),
         {"f": st["followers"], "n": st["normal"], "v": st["video"], "s": st["scheduled"], "id": row["id"],
-         "photo": bool(st.get("has_photo")), "cover": bool(st.get("has_cover")), "cat": str(st.get("category") or "")[:80]})
+         "photo": st.get("has_photo"), "cover": st.get("has_cover"), "cat": str(st.get("category") or "")[:80]})
     if fresh:
         await db.execute(text("UPDATE fb_pages SET language = :l WHERE id = :id"), {"l": st.get("language") or "pt-BR", "id": row["id"]})
     try:
