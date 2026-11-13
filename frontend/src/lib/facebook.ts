@@ -104,6 +104,17 @@ export const fb = {
   posts: (pageId: string) => call<{ posts: FbPost[] }>(`pages/${pageId}/posts`).then((r) => r.posts),
   removePost: (id: string) => call("posts/" + id, { method: "DELETE" }),
   publish: () => call<{ enviados: number; falharam: number }>("publish", { method: "POST", body: {} }),
+  // Upload vai como multipart/form-data, então não passa pelo helper `call` (que manda JSON).
+  applyPagePhotos: async (pageId: string, picture?: File, cover?: File, offsetY?: number): Promise<{ ok: boolean; feito: string[] }> => {
+    const form = new FormData();
+    if (picture) form.append("picture", picture);
+    if (cover) form.append("cover", cover);
+    if (offsetY !== undefined) form.append("offset_y", String(offsetY));
+    const res = await fetch(`/api/facebook/pages/${pageId}/photos`, { method: "POST", body: form });
+    const data = (await res.json().catch(() => ({}))) as { ok?: boolean; feito?: string[]; detail?: string };
+    if (!res.ok) throw new Error(data.detail || "Não deu para trocar as imagens");
+    return { ok: !!data.ok, feito: data.feito ?? [] };
+  },
 };
 
 // ---------- conector local ----------

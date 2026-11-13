@@ -14,7 +14,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import text
@@ -34,6 +34,8 @@ from ...facebook import (
     delete_remote,
     plan_times,
     publish_due,
+    set_page_cover_file,
+    set_page_picture_file,
 )
 from ...runtime_settings import decrypt_setting_value, encrypt_setting_value
 
@@ -358,6 +360,53 @@ async def disconnect_meta(page_id: str, request: Request, db: AsyncSession = Dep
     await add_event(db, user_id, "Desconectada da Meta", page_id=page_id, actor="voce")
     await db.commit()
     return {"ok": True}
+
+
+MAX_PHOTO_BYTES = 8 * 1024 * 1024  # 8 MB por imagem
+
+
+@router.post("/pages/{page_id}/photos")
+async def apply_page_photos(
+    page_id: str,
+    request: Request,
+    picture: UploadFile | None = File(default=None),
+    cover: UploadFile | None = File(default=None),
+    offset_y: int | None = Form(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Troca a foto de perfil e/ou a capa de UMA página, com arquivos enviados do computador."""
+    user_id = await _admin(request, db)
+    page = await _own(db, "fb_pages", page_id, user_id)
+    if not page.get("meta_token_enc") or not page.get("meta_page_id"):
+        raise HTTPException(status_code=400, detail="Página não conectada à Meta")
+    if picture is None and cover is None:
+        raise HTTPException(status_code=400, detail="Envie a foto de perfil, a capa, ou as duas")
+
+    token = decrypt_setting_value(page["meta_token_enc"])
+    fb_id = str(page["meta_page_id"])
+    feito: list[str] = []
+    async with httpx.AsyncClient(timeout=httpx.Timeout(120, connect=20)) as client:
+        try:
+            if picture is not None:
+                data = await picture.read()
+                if len(data) > MAX_PHOTO_BYTES:
+                    raise HTTPException(status_code=400, detail="Foto de perfil acima de 8 MB")
+                await set_page_picture_file(client, page_id=fb_id, token=token, data=data, filename=picture.filename or "perfil.jpg")
+                await db.execute(text("UPDATE fb_pages SET has_photo = TRUE, updated_at = NOW() WHERE id = :id"), {"id": page_id})
+                await add_event(db, user_id, "Foto do perfil trocada pela ferramenta", page_id=page_id, actor="voce")
+                feito.append("perfil")
+            if cover is not None:
+                data = await cover.read()
+                if len(data) > MAX_PHOTO_BYTES:
+                    raise HTTPException(status_code=400, detail="Capa acima de 8 MB")
+                await set_page_cover_file(client, page_id=fb_id, token=token, data=data, filename=cover.filename or "capa.jpg", offset_y=offset_y)
+                await db.execute(text("UPDATE fb_pages SET has_cover = TRUE, updated_at = NOW() WHERE id = :id"), {"id": page_id})
+                await add_event(db, user_id, "Capa trocada pela ferramenta", page_id=page_id, actor="voce")
+                feito.append("capa")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await db.commit()
+    return {"ok": True, "feito": feito}
 
 
 # ---------- entrar com o Facebook ----------

@@ -125,6 +125,48 @@ async def check_page_token(token: str, client: httpx.AsyncClient | None = None) 
             await client.aclose()
 
 
+async def _upload_photo_bytes(client: httpx.AsyncClient, *, page_id: str, token: str, data: bytes, filename: str) -> str:
+    """Sobe uma foto (bytes) na página SEM publicar no feed e devolve o id. Precisa de pages_manage_posts."""
+    r = await client.post(
+        f"{GRAPH}/{GRAPH_VERSION}/{page_id}/photos",
+        data={"access_token": token, "published": "false"},
+        files={"source": (filename or "image.jpg", data, "application/octet-stream")},
+    )
+    body = r.json() if r.content else {}
+    if r.status_code >= 400 or "error" in body:
+        raise ValueError(_graph_error(body, r.status_code))
+    photo_id = str(body.get("id") or "")
+    if not photo_id:
+        raise ValueError("O Facebook não devolveu o id da foto enviada")
+    return photo_id
+
+
+async def set_page_picture_file(client: httpx.AsyncClient, *, page_id: str, token: str, data: bytes, filename: str) -> str:
+    """Define a foto de PERFIL da página a partir de um arquivo. Precisa de pages_manage_metadata (+ pages_manage_posts)."""
+    photo_id = await _upload_photo_bytes(client, page_id=page_id, token=token, data=data, filename=filename)
+    r = await client.post(
+        f"{GRAPH}/{GRAPH_VERSION}/{page_id}/picture",
+        data={"access_token": token, "photo": photo_id},
+    )
+    body = r.json() if r.content else {}
+    if r.status_code >= 400 or "error" in body:
+        raise ValueError(_graph_error(body, r.status_code))
+    return photo_id
+
+
+async def set_page_cover_file(client: httpx.AsyncClient, *, page_id: str, token: str, data: bytes, filename: str, offset_y: int | None = None) -> str:
+    """Define a CAPA da página a partir de um arquivo (sobe sem publicar, depois aponta como capa). Precisa de pages_manage_metadata."""
+    photo_id = await _upload_photo_bytes(client, page_id=page_id, token=token, data=data, filename=filename)
+    params: dict[str, str] = {"access_token": token, "cover": photo_id}
+    if offset_y is not None:
+        params["offset_y"] = str(max(0, min(100, offset_y)))
+    r = await client.post(f"{GRAPH}/{GRAPH_VERSION}/{page_id}", data=params)
+    body = r.json() if r.content else {}
+    if r.status_code >= 400 or "error" in body:
+        raise ValueError(_graph_error(body, r.status_code))
+    return photo_id
+
+
 async def send_post(client: httpx.AsyncClient, *, page_id: str, token: str, kind: str, file_path: str | None, caption: str, when: datetime | None) -> str:
     """Manda um post para a página. `when` None publica agora. Devolve o id do post no Facebook."""
     data: dict[str, str] = {"access_token": token}
