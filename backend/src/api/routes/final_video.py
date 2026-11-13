@@ -237,18 +237,69 @@ async def make_takes(job_id: str, request: Request, db: AsyncSession = Depends(g
         Path(item[0]).unlink(missing_ok=True)
 
     saved: list[dict[str, Any]] = []
-    for i, take in enumerate(takes):
+    for take in takes:
         start = float(take["start"])
         end = min(float(take["end"]), total)
-        cut = await run_in_thread(trim_clip_file, final_path, out_dir, start, total - end)
+        try:
+            cut = await run_in_thread(trim_clip_file, final_path, out_dir, start, total - end)
+        except Exception:
+            # um take que falha no corte não trava os outros
+            logger.exception("take cut %.1f-%.1f failed for final %s", start, end, row.id)
+            continue
+        idx = len(saved)
         take_id = str(uuid.uuid4())
         await db.execute(text(
             "INSERT INTO video_takes (id, user_id, final_video_id, idx, path, hook_title, text, start_seconds, end_seconds, score) "
             "VALUES (:id, :u, :fv, :i, :p, :h, :t, :s, :e, :sc)"
-        ), {"id": take_id, "u": user_id, "fv": row.id, "i": i, "p": str(cut),
+        ), {"id": take_id, "u": user_id, "fv": row.id, "i": idx, "p": str(cut),
             "h": (take.get("hook_title") or "")[:200] or None, "t": take.get("text") or "",
             "s": start, "e": end, "sc": float(take.get("score") or 0.0)})
-        saved.append({"id": take_id, "idx": i, "hook_title": take.get("hook_title"),
+        saved.append({"id": take_id, "idx": idx, "hook_title": take.get("hook_title"),
                       "start": start, "end": end, "duration": round(end - start, 1), "score": float(take.get("score") or 0.0)})
     await db.commit()
+    if not saved:
+        raise HTTPException(status_code=400, detail="Não consegui cortar nenhum take deste vídeo")
     return {"takes": saved}
+
+
+@router.post("/{job_id}/takes/merge")
+async def merge_takes(job_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    """Une todos os takes do vídeo num único arquivo final, pronto para baixar."""
+    from ...clip_editor import merge_clip_files
+
+    user_id = await _user_id(request, db)
+    row = (await db.execute(text(
+        "SELECT id FROM final_videos WHERE id = :id AND user_id = :u"
+    ), {"id": _uuid(job_id), "u": user_id})).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Vídeo final não encontrado")
+    rows = (await db.execute(text(
+        "SELECT path FROM video_takes WHERE final_video_id = :id ORDER BY idx"
+    ), {"id": row.id})).all()
+    paths = [Path(r[0]) for r in rows if Path(r[0] or "").is_file()]
+    if not paths:
+        raise HTTPException(status_code=400, detail="Não há takes para unir. Gere os takes primeiro.")
+    out_dir = _root() / row.id / "takes"
+    merged = await run_in_thread(merge_clip_files, paths, out_dir)
+    final = out_dir / "_merged.mp4"
+    merged.replace(final)
+    return {"ok": True, "count": len(paths)}
+
+
+@router.get("/{job_id}/takes/merge/file")
+async def merged_takes_file(job_id: str, request: Request, download: int = 0, db: AsyncSession = Depends(get_db)):
+    """Serve o vídeo unido dos takes (download ou inline)."""
+    user_id = await _user_id(request, db)
+    row = (await db.execute(text(
+        "SELECT id FROM final_videos WHERE id = :id AND user_id = :u"
+    ), {"id": _uuid(job_id), "u": user_id})).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Vídeo não encontrado")
+    path = _root() / row.id / "takes" / "_merged.mp4"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="O vídeo unido ainda não está pronto")
+    return FileResponse(
+        path, media_type="video/mp4",
+        filename="takes-unidos.mp4" if download else None,
+        content_disposition_type="attachment" if download else "inline",
+    )
