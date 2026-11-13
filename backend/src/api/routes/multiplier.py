@@ -1032,7 +1032,7 @@ SCRIPT_SYSTEM_PROMPT = """You write copy for short vertical video ads (TikTok, R
 The user describes a product. Produce text for three parts of the video:
 - hooks: 3 different opening lines that stop the scroll in the first seconds (max 70 characters each). Use curiosity, a question, a bold but honest statement or a relatable problem. Each hook takes a different angle.
 - bodies: 2 short body texts (max 200 characters each) that explain the benefit and how the product helps, in simple everyday language.
-- ctas: 2 calls to action. Each one MUST ask the viewer to type a specific keyword in the video comments to get more (the full video, the guide, the link, etc.), for example "Comente EU QUERO que eu te mando o passo a passo". Pick a short uppercase keyword that fits the offer. Each has a short line (max 60 characters) that asks to comment the keyword, and a button label (max 24 characters, verb first, for example "Quero o meu").
+- ctas: 3 to 4 calls to action. Each one MUST ask the viewer to type a specific keyword in the video comments to get more (the full video, the guide, the link, etc.), for example "Comente EU QUERO que eu te mando o passo a passo". Pick a short uppercase keyword that fits the offer. Each has a short line (max 60 characters) that asks to comment the keyword, and a button label (max 24 characters, verb first, for example "Quero o meu").
 Rules: never invent prices, discounts, deadlines, statistics, awards or testimonials that were not given. No guaranteed results and no medical, financial-return or "miracle" claims. No emojis. Do not mention competitors. Write only what the product description supports."""
 
 
@@ -1044,7 +1044,7 @@ class _CtaCopy(BaseModel):
 class _AdCopy(BaseModel):
     hooks: list[str] = Field(description="3 opening lines, max 70 characters each")
     bodies: list[str] = Field(description="2 body texts, max 200 characters each")
-    ctas: list[_CtaCopy] = Field(description="2 calls to action")
+    ctas: list[_CtaCopy] = Field(description="3 to 4 calls to action, each asking to comment a keyword")
 
 
 def _clip(value: str, limit: int) -> str:
