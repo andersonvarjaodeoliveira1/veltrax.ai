@@ -13,6 +13,18 @@ function runLabel(c: Creative) {
   return d > 0 ? `${d} ${d === 1 ? "dia ativo" : "dias ativo"}` : "ativo";
 }
 
+// Deep-link para a Ad Library pública da Meta, já com o termo preenchido.
+// country=ALL dá a visão global (sem filtrar país). O marcador cg=1 avisa a
+// extensão que esta aba veio do ClipSpy, para ela fazer a rolagem suave — e
+// não mexe quando o usuário abre a Ad Library por conta própria.
+function adLibraryUrl(term: string) {
+  const q = encodeURIComponent(term.trim());
+  return (
+    "https://www.facebook.com/ads/library/?active_status=active&ad_type=all" +
+    `&country=ALL&q=${q}&search_type=keyword_unordered&media_type=all&cg=1`
+  );
+}
+
 function Card({ c, onSave, onArchive, busy }: { c: Creative; onSave?: () => void; onArchive?: () => void; busy?: boolean }) {
   return (
     <div className="rounded-[14px] border border-white/10 bg-[#1a191d] p-3">
@@ -62,6 +74,9 @@ export function ClipSpyPanel() {
 
   async function run() {
     if (term.trim().length < 2) { toast.error("Digite um termo de busca"); return; }
+    // Abre a Ad Library global ANTES de qualquer await, ainda dentro do clique,
+    // para o navegador não tratar como popup e bloquear a aba.
+    window.open(adLibraryUrl(term), "_blank", "noopener,noreferrer");
     setLoading(true);
     try {
       const cs = countries.split(",").map((s) => s.trim()).filter(Boolean);
@@ -118,7 +133,7 @@ export function ClipSpyPanel() {
             <label className="mt-3 block text-xs text-white/60">Países (a UE tem a cobertura comercial mais completa)</label>
             <input value={countries} onChange={(e) => setCountries(e.target.value)}
               className="mt-1 w-full rounded-full border border-white/15 bg-black/30 px-4 py-1.5 text-xs text-white/80 outline-none" />
-            <p className="mt-2 text-[11px] text-white/40">Mostra anúncios ainda ativos, dos que rodam há mais tempo (prováveis vencedores) para os mais novos.</p>
+            <p className="mt-2 text-[11px] text-white/40">Ao pesquisar, abre a Ad Library da Meta numa nova aba (visão global) e guarda os vencedores aqui na sua biblioteca. Mostra anúncios ainda ativos, dos que rodam há mais tempo (prováveis vencedores) para os mais novos.</p>
           </div>
 
           {results && (

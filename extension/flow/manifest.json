@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ClipGringa · Flow",
-  "version": "1.21.10",
+  "version": "1.22.0",
   "description": "Cria sozinho as imagens e vídeos do seu pacote do ClipGringa no Google Flow, e os textos pela sua conta Gemini, ChatGPT ou Claude.",
   "permissions": [
     "storage",
@@ -65,6 +65,15 @@
       ],
       "js": [
         "ai.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://*.facebook.com/ads/library*"
+      ],
+      "js": [
+        "adlib.js"
       ],
       "run_at": "document_idle"
     }
