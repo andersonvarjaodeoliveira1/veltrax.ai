@@ -41,6 +41,92 @@
     }
   }
 
+  // Espera um elemento aparecer.
+  // Seletor CSS: observa o DOM com MutationObserver e para assim que achar (ou no fim do prazo).
+  // Função (ex.: editor): repete a função até ela devolver o elemento.
+  // Sem elemento até o fim do prazo → null.
+  function waitForElement(selector, timeout = 10000) {
+    if (typeof selector === "function") return waitFor(selector, timeout);
+    return new Promise((resolve) => {
+      const found = document.querySelector(selector);
+      if (found) return resolve(found);
+      const obs = new MutationObserver(() => {
+        const el = document.querySelector(selector);
+        if (el) { obs.disconnect(); clearTimeout(t); resolve(el); }
+      });
+      obs.observe(document.documentElement, { childList: true, subtree: true });
+      const t = setTimeout(() => { obs.disconnect(); resolve(null); }, timeout);
+    });
+  }
+
+  // Escreve num campo controlado pelo React de um jeito que o React percebe a mudança. Devolve true se ficou.
+  // checkbox/radio: clica só se o estado for diferente.
+  // input/textarea/select: setter nativo do value (o React ignora el.value = ...) + eventos input e change.
+  // contenteditable (caixa de prompt do Flow): o setter de value não serve aqui (dá "Illegal invocation"),
+  // então seleciona tudo e usa insertText, que gera o evento de digitação.
+  function setReactValue(el, value) {
+    if (!el) return false;
+    if (el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio")) {
+      if (el.checked !== Boolean(value)) el.click();
+      return el.checked === Boolean(value);
+    }
+    const v = String(value);
+    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) {
+      const proto =
+        el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype :
+        el instanceof HTMLSelectElement ? HTMLSelectElement.prototype :
+        HTMLInputElement.prototype;
+      const setter = Object.getOwnPropertyDescriptor(proto, "value").set;
+      el.focus();
+      setter.call(el, v);
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      el.blur();
+      return el.value === v;
+    }
+    el.focus();
+    document.execCommand("selectAll", false, null);
+    document.execCommand("insertText", false, v);
+    return text(el).startsWith(v.slice(0, 20).trim());
+  }
+
+  // Digita texto num input/textarea letra por letra (keydown, keypress, input, keyup).
+  // Os eventos de tecla sozinhos não escrevem no campo: quem escreve é o setter nativo + "input",
+  // que é o que o React escuta. Se o app cancelar a tecla (preventDefault), a letra não entra.
+  // Para campo editável (div contenteditable, como o prompt do Flow), use setReactValue.
+  async function typeInto(el, value, { delay = 0, clear = true } = {}) {
+    if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) return setReactValue(el, value);
+    const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    const setValue = Object.getOwnPropertyDescriptor(proto, "value").set;
+    el.focus();
+    if (clear) {
+      setValue.call(el, "");
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    for (const ch of String(value)) {
+      const key = { key: ch, code: keyCode(ch), bubbles: true, cancelable: true };
+      const down = el.dispatchEvent(new KeyboardEvent("keydown", key));
+      const press = down && el.dispatchEvent(new KeyboardEvent("keypress", { ...key, charCode: ch.charCodeAt(0) }));
+      if (press) {
+        setValue.call(el, el.value + ch);
+        el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: ch }));
+      }
+      el.dispatchEvent(new KeyboardEvent("keyup", key));
+      if (delay > 0) await sleep(delay);
+    }
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+    el.blur();
+    return el.value === String(value);
+  }
+
+  // Código físico da tecla (KeyboardEvent.code) para letras, números e espaço; vazio para o resto.
+  function keyCode(ch) {
+    if (/^[a-z]$/i.test(ch)) return "Key" + ch.toUpperCase();
+    if (/^[0-9]$/.test(ch)) return "Digit" + ch;
+    if (ch === " ") return "Space";
+    return "";
+  }
+
   /* ---------- estado salvo (sobrevive a recarregar a página) ---------- */
   const storage = {
     async get() {
@@ -310,18 +396,16 @@
   }
 
   async function setPrompt(value) {
-    const ed = await waitFor(editor, 6000);
+    const ed = await waitForElement(editor, 6000);
     if (!ed) throw new Error("Não achei a caixa de prompt do Flow.");
-    ed.focus();
-    document.execCommand("selectAll", false, null);
-    document.execCommand("insertText", false, value);
+    setReactValue(ed, value);
     await sleep(400);
-    if (!text(ed).startsWith(value.slice(0, 20))) {
-      // segunda tentativa
+    if (!text(ed).startsWith(value.slice(0, 20)) && !(ed.value || "").startsWith(value.slice(0, 20))) {
+      // segunda tentativa: apaga o que ficou e escreve de novo
       ed.focus();
       document.execCommand("selectAll", false, null);
       document.execCommand("delete", false, null);
-      document.execCommand("insertText", false, value);
+      setReactValue(ed, value);
       await sleep(400);
     }
   }
@@ -1382,4 +1466,48 @@
       if (autoRun && left) window.setTimeout(() => { if (!running) start(); }, 2500);
     }
   }).then(takePending).then(takeResume).then(updateGuide);
+
+  /* ---------- preenchimento automático depois de recarregar ---------- */
+  // Quem quiser preencher grava em chrome.storage.local:
+  //   { "clipgringa-autofill-v1": { status: "PREENCHER_AGORA", campos: { prompt: "texto..." } } }
+  // Ao carregar (ou recarregar) a página do Flow, e sempre que essa chave mudar, os campos são preenchidos
+  // e o status volta para "IDLE". Chave com nome próprio para não esbarrar no "status" de outros scripts.
+  const AUTOFILL_KEY = "clipgringa-autofill-v1";
+  // Campos do Flow: nome → como achar o elemento. O prompt é um editor ProseMirror (contenteditable).
+  const FLOW_FIELDS = {
+    prompt: editor,
+  };
+  let autofilling = false;
+
+  async function iniciarPreenchimento() {
+    if (autofilling) return;
+    let job = null;
+    try { job = (await chrome.storage.local.get(AUTOFILL_KEY))[AUTOFILL_KEY]; } catch (_e) { return; }
+    if (!job || job.status !== "PREENCHER_AGORA") return;
+    // A geração automática também escreve na caixa de prompt: não disputa com ela.
+    if (running) { console.warn("[autofill] a geração do pacote está rodando; preenchimento adiado"); return; }
+    autofilling = true;
+    const faltando = [];
+    try {
+      for (const [nome, value] of Object.entries(job.campos || {})) {
+        const find = FLOW_FIELDS[nome];
+        if (!find) { faltando.push(nome + " (campo desconhecido)"); continue; }
+        const el = await waitForElement(find, 15000); // o Flow demora a montar a tela depois do F5
+        if (!el || !setReactValue(el, value)) { faltando.push(nome); continue; }
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      if (!faltando.length) await chrome.storage.local.set({ [AUTOFILL_KEY]: { ...job, status: "IDLE", doneAt: Date.now() } });
+      else console.warn("[autofill] campos não preenchidos:", faltando);
+    } finally {
+      autofilling = false;
+    }
+  }
+
+  iniciarPreenchimento();
+  try {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      const v = changes[AUTOFILL_KEY] && changes[AUTOFILL_KEY].newValue;
+      if (area === "local" && v && v.status === "PREENCHER_AGORA") iniciarPreenchimento();
+    });
+  } catch (_e) { /* extensão recarregada */ }
 })();

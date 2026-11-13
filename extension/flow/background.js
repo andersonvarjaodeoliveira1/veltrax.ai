@@ -279,3 +279,166 @@ async function checkForUpdate() {
 }
 chrome.runtime.onStartup.addListener(checkForUpdate);
 chrome.runtime.onInstalled.addListener(checkForUpdate);
+
+
+/* ===================== Contas do ClipGringa (troca de sessão) ===================== */
+// Contas do ClipGringa: guarda e troca os cookies de login (Better Auth) sem sair e entrar de novo.
+// Tudo aqui usa nomes próprios para não esbarrar no resto da extensão: mensagens "clipgringa-session-*" e a chave "clipgringa-sessions-v1".
+const SESS_DOMAIN = "clipgringa.gringatools.com";
+const SESS_APP_URL = "https://" + SESS_DOMAIN + "/";
+const SESS_KEY = "clipgringa-sessions-v1";
+const SESS_COOKIE = "better-auth.session_token";
+const SESS_NAMES = ["__Secure-" + SESS_COOKIE, SESS_COOKIE];
+const SESS_PROGRESS_KEY = "clipgringa-flow-progress-v1"; // gravado pelo content.js do Flow
+
+function sessCookieUrl(c) {
+  return "https://" + c.domain.replace(/^\./, "") + (c.path || "/");
+}
+
+// Pega os cookies de clipgringa.gringatools.com e de api.clipgringa.gringatools.com.
+function sessGetCookies() {
+  return chrome.cookies.getAll({ domain: SESS_DOMAIN });
+}
+
+async function sessClearCookies() {
+  const all = await sessGetCookies();
+  await Promise.all(all.map((c) => chrome.cookies.remove({ url: sessCookieUrl(c), name: c.name }).catch(() => null)));
+}
+
+function toSetDetails(c) {
+  const securePrefix = c.name.startsWith("__Secure-");
+  const hostPrefix = c.name.startsWith("__Host-");
+  const d = {
+    url: sessCookieUrl(c),
+    name: c.name,
+    value: c.value,
+    path: hostPrefix ? "/" : c.path || "/",
+    secure: c.secure || securePrefix || hostPrefix, // __Secure- e __Host- exigem secure
+    httpOnly: c.httpOnly
+  };
+  if (!c.hostOnly && !hostPrefix) d.domain = c.domain;
+  if (c.sameSite && c.sameSite !== "unspecified") d.sameSite = c.sameSite;
+  if (d.sameSite === "no_restriction") d.secure = true;
+  if (!c.session && c.expirationDate) d.expirationDate = c.expirationDate;
+  return d;
+}
+
+async function sessHasLogin() {
+  for (const name of SESS_NAMES) {
+    if (await chrome.cookies.get({ url: SESS_APP_URL, name })) return true;
+  }
+  return false;
+}
+
+async function restoreCookies(list) {
+  for (const c of list) {
+    try {
+      const r = await chrome.cookies.set(toSetDetails(c));
+      if (!r) console.warn("[sessões] O Chrome recusou o cookie", c.name);
+    } catch (e) {
+      console.warn("[sessões] Não deu para restaurar o cookie", c.name, e);
+    }
+  }
+  return sessHasLogin();
+}
+
+async function sessReloadTabs() {
+  const tabs = await chrome.tabs.query({ url: "https://" + SESS_DOMAIN + "/*" });
+  if (tabs.length) await Promise.all(tabs.map((t) => chrome.tabs.reload(t.id).catch(() => null)));
+  else await chrome.tabs.create({ url: SESS_APP_URL + "automacao" });
+}
+
+async function sessState() {
+  const got = (await chrome.storage.local.get(SESS_KEY))[SESS_KEY] || {};
+  return { sessions: got.sessions || {}, active: got.active || null };
+}
+
+async function sessSaveState(sessions, active) {
+  await chrome.storage.local.set({ [SESS_KEY]: { sessions, active } });
+  await sessNotify(active);
+}
+
+// Avisa as abas do ClipGringa que a conta em uso mudou, para o selo atualizar na hora.
+async function sessNotify(active) {
+  try {
+    const tabs = await chrome.tabs.query({ url: "https://" + SESS_DOMAIN + "/*" });
+    await Promise.all(tabs.map((t) =>
+      chrome.tabs.sendMessage(t.id, { type: "clipgringa-session-changed", active: active || null }).catch(() => null)
+    ));
+  } catch (_e) { /* sem abas abertas */ }
+}
+
+// Não troca de conta no meio de uma geração do Flow: o pacote em andamento é da conta atual.
+async function sessFlowBusy() {
+  const p = (await chrome.storage.local.get(SESS_PROGRESS_KEY))[SESS_PROGRESS_KEY];
+  return !!(p && p.running && Date.now() - (p.at || 0) < 2 * 60 * 1000);
+}
+
+// Antes de sair da conta ativa, guarda os cookies de agora (o token pode ter sido renovado).
+async function sessRefreshActive(sessions, active) {
+  if (!active || !sessions[active]) return;
+  const now = await sessGetCookies();
+  if (now.length && (await sessHasLogin())) sessions[active].cookies = now;
+}
+
+async function sessHandle(msg) {
+  const { sessions, active } = await sessState();
+  switch (msg.type) {
+    case "clipgringa-session-list":
+      return { ok: true, sessions: Object.keys(sessions), active };
+
+    case "clipgringa-session-active":
+      return { ok: true, active };
+
+    case "clipgringa-session-save": {
+      const name = String(msg.name || "").trim().slice(0, 40);
+      if (!name) return { ok: false, error: "Dê um nome para a conta." };
+      if (!(await sessHasLogin())) return { ok: false, error: "Entre no ClipGringa antes de salvar." };
+      sessions[name] = { cookies: await sessGetCookies(), savedAt: Date.now() };
+      await sessSaveState(sessions, name);
+      return { ok: true };
+    }
+
+    case "clipgringa-session-switch": {
+      const s = sessions[msg.name];
+      if (!s) return { ok: false, error: "Conta não encontrada." };
+      if (await sessFlowBusy()) return { ok: false, error: "O Flow está gerando um pacote. Espere terminar ou pare antes de trocar de conta." };
+      await sessRefreshActive(sessions, active);
+      await sessClearCookies();
+      const ok = await restoreCookies(s.cookies);
+      await sessSaveState(sessions, ok ? msg.name : null);
+      await sessReloadTabs();
+      return ok ? { ok: true } : { ok: false, error: "A sessão de " + msg.name + " expirou. Entre de novo e salve por cima." };
+    }
+
+    case "clipgringa-session-new": {
+      if (await sessFlowBusy()) return { ok: false, error: "O Flow está gerando um pacote. Espere terminar ou pare antes de trocar de conta." };
+      await sessRefreshActive(sessions, active);
+      await sessClearCookies();
+      await sessSaveState(sessions, null);
+      await sessReloadTabs();
+      return { ok: true };
+    }
+
+    case "clipgringa-session-delete": {
+      delete sessions[msg.name];
+      await sessSaveState(sessions, active === msg.name ? null : active);
+      return { ok: true };
+    }
+  }
+  return { ok: false, error: "Ação desconhecida." };
+}
+
+// Ouvinte próprio: só responde às mensagens "clipgringa-session-*" e deixa as outras para o background.js.
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (!msg || typeof msg.type !== "string" || !msg.type.startsWith("clipgringa-session-")) return false;
+  // Só aceita pedidos do painel da extensão e das abas do próprio ClipGringa.
+  const fromPopup = !sender.tab && sender.id === chrome.runtime.id;
+  const fromApp = sender.tab && String(sender.url || "").startsWith(SESS_APP_URL);
+  if (!fromPopup && !(fromApp && msg.type === "clipgringa-session-active")) {
+    sendResponse({ ok: false, error: "Sem permissão." });
+    return false;
+  }
+  sessHandle(msg).then(sendResponse).catch((e) => sendResponse({ ok: false, error: String((e && e.message) || e) }));
+  return true;
+});
