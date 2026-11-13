@@ -1,5 +1,5 @@
--- ClipSpy: biblioteca de criativos vencedores minerados por APIs oficiais
--- (Meta Ad Library na Fase 1; YouTube/TikTok nas fases seguintes).
+-- ClipSpy: biblioteca de criativos vencedores minerados por APIs oficiais.
+-- Meta Ad Library na Fase 1, e YouTube ou TikTok nas fases seguintes.
 CREATE TABLE IF NOT EXISTS creative_bank (
     id VARCHAR(36) PRIMARY KEY,
     user_id VARCHAR(36) NOT NULL,
