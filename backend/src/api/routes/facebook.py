@@ -32,10 +32,12 @@ from ...facebook import (
     caption_for,
     check_page_token,
     delete_remote,
+    get_page_profile,
     plan_times,
     publish_due,
     set_page_cover_file,
     set_page_picture_file,
+    set_page_profile,
 )
 from ...runtime_settings import decrypt_setting_value, encrypt_setting_value
 
@@ -407,6 +409,52 @@ async def apply_page_photos(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
     await db.commit()
     return {"ok": True, "feito": feito}
+
+
+# ---------- perfil da página (bio / categoria) ----------
+MAX_ABOUT = 255
+MAX_DESCRIPTION = 5000
+
+
+@router.get("/pages/{page_id}/profile")
+async def read_page_profile(page_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    """Lê a bio curta, a descrição e a categoria atuais de UMA página na Meta."""
+    user_id = await _admin(request, db)
+    page = await _own(db, "fb_pages", page_id, user_id)
+    if not page.get("meta_token_enc") or not page.get("meta_page_id"):
+        raise HTTPException(status_code=400, detail="Página não conectada à Meta")
+    token = decrypt_setting_value(page["meta_token_enc"])
+    async with httpx.AsyncClient(timeout=httpx.Timeout(30, connect=20)) as client:
+        try:
+            return await get_page_profile(client, page_id=str(page["meta_page_id"]), token=token)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/pages/{page_id}/profile")
+async def apply_page_profile(page_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    """Atualiza a bio curta (about) e/ou a descrição de UMA página. Padroniza a marca."""
+    user_id = await _admin(request, db)
+    page = await _own(db, "fb_pages", page_id, user_id)
+    if not page.get("meta_token_enc") or not page.get("meta_page_id"):
+        raise HTTPException(status_code=400, detail="Página não conectada à Meta")
+    body = await request.json()
+    about = body.get("about")
+    description = body.get("description")
+    about = _s(about, MAX_ABOUT) if about is not None else None
+    description = _s(description, MAX_DESCRIPTION) if description is not None else None
+    if about is None and description is None:
+        raise HTTPException(status_code=400, detail="Mande a bio (about) e/ou a descrição")
+    token = decrypt_setting_value(page["meta_token_enc"])
+    async with httpx.AsyncClient(timeout=httpx.Timeout(60, connect=20)) as client:
+        try:
+            await set_page_profile(client, page_id=str(page["meta_page_id"]), token=token, about=about, description=description)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    mudou = ", ".join([t for t, v in (("bio", about), ("descrição", description)) if v is not None])
+    await add_event(db, user_id, f"Perfil atualizado pela ferramenta ({mudou})", page_id=page_id, actor="voce")
+    await db.commit()
+    return {"ok": True}
 
 
 # ---------- entrar com o Facebook ----------

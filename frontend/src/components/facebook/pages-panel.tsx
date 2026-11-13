@@ -8,6 +8,7 @@ import { ManualPostDialog, RegisterPostsDialog } from "./manual-post";
 import { goToFacebookLogin, MetaCard, MetaSetupDialog, useMetaStatus } from "./meta-connect";
 import { PagePlanSteps } from "./page-plan";
 import { PhotoSwap } from "./photo-swap";
+import { ProfileStandardize } from "./profile-standardize";
 import { cn } from "@/lib/utils";
 import { ACTOR, card, field, Modal, Pill, primary, secondary } from "./ui";
 
@@ -28,6 +29,7 @@ export function PagesPanel({ pages, accounts, onChange }: { pages: FbPage[]; acc
       <div className="flex flex-wrap gap-2">
         <button type="button" className={primary} onClick={() => setCreating((v) => !v)}>{creating ? "Fechar" : "Nova página"}</button>
         <PhotoSwap pages={pages} onChange={onChange} />
+        <ProfileStandardize pages={pages} onChange={onChange} />
         {pages.some((p) => p.meta_connected) ? <button type="button" className={secondary} disabled={sending} onClick={() => void sendNow()}>{sending ? "Enviando…" : "Enviar agora para o Facebook"}</button> : null}
       </div>
       <MetaCard onChange={onChange} />
