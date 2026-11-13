@@ -10,6 +10,7 @@ from src.takes import (
     plan_takes,
     remap_boundaries,
     scene_boundaries,
+    takes_from_bounds,
 )
 
 
@@ -90,6 +91,23 @@ def test_plan_takes_estende_take_curto():
     # 0..3 é curto (3s < 8): estende para a próxima borda >= 8 -> 0..20
     assert takes[0]["start"] == 0.0
     assert takes[0]["end"] == 20.0
+
+
+@pytest.mark.asyncio
+async def test_takes_from_bounds_usa_bordas_prontas():
+    class FakeAnalysis:
+        most_relevant_segments: ClassVar = [
+            {"start_time": "00:07", "end_time": "00:23", "hook_title": "H", "text": "x", "relevance_score": 0.8},
+        ]
+
+    async def fake_analyze(_t):
+        return FakeAnalysis()
+
+    # bordas já no tempo do vídeo final (o que o render guardou), 4 cenas de 10s
+    takes = await takes_from_bounds("00:07 oi", [0.0, 10.0, 20.0, 30.0, 40.0], analyze=fake_analyze, min_len=5.0)
+    assert len(takes) == 1
+    assert takes[0]["start"] == 0.0 and takes[0]["end"] == 30.0
+    assert takes[0]["hook_title"] == "H"
 
 
 @pytest.mark.asyncio

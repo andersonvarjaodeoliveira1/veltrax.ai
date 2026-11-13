@@ -178,6 +178,42 @@ def plan_takes(
     return accepted
 
 
+async def takes_from_bounds(
+    transcript: str,
+    bounds: list[float],
+    *,
+    min_len: float = DEFAULT_MIN_LEN,
+    max_len: float = DEFAULT_MAX_LEN,
+    analyze: Callable[[str], Awaitable[Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """Gera os takes a partir de bordas de cena já prontas (as que o render guardou).
+
+    A IA escolhe os trechos na transcrição e a gente encaixa nas bordas. `analyze` é injetável
+    para teste; por padrão usa ai.get_most_relevant_parts_by_transcript.
+    """
+    if len(bounds) < 2:
+        return []
+    if analyze is None:
+        from .ai import (
+            get_most_relevant_parts_by_transcript as analyze,  # import tardio (dependências pesadas)
+        )
+    analysis = await analyze(transcript)
+    raw = getattr(analysis, "most_relevant_segments", None)
+    if raw is None and isinstance(analysis, dict):
+        raw = analysis.get("most_relevant_segments")
+    segments: list[dict[str, Any]] = []
+    for seg in raw or []:
+        get = seg.get if isinstance(seg, dict) else lambda k, d=None, s=seg: getattr(s, k, d)
+        segments.append({
+            "start": parse_mmss(get("start_time", 0)),
+            "end": parse_mmss(get("end_time", 0)),
+            "hook_title": get("hook_title", None),
+            "text": get("text", "") or "",
+            "score": float(get("relevance_score", 0.0) or 0.0),
+        })
+    return plan_takes(segments, bounds, min_len=min_len, max_len=max_len)
+
+
 async def build_takes(
     transcript: str,
     durations: list[float],
@@ -197,26 +233,4 @@ async def build_takes(
     bounds = scene_boundaries(durations, transition_seconds=transition_seconds)
     if silence_ranges:
         bounds = remap_boundaries(bounds, silence_ranges)
-    if len(bounds) < 2:
-        return []
-
-    if analyze is None:
-        from .ai import (
-            get_most_relevant_parts_by_transcript as analyze,  # import tardio (dependências pesadas)
-        )
-
-    analysis = await analyze(transcript)
-    raw = getattr(analysis, "most_relevant_segments", None)
-    if raw is None and isinstance(analysis, dict):
-        raw = analysis.get("most_relevant_segments")
-    segments: list[dict[str, Any]] = []
-    for seg in raw or []:
-        get = seg.get if isinstance(seg, dict) else lambda k, d=None, s=seg: getattr(s, k, d)
-        segments.append({
-            "start": parse_mmss(get("start_time", 0)),
-            "end": parse_mmss(get("end_time", 0)),
-            "hook_title": get("hook_title", None),
-            "text": get("text", "") or "",
-            "score": float(get("relevance_score", 0.0) or 0.0),
-        })
-    return plan_takes(segments, bounds, min_len=min_len, max_len=max_len)
+    return await takes_from_bounds(transcript, bounds, min_len=min_len, max_len=max_len, analyze=analyze)
