@@ -167,6 +167,37 @@ async def set_page_cover_file(client: httpx.AsyncClient, *, page_id: str, token:
     return photo_id
 
 
+async def get_page_profile(client: httpx.AsyncClient, *, page_id: str, token: str) -> dict[str, str]:
+    """Lê o perfil atual da página: bio curta (about), descrição e categoria."""
+    r = await client.get(
+        f"{GRAPH}/{GRAPH_VERSION}/{page_id}",
+        params={"fields": "about,description,category", "access_token": token},
+    )
+    body = r.json() if r.content else {}
+    if r.status_code >= 400 or "error" in body:
+        raise ValueError(_graph_error(body, r.status_code))
+    return {
+        "about": str(body.get("about") or ""),
+        "description": str(body.get("description") or ""),
+        "category": str(body.get("category") or ""),
+    }
+
+
+async def set_page_profile(client: httpx.AsyncClient, *, page_id: str, token: str, about: str | None = None, description: str | None = None) -> None:
+    """Atualiza a bio curta (about) e/ou a descrição da página. Precisa de pages_manage_metadata."""
+    params: dict[str, str] = {"access_token": token}
+    if about is not None:
+        params["about"] = about
+    if description is not None:
+        params["description"] = description
+    if len(params) == 1:  # nada para mudar
+        return
+    r = await client.post(f"{GRAPH}/{GRAPH_VERSION}/{page_id}", data=params)
+    body = r.json() if r.content else {}
+    if r.status_code >= 400 or "error" in body:
+        raise ValueError(_graph_error(body, r.status_code))
+
+
 async def send_post(client: httpx.AsyncClient, *, page_id: str, token: str, kind: str, file_path: str | None, caption: str, when: datetime | None) -> str:
     """Manda um post para a página. `when` None publica agora. Devolve o id do post no Facebook."""
     data: dict[str, str] = {"access_token": token}
