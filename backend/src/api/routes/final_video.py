@@ -83,7 +83,12 @@ async def _run(job_id: str, parts: list[Path], options: dict[str, Any]) -> None:
     try:
         async with _render_gate:
             result = await run_in_thread(render_final, parts, output, work, options, transcribe_words, progress)
-        await _save(job_id, status="done", step="Pronto", path=str(output), duration=result["duration"], warning=result["warning"])
+        await _save(
+            job_id, status="done", step="Pronto", path=str(output),
+            duration=result["duration"], warning=result["warning"],
+            scene_bounds=json.dumps(result.get("scene_bounds") or []),
+            transcript=json.dumps(result.get("transcript") or []),
+        )
     except Exception:
         logger.exception("final video %s failed", job_id)
         await _save(job_id, status="error", step="", error="Não consegui montar o vídeo final. Tente de novo.")
@@ -160,3 +165,90 @@ async def delete_final(job_id: str, request: Request, db: AsyncSession = Depends
     await db.commit()
     shutil.rmtree(_root() / row.id, ignore_errors=True)
     return {"ok": True}
+
+
+MAX_TAKES = 12
+
+
+def _take_json(row: Any) -> dict[str, Any]:
+    start, end = float(row.start_seconds), float(row.end_seconds)
+    return {
+        "id": row.id, "idx": row.idx, "hook_title": row.hook_title, "text": row.text,
+        "start": start, "end": end, "duration": round(end - start, 1), "score": float(row.score),
+    }
+
+
+@router.get("/{job_id}/takes")
+async def list_takes(job_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    user_id = await _user_id(request, db)
+    rows = (await db.execute(text(
+        "SELECT id, idx, hook_title, text, start_seconds, end_seconds, score FROM video_takes "
+        "WHERE final_video_id = :id AND user_id = :u ORDER BY idx"
+    ), {"id": _uuid(job_id), "u": user_id})).all()
+    return {"takes": [_take_json(r) for r in rows]}
+
+
+@router.patch("/{job_id}/takes/{take_id}")
+async def edit_take(job_id: str, take_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    """Salva a headline editada à mão de um take."""
+    user_id = await _user_id(request, db)
+    body = await request.json()
+    hook = str(body.get("hook_title") or "").strip()[:200]
+    result = await db.execute(text(
+        "UPDATE video_takes SET hook_title = :h WHERE id = :id AND final_video_id = :fv AND user_id = :u"
+    ), {"h": hook or None, "id": _uuid(take_id), "fv": _uuid(job_id), "u": user_id})
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Take não encontrado")
+    await db.commit()
+    return {"ok": True, "hook_title": hook or None}
+
+
+@router.post("/{job_id}/takes")
+async def make_takes(job_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    """Gera takes inteligentes: a IA escolhe os trechos de maior gancho e a gente encaixa nas cenas do Flow."""
+    from ...clip_editor import trim_clip_file
+    from ...media.ffmpeg import ffprobe_duration
+    from ...media.transcription import get_video_transcript
+    from ...takes import takes_from_bounds
+
+    user_id = await _user_id(request, db)
+    row = (await db.execute(text(
+        "SELECT id, status, path, scene_bounds FROM final_videos WHERE id = :id AND user_id = :u"
+    ), {"id": _uuid(job_id), "u": user_id})).first()
+    if not row or row.status != "done" or not Path(row.path or "").is_file():
+        raise HTTPException(status_code=404, detail="O vídeo final não está pronto")
+    bounds = json.loads(row.scene_bounds or "[]")
+    if len(bounds) < 3:  # 0 ou 1 cena: não há onde dividir em takes
+        raise HTTPException(status_code=400, detail="Esse vídeo tem só uma cena; não dá para dividir em takes")
+
+    final_path = Path(row.path)
+    transcript = await run_in_thread(get_video_transcript, final_path)
+    if not (transcript or "").strip():
+        raise HTTPException(status_code=400, detail="Não encontrei fala no vídeo para escolher os takes")
+    takes = (await takes_from_bounds(transcript, bounds))[:MAX_TAKES]
+    if not takes:
+        raise HTTPException(status_code=400, detail="A IA não achou trechos fortes o bastante para virar takes")
+
+    out_dir = _root() / row.id / "takes"
+    total = float(ffprobe_duration(final_path))
+    old = (await db.execute(text("SELECT path FROM video_takes WHERE final_video_id = :id"), {"id": row.id})).all()
+    await db.execute(text("DELETE FROM video_takes WHERE final_video_id = :id"), {"id": row.id})
+    for item in old:
+        Path(item[0]).unlink(missing_ok=True)
+
+    saved: list[dict[str, Any]] = []
+    for i, take in enumerate(takes):
+        start = float(take["start"])
+        end = min(float(take["end"]), total)
+        cut = await run_in_thread(trim_clip_file, final_path, out_dir, start, total - end)
+        take_id = str(uuid.uuid4())
+        await db.execute(text(
+            "INSERT INTO video_takes (id, user_id, final_video_id, idx, path, hook_title, text, start_seconds, end_seconds, score) "
+            "VALUES (:id, :u, :fv, :i, :p, :h, :t, :s, :e, :sc)"
+        ), {"id": take_id, "u": user_id, "fv": row.id, "i": i, "p": str(cut),
+            "h": (take.get("hook_title") or "")[:200] or None, "t": take.get("text") or "",
+            "s": start, "e": end, "sc": float(take.get("score") or 0.0)})
+        saved.append({"id": take_id, "idx": i, "hook_title": take.get("hook_title"),
+                      "start": start, "end": end, "duration": round(end - start, 1), "score": float(take.get("score") or 0.0)})
+    await db.commit()
+    return {"takes": saved}

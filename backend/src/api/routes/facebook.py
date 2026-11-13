@@ -716,6 +716,14 @@ async def add_clips(page_id: str, request: Request, db: AsyncSession = Depends(g
     caption = _s(body.get("caption"), 3000)
     title = _s(body.get("title"), 200)
     for v in vids:
+        if v.get("source") == "take":
+            # take: corte inteligente de um vídeo final, já com headline própria
+            row = (await db.execute(text("SELECT id, path, hook_title, text FROM video_takes WHERE id = :id AND user_id = :u"), {"id": str(v["id"]), "u": user_id})).mappings().first()
+            if row and os.path.isfile(str(row["path"])):
+                clips.append({"source": "take", "id": row["id"], "task_id": None, "file_path": row["path"],
+                              "hook_title": title or _s(row.get("hook_title"), 200) or "Take", "text": row.get("text"),
+                              "caption": caption_for(row.get("hook_title"), row.get("text")) if not caption else caption})
+            continue
         if v.get("source") == "final":
             row = (await db.execute(text("SELECT id, path FROM final_videos WHERE id = :id AND user_id = :u AND status = 'done'"), {"id": str(v["id"]), "u": user_id})).mappings().first()
         else:

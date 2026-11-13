@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -163,13 +164,30 @@ def render_final(
     transcribe: Callable[[Path], list[dict[str, Any]]],
     progress: Callable[[str], None] = lambda _s: None,
 ) -> dict[str, Any]:
-    """Junta as cenas, transcreve, queima legenda/título e acelera. Devolve {duration, warning}."""
-    from .api.routes.multiplier import ensure_audio, render_combination, render_variation
+    """Junta as cenas, transcreve, queima legenda/título e acelera.
+
+    Devolve {duration, warning, scene_bounds, transcript}: scene_bounds são as bordas de cada
+    cena do Flow no tempo do vídeo final (entrada do planejador de takes) e transcript é a
+    transcrição (lista de palavras) já no tempo do vídeo final.
+    """
+    from .api.routes.multiplier import (
+        ensure_audio,
+        render_combination,
+        render_variation,
+    )
     from .media.ffmpeg import ffprobe_duration
+    from .takes import remap_boundaries, scene_boundaries
 
     width, height = ASPECTS[options["aspect"]]
     warning = ""
     progress("Juntando as cenas")
+    # durações de cada cena (antes de juntar), para montar as bordas de cena
+    part_durations: list[float] = []
+    for part in parts:
+        try:
+            part_durations.append(float(ffprobe_duration(part)))
+        except Exception:
+            part_durations.append(0.0)
     prepared = [ensure_audio(part) for part in parts]
     joined = work / "joined.mp4"
     if options["transition"] != "none" and len(prepared) > 1:
@@ -190,6 +208,7 @@ def render_final(
             if not words:
                 warning = "Não encontrei fala no vídeo, então ele saiu sem legenda."
 
+    silence_ranges: list[tuple[float, float]] | None = None
     if (options["silence"] != "off" and words) or options["denoise"]:
         progress("Cortando as pausas" if options["silence"] != "off" and words else "Limpando o áudio")
         ranges = keep_ranges(words, duration, options["silence"]) if options["silence"] != "off" else [(0.0, duration)]
@@ -199,9 +218,13 @@ def render_final(
         joined = cut
         if words and options["silence"] != "off":
             words = remap_words(words, ranges)
+            silence_ranges = ranges  # o corte de silêncio muda o tempo: remapeia as bordas também
         duration = float(ffprobe_duration(joined))
     elif options["silence"] != "off" and not words:
         warning = (warning + " " if warning else "") + "Sem fala para guiar o corte, então não cortei as pausas."
+
+    # guarda a transcrição para os takes antes de a legenda ser zerada (quando captions está off)
+    transcript_words = [dict(w) for w in words]
 
     if not options["captions"]:
         words = []
@@ -221,4 +244,24 @@ def render_final(
     else:
         render_variation(joined, output, width, height, {"speed": options["speed"]}, False, ass_path=ass_path, fonts_dir=fonts_dir)
         joined.unlink(missing_ok=True)
-    return {"duration": float(ffprobe_duration(output)), "warning": warning}
+    final_duration = float(ffprobe_duration(output))
+
+    # Bordas de cena e transcrição no tempo do vídeo FINAL (depois de transição, corte de silêncio e velocidade),
+    # que é o que o planejador de takes consome.
+    transition_seconds = TRANSITION_SECONDS if (options["transition"] != "none" and len(parts) > 1) else 0.0
+    bounds = scene_boundaries(part_durations, transition_seconds=transition_seconds)
+    if silence_ranges:
+        bounds = remap_boundaries(bounds, silence_ranges)
+    speed = float(options.get("speed") or 1.0)
+    if speed and speed != 1.0:
+        bounds = [round(b / speed, 3) for b in bounds]
+        transcript_words = [{**w, "start": float(w["start"]) / speed, "end": float(w["end"]) / speed} for w in transcript_words]
+    if bounds:  # a última borda não passa da duração real do vídeo final
+        bounds[-1] = min(bounds[-1], round(final_duration, 3))
+
+    return {
+        "duration": final_duration,
+        "warning": warning,
+        "scene_bounds": bounds,
+        "transcript": transcript_words,
+    }
