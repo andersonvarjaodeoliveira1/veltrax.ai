@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Download, Film, Loader2 } from "lucide-react";
 import { readTarget, type FacebookTarget } from "@/lib/facebook-target";
+import { TakesPanel } from "./takes-panel";
 
 type Final = { id: string; status: "processing" | "done" | "error"; step: string; error: string | null; warning: string; duration: number | null };
 
@@ -199,6 +200,7 @@ export function FinalVideoMaker({ items, defaultTitle }: { items: FinalItem[]; d
                       {queued[item.id] && queued[item.id] !== "busy" && <p role="alert" className="text-xs text-[#F0466B]">{queued[item.id]}</p>}
                     </div>
                   ))}
+                  <TakesPanel finalId={item.id} target={target} />
                 </div>
               )}
             </div>

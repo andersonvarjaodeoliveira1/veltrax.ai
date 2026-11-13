@@ -188,6 +188,21 @@ async def list_takes(job_id: str, request: Request, db: AsyncSession = Depends(g
     return {"takes": [_take_json(r) for r in rows]}
 
 
+@router.patch("/{job_id}/takes/{take_id}")
+async def edit_take(job_id: str, take_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    """Salva a headline editada à mão de um take."""
+    user_id = await _user_id(request, db)
+    body = await request.json()
+    hook = str(body.get("hook_title") or "").strip()[:200]
+    result = await db.execute(text(
+        "UPDATE video_takes SET hook_title = :h WHERE id = :id AND final_video_id = :fv AND user_id = :u"
+    ), {"h": hook or None, "id": _uuid(take_id), "fv": _uuid(job_id), "u": user_id})
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Take não encontrado")
+    await db.commit()
+    return {"ok": True, "hook_title": hook or None}
+
+
 @router.post("/{job_id}/takes")
 async def make_takes(job_id: str, request: Request, db: AsyncSession = Depends(get_db)):
     """Gera takes inteligentes: a IA escolhe os trechos de maior gancho e a gente encaixa nas cenas do Flow."""
