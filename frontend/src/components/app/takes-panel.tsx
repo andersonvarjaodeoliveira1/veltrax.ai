@@ -136,7 +136,7 @@ export function TakesPanel({ finalId, target }: { finalId: string; target: Faceb
 
   return (
     <div className="space-y-2 rounded-[12px] bg-white/[0.03] p-3" data-testid="takes-review">
-      <p className="text-xs font-medium">{takes.length} takes. Revise a headline de cada um:</p>
+      <p className="text-xs font-medium">{takes.length === 1 ? "1 take" : `${takes.length} takes`}. Revise a headline{takes.length === 1 ? "" : " de cada um"}:</p>
       {takes.map((take, i) => (
         <div key={take.id} className="flex items-center gap-2">
           <span className="w-5 shrink-0 text-xs text-white/50">{i + 1}</span>
@@ -161,7 +161,7 @@ export function TakesPanel({ finalId, target }: { finalId: string; target: Faceb
 
       {scheduled ? (
         <p role="status" className="text-xs text-[#5BD69A]">
-          {takes.length} takes entraram na agenda{target ? ` de ${target.pageName}` : ""}.{" "}
+          {takes.length === 1 ? "1 take entrou" : `${takes.length} takes entraram`} na agenda{target ? ` de ${target.pageName}` : ""}.{" "}
           <a href="/facebook?aba=paginas" className="underline">Ver a agenda</a>
         </p>
       ) : (
@@ -207,7 +207,7 @@ export function TakesPanel({ finalId, target }: { finalId: string; target: Faceb
               </button>
             </div>
             <p className="text-xs text-white/70">
-              Juntei os {takes.length} takes num arquivo só. Quer baixar agora ou deixar para depois?
+              Juntei {takes.length === 1 ? "1 take" : `${takes.length} takes`} num arquivo só. Quer baixar agora ou deixar para depois?
             </p>
             <div className="flex flex-wrap gap-2">
               <button
