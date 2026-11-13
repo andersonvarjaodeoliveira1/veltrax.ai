@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
 import random
@@ -167,19 +168,26 @@ async def set_page_cover_file(client: httpx.AsyncClient, *, page_id: str, token:
     return photo_id
 
 
-async def get_page_profile(client: httpx.AsyncClient, *, page_id: str, token: str) -> dict[str, str]:
-    """Lê o perfil atual da página: bio curta (about), descrição e categoria."""
+async def get_page_profile(client: httpx.AsyncClient, *, page_id: str, token: str) -> dict[str, Any]:
+    """Lê o perfil atual da página: bio curta (about), descrição e categoria (nome + lista com IDs)."""
     r = await client.get(
         f"{GRAPH}/{GRAPH_VERSION}/{page_id}",
-        params={"fields": "about,description,category", "access_token": token},
+        params={"fields": "about,description,category,category_list", "access_token": token},
     )
     body = r.json() if r.content else {}
     if r.status_code >= 400 or "error" in body:
         raise ValueError(_graph_error(body, r.status_code))
+    cat_list = [
+        {"id": str(c.get("id") or ""), "name": str(c.get("name") or "")}
+        for c in (body.get("category_list") or [])
+        if c.get("id")
+    ]
     return {
         "about": str(body.get("about") or ""),
         "description": str(body.get("description") or ""),
         "category": str(body.get("category") or ""),
+        "category_id": cat_list[0]["id"] if cat_list else "",
+        "category_list": cat_list,
     }
 
 
@@ -193,6 +201,21 @@ async def set_page_profile(client: httpx.AsyncClient, *, page_id: str, token: st
     if len(params) == 1:  # nada para mudar
         return
     r = await client.post(f"{GRAPH}/{GRAPH_VERSION}/{page_id}", data=params)
+    body = r.json() if r.content else {}
+    if r.status_code >= 400 or "error" in body:
+        raise ValueError(_graph_error(body, r.status_code))
+
+
+async def set_page_category(client: httpx.AsyncClient, *, page_id: str, token: str, category_id: str) -> None:
+    """Define a categoria da página a partir de um ID de categoria do Facebook (não o nome).
+
+    A Meta espera `category_list` como um array de IDs; mandamos JSON com um ID.
+    Mudar categoria pode disparar re-análise da página pela Meta.
+    """
+    r = await client.post(
+        f"{GRAPH}/{GRAPH_VERSION}/{page_id}",
+        data={"access_token": token, "category_list": json.dumps([str(category_id)])},
+    )
     body = r.json() if r.content else {}
     if r.status_code >= 400 or "error" in body:
         raise ValueError(_graph_error(body, r.status_code))

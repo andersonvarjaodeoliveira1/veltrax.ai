@@ -35,6 +35,7 @@ from ...facebook import (
     get_page_profile,
     plan_times,
     publish_due,
+    set_page_category,
     set_page_cover_file,
     set_page_picture_file,
     set_page_profile,
@@ -453,6 +454,31 @@ async def apply_page_profile(page_id: str, request: Request, db: AsyncSession = 
             raise HTTPException(status_code=400, detail=str(exc)) from exc
     mudou = ", ".join([t for t, v in (("bio", about), ("descrição", description)) if v is not None])
     await add_event(db, user_id, f"Perfil atualizado pela ferramenta ({mudou})", page_id=page_id, actor="voce")
+    await db.commit()
+    return {"ok": True}
+
+
+@router.post("/pages/{page_id}/category")
+async def apply_page_category(page_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    """Define a categoria de UMA página a partir de um ID de categoria do Facebook.
+
+    O ID vem da própria lista de categorias de uma página (campo category_list do GET profile),
+    então usamos uma página de referência que já está certa como fonte do ID.
+    """
+    user_id = await _admin(request, db)
+    page = await _own(db, "fb_pages", page_id, user_id)
+    if not page.get("meta_token_enc") or not page.get("meta_page_id"):
+        raise HTTPException(status_code=400, detail="Página não conectada à Meta")
+    category_id = _s((await request.json()).get("category_id"), 40)
+    if not category_id.isdigit():
+        raise HTTPException(status_code=400, detail="Mande o ID da categoria (número), não o nome")
+    token = decrypt_setting_value(page["meta_token_enc"])
+    async with httpx.AsyncClient(timeout=httpx.Timeout(60, connect=20)) as client:
+        try:
+            await set_page_category(client, page_id=str(page["meta_page_id"]), token=token, category_id=category_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await add_event(db, user_id, f"Categoria atualizada pela ferramenta (id {category_id})", page_id=page_id, actor="voce")
     await db.commit()
     return {"ok": True}
 
