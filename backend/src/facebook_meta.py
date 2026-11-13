@@ -24,7 +24,7 @@ from .config import Config
 from .facebook import GRAPH, GRAPH_VERSION, _graph_error
 from .runtime_settings import _get_encryption_secret, decrypt_setting_value
 
-SCOPES = ("pages_show_list", "pages_read_engagement", "pages_manage_posts", "pages_read_user_content", "business_management")
+SCOPES = ("pages_show_list", "pages_read_engagement", "pages_manage_posts", "pages_manage_metadata", "pages_read_user_content", "business_management")
 DM_WINDOW_HOURS = 24  # só responde em privado comentário recente; comentário antigo nunca recebe mensagem
 DM_PER_RUN = 20
 
