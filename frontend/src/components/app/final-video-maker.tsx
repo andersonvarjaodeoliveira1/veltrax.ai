@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Download, Film, Loader2 } from "lucide-react";
-import { readTarget, type FacebookTarget } from "@/lib/facebook-target";
+import { readTarget, saveTarget, type FacebookTarget } from "@/lib/facebook-target";
 import { TakesPanel } from "./takes-panel";
 
 type Final = { id: string; status: "processing" | "done" | "error"; step: string; error: string | null; warning: string; duration: number | null };
@@ -33,6 +33,25 @@ export function FinalVideoMaker({ items, defaultTitle }: { items: FinalItem[]; d
     setTarget(t);
     if (t?.title) setTitle((current) => current || t.title.slice(0, 90));
   }, [items.length]);
+
+  // Fluxo manual (sem tema de página): deixa escolher uma das páginas do usuário para agendar.
+  const [pages, setPages] = useState<{ id: string; name: string }[]>([]);
+  useEffect(() => {
+    if (target) return;
+    let alive = true;
+    fetch("/api/facebook/overview")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (alive && Array.isArray(d?.pages)) setPages(d.pages.map((p: { id: string; name: string }) => ({ id: p.id, name: p.name }))); })
+      .catch(() => { /* sem páginas: segue sem o atalho de agenda */ });
+    return () => { alive = false; };
+  }, [target]);
+  function pickPage(id: string) {
+    const p = pages.find((x) => x.id === id);
+    if (!p) return;
+    const base = { pageId: p.id, pageName: p.name, title: title.trim().slice(0, 200), caption: "" };
+    saveTarget(base);
+    setTarget({ ...base, at: Date.now() });
+  }
 
   async function queue(finalId: string) {
     if (!target) return;
@@ -189,6 +208,16 @@ export function FinalVideoMaker({ items, defaultTitle }: { items: FinalItem[]; d
                   {item.warning && <p className="text-xs text-[#F5B454]">{item.warning}</p>}
                   <video controls playsInline src={`/api/multiplier/final/${item.id}/file`} className="mx-auto max-h-[60vh] rounded-[12px] bg-black" aria-label={`Vídeo final ${item.label}`} />
                   <a href={`/api/multiplier/final/${item.id}/file?download=1`} download className="inline-flex items-center gap-2 rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-4 py-2 text-xs font-medium text-white"><Download className="size-3.5" />Baixar o vídeo</a>
+                  {!target && pages.length > 0 && (
+                    <div className="space-y-1">
+                      <label htmlFor={`page-${item.id}`} className="block text-xs text-muted-foreground">Agendar numa página</label>
+                      <select id={`page-${item.id}`} defaultValue="" onChange={(e) => pickPage(e.target.value)} data-testid="final-page-picker"
+                        className="block w-full rounded-md bg-white/5 px-3 py-1.5 text-sm outline-none ring-1 ring-white/10">
+                        <option value="" disabled>Escolha uma página</option>
+                        {pages.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                    </div>
+                  )}
                   {target && (queued[item.id] === "done" ? (
                     <p role="status" className="text-xs text-[#5BD69A]">Entrou na agenda de {target.pageName}. <a href="/facebook?aba=paginas" className="underline">Ver a agenda</a></p>
                   ) : (
