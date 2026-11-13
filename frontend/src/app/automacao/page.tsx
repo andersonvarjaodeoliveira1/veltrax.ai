@@ -17,6 +17,7 @@ type Creative = {
   body: string;
   cta: string;
   button: string;
+  cta_options: { text: string; button: string }[];
   status: Status;
   prompt: string;
 };
@@ -137,6 +138,7 @@ export default function AutomationPage() {
           body: bodies[index % bodies.length],
           cta: cta.text,
           button: cta.button,
+          cta_options: ctas,
           status: "copy" as Status,
           prompt: "",
         };
@@ -352,12 +354,28 @@ export default function AutomationPage() {
             <div key={item.id} className="space-y-3 rounded-[18px] border border-border bg-card p-4">
               <div className="text-xs text-muted-foreground">Nicho: {item.niche}</div>
               {([["hook", "Gancho"], ["body", "Corpo"], ["cta", "CTA"]] as const).map(([field, label]) => (
-                <label key={field} className="block space-y-1 text-sm">
-                  <span className="text-muted-foreground">{label}</span>
-                  <textarea value={item[field]} rows={field === "body" ? 3 : 2} maxLength={300}
-                    onChange={(event) => update(item.id, { [field]: event.target.value })}
-                    className="w-full rounded-lg border border-border bg-background px-3 py-2" />
-                </label>
+                <div key={field} className="space-y-1">
+                  <label className="block space-y-1 text-sm">
+                    <span className="text-muted-foreground">{label}</span>
+                    <textarea value={item[field]} rows={field === "body" ? 3 : 2} maxLength={300}
+                      onChange={(event) => update(item.id, { [field]: event.target.value })}
+                      className="w-full rounded-lg border border-border bg-background px-3 py-2" />
+                  </label>
+                  {field === "cta" && item.cta_options.length > 1 && (
+                    <div className="space-y-1 pt-0.5">
+                      <p className="text-xs text-muted-foreground">Sugestões de CTA (clique para usar, pode editar):</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {item.cta_options.map((option, i) => (
+                          <button key={i} type="button"
+                            onClick={() => update(item.id, { cta: option.text, button: option.button })}
+                            className={`rounded-full border px-3 py-1 text-left text-xs ${item.cta === option.text ? "border-primary bg-primary/15 text-foreground" : "border-border text-muted-foreground hover:text-foreground"}`}>
+                            {option.text}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               ))}
               <div className="flex gap-2">
                 <Button size="sm" onClick={() => approve(item.id)}><Check className="size-4" /> Aprovar</Button>
