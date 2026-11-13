@@ -8,7 +8,7 @@ import { isNewerVersion } from "@/components/app/extension-update-notice";
 import { cn } from "@/lib/utils";
 
 const FLOW_URL = "https://labs.google/fx/pt/tools/flow";
-const EXT_VERSION = "1.21.10";
+const EXT_VERSION = "1.23.0";
 const GEMINI_OK_KEY = "gv-gemini-ok-v1";
 const GEMINI_OK_DAYS = 30;
 const rememberedGemini = () => { try { const at = Number(window.localStorage.getItem(GEMINI_OK_KEY) || 0); return at > 0 && Date.now() - at < GEMINI_OK_DAYS * 86400_000; } catch { return false; } };

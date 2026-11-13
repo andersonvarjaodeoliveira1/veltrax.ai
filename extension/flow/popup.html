@@ -16,6 +16,23 @@
   .btn.ghost{background:transparent;border:1px solid rgba(123,63,228,.6);color:#C9BBFA}
   .new{margin-top:12px;padding:10px 12px;border-radius:14px;border:1px solid rgba(245,180,84,.5);background:rgba(245,180,84,.1);color:#F5B454}
   .hide{display:none}
+  .limit{margin-top:12px;padding:10px 12px;border-radius:14px;border:1px solid rgba(245,180,84,.5);background:rgba(245,180,84,.1);color:#F5B454;font-size:12.5px;line-height:1.4}
+  .limit b{color:#fff;font-variant-numeric:tabular-nums}
+  .limit.bad{border-color:rgba(240,70,107,.5);background:rgba(240,70,107,.1);color:#F0466B}
+  .s-title{margin:16px 0 8px;font-size:13px;font-weight:600}
+  #s-list{list-style:none;margin:0;padding:0;border:1px solid rgba(255,255,255,.1);border-radius:14px;background:#141316}
+  #s-list li{display:flex;align-items:center;gap:6px;padding:6px 6px 6px 12px;border-top:1px solid rgba(255,255,255,.06)}
+  #s-list li:first-child{border-top:0}
+  #s-list li.on{background:rgba(255,255,255,.05)}
+  .s-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .s-now{color:#a9a6b3;font-size:12px;padding-right:6px}
+  .s-empty{color:#a9a6b3}
+  #s-list button,#s-save,#s-new{font:inherit;color:#f3f1f8;background:#232325;border:1px solid rgba(255,255,255,.14);border-radius:8px;padding:6px 10px;cursor:pointer}
+  #s-list .s-del{background:transparent;border-color:transparent;color:#a9a6b3}
+  .s-row{display:flex;gap:6px;margin-top:8px}
+  #s-name{flex:1;min-width:0;font:inherit;color:#f3f1f8;background:#141316;border:1px solid rgba(255,255,255,.14);border-radius:8px;padding:6px 10px}
+  #s-new{width:100%;margin-top:6px}
+  #s-msg{min-height:16px;margin-top:6px;color:#F0466B;font-size:12px}
 </style></head>
 <body><div class="wrap">
   <h1>ClipGringa · Flow</h1><div class="ver" id="ver"></div>
@@ -26,6 +43,13 @@
     <div class="row"><span>Créditos</span><b id="credits">—</b></div>
     <div class="row"><span>Última leitura</span><b id="seen">—</b></div>
   </div>
+  <div class="limit hide" id="limit"></div>
   <a class="btn" id="site" href="https://clipgringa.gringatools.com/automacao" target="_blank" rel="noopener">Abrir o ClipGringa</a>
   <a class="btn ghost" id="open" href="https://labs.google/fx/tools/flow" target="_blank" rel="noopener">Abrir o Google Flow</a>
-</div><script src="popup.js"></script></body></html>
+  <a class="btn ghost" id="switch" href="#">Trocar conta do Flow</a>
+  <div class="s-title">Contas do ClipGringa</div>
+  <ul id="s-list"></ul>
+  <div class="s-row"><input id="s-name" maxlength="40" placeholder="Nome da conta aberta agora" aria-label="Nome da conta"><button id="s-save">Salvar</button></div>
+  <button id="s-new">Entrar com outra conta</button>
+  <div id="s-msg" role="status"></div>
+</div><script src="popup.js"></script><script src="popup-sessions.js"></script></body></html>
