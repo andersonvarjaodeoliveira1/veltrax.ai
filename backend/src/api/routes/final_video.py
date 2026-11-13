@@ -83,7 +83,12 @@ async def _run(job_id: str, parts: list[Path], options: dict[str, Any]) -> None:
     try:
         async with _render_gate:
             result = await run_in_thread(render_final, parts, output, work, options, transcribe_words, progress)
-        await _save(job_id, status="done", step="Pronto", path=str(output), duration=result["duration"], warning=result["warning"])
+        await _save(
+            job_id, status="done", step="Pronto", path=str(output),
+            duration=result["duration"], warning=result["warning"],
+            scene_bounds=json.dumps(result.get("scene_bounds") or []),
+            transcript=json.dumps(result.get("transcript") or []),
+        )
     except Exception:
         logger.exception("final video %s failed", job_id)
         await _save(job_id, status="error", step="", error="Não consegui montar o vídeo final. Tente de novo.")
