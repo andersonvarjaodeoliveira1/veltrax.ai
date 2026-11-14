@@ -79,7 +79,7 @@ export default function AutomationPage() {
   const section = tab === "clonagem" ? "auto" : libraryTab ? "library" : "manual";
   useEffect(() => {
     const aba = new URLSearchParams(window.location.search).get("aba");
-    if (aba === "videos" || aba === "imagens") setTab(aba);
+    if (aba === "videos" || aba === "imagens" || aba === "criar") setTab(aba);
   }, []);
   const [creatives, setCreatives] = useState<Creative[]>([]);
   const [niches, setNiches] = useState<string[]>(["Geral"]);
