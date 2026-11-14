@@ -26,6 +26,8 @@ async function call<T>(path: string, init?: { method?: string; body?: unknown })
 }
 
 export const clipspy = {
+  // Diz se o servidor tem o token da Ad Library configurado (nunca devolve o valor).
+  status: () => call<{ configured: boolean }>("status"),
   search: (term: string, countries?: string[], limit?: number) =>
     call<{ results: Creative[]; count: number }>("search", { method: "POST", body: { term, countries, limit } }),
   bank: (opts?: { champion?: boolean; source?: string }) => {
