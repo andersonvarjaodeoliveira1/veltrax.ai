@@ -855,18 +855,46 @@ def _estimate_block_seconds(text: str, cadence: float) -> float:
     return round(words / max(cadence, 1.0) + 0.6, 1)
 
 
+def _format_template_beats(template_beats: Optional[List[Dict[str, Any]]]) -> str:
+    """Descreve a receita de beats de um vencedor como instrução de template."""
+    if not template_beats:
+        return ""
+    parts: List[str] = []
+    for item in template_beats:
+        role = str((item or {}).get("beat_role") or "none").strip().lower()
+        if role not in _BEAT_PHASE:
+            role = "none"
+        try:
+            weight = float((item or {}).get("weight") or 0.0)
+        except (TypeError, ValueError):
+            weight = 0.0
+        parts.append(f"{role} (~{round(weight * 100)}%)" if weight > 0 else role)
+    if not parts:
+        return ""
+    return (
+        "\n\nWINNER TEMPLATE (model the output on this proven structure):\n"
+        "Follow this exact beat sequence and keep roughly these relative lengths, "
+        "mapping the user's copy onto this arc. Do not invent content to fill a "
+        "beat the copy does not support — skip a beat instead of fabricating:\n"
+        + " -> ".join(parts)
+    )
+
+
 async def copy_to_blocks(
     copy: str,
     target_seconds: float = 30.0,
     *,
     cadence: float | None = None,
+    template_beats: Optional[List[Dict[str, Any]]] = None,
     agent: Any = None,
 ) -> SceneScript:
     """Transforma a copy aprovada em cenas organizadas por beat, prontas para o Flow.
 
+    ``template_beats`` (opcional) é a "receita" de um vencedor do ClipSpy
+    ([{beat_role, weight}]); quando presente, o agente mapeia a copy no mesmo
+    arco em vez da estrutura genérica.
     ``agent`` é injetável para teste; por padrão usa get_blocks_agent().
-    O ``est_seconds`` de cada bloco é recalculado no servidor pela cadência,
-    para não depender da conta da IA.
+    O ``est_seconds`` de cada bloco é recalculado no servidor pela cadência.
     """
     text = (copy or "").strip()
     if len(text) < 10:
@@ -878,7 +906,8 @@ async def copy_to_blocks(
     runner = agent if agent is not None else get_blocks_agent()
     prompt = (
         f"Target total length: about {int(target)} seconds.\n"
-        f"Turn this approved copy into ordered scenes (speech blocks) as specified.\n\n"
+        f"Turn this approved copy into ordered scenes (speech blocks) as specified."
+        f"{_format_template_beats(template_beats)}\n\n"
         f"COPY:\n{text}"
     )
     result = await runner.run(prompt)
@@ -886,6 +915,36 @@ async def copy_to_blocks(
     for block in script.blocks:
         block.est_seconds = _estimate_block_seconds(block.text, cadence)
     return script
+
+
+class BeatRecipe(BaseModel):
+    """Receita de beats extraída do TEXTO de um anúncio vencedor do ClipSpy.
+
+    sequência medida do texto; weights são proporção de duração estimada. Não há
+    acesso ao vídeo original, então isto é a estrutura da mensagem, não uma cópia.
+    """
+
+    beats: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Beats em ordem: [{beat_role, weight}], weight = proporção da duração",
+    )
+    summary: str = Field(default="", description="Resumo de uma linha do ângulo do vencedor")
+
+
+async def extract_recipe(
+    copy_text: str,
+    target_seconds: float = 30.0,
+    *,
+    agent: Any = None,
+) -> BeatRecipe:
+    """Extrai a receita de beats do texto de um vencedor (via copy_to_blocks)."""
+    script = await copy_to_blocks(copy_text, target_seconds, agent=agent)
+    total = sum(max(b.est_seconds, 0.0) for b in script.blocks) or 1.0
+    beats = [
+        {"beat_role": b.beat_role, "weight": round(max(b.est_seconds, 0.0) / total, 3)}
+        for b in script.blocks
+    ]
+    return BeatRecipe(beats=beats, summary=script.summary)
 
 
 def build_candidate_rerank_prompt(candidates: List[TranscriptSegment]) -> str:

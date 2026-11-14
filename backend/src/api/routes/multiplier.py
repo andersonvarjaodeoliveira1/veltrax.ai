@@ -540,11 +540,16 @@ async def generate_scenes(request: Request, db: AsyncSession = Depends(get_db)):
         target = float(body.get("target_seconds") or 30)
     except (TypeError, ValueError):
         target = 30.0
+    # Receita opcional de um vencedor do ClipSpy: [{beat_role, weight}].
+    template = body.get("template")
+    template_beats = template.get("beats") if isinstance(template, dict) else template
+    if not isinstance(template_beats, list):
+        template_beats = None
 
     from ...ai import copy_to_blocks  # import tardio (dependências pesadas de IA)
 
     try:
-        script = await copy_to_blocks(copy, target)
+        script = await copy_to_blocks(copy, target, template_beats=template_beats)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001 — devolve erro legível à interface
