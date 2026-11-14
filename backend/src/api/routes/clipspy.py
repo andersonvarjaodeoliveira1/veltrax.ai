@@ -13,11 +13,22 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...clipspy import search_ad_library
+from ...clipspy import adlib_token, search_ad_library
 from ...database import get_db
 from .multiplier import _user_id
 
 router = APIRouter(prefix="/clipspy", tags=["clipspy"])
+
+
+@router.get("/status")
+async def status(request: Request, db: AsyncSession = Depends(get_db)):
+    """Diz se a Ad Library está configurada no servidor, sem nunca expor o token.
+
+    A interface usa isso para mostrar a tela de configuracao em vez de disparar
+    uma busca que falharia.
+    """
+    await _user_id(request, db)  # exige sessão válida
+    return {"configured": adlib_token() is not None}
 
 # A UE tem cobertura comercial completa na Ad Library (DSA); por isso o default.
 DEFAULT_COUNTRIES = ["DE", "FR", "IT", "ES", "NL", "PT"]
