@@ -726,6 +726,168 @@ def get_rerank_agent() -> Agent[None, CandidateRanking]:
     return _rerank_agent
 
 
+# ---------------------------------------------------------------------------
+# AntiGravity Fase 2: copy -> blocos de cena (as cenas "nascem organizadas")
+# ---------------------------------------------------------------------------
+
+
+class SpeechBlock(BaseModel):
+    """Um bloco de fala = uma cena do Flow, rotulado pelo beat do arco de retenção."""
+
+    text: str = Field(
+        description=(
+            "A fala exata desta cena, cortada só em fim de frase (nunca no meio da "
+            "frase). Vem da copy aprovada: pode condensar, mas nunca inventa fato novo."
+        )
+    )
+    beat_role: BeatRole = Field(
+        default="none",
+        validation_alias=AliasChoices("beat_role", "beat", "role"),
+        description="Beat desta cena no arco Hook -> Retenção -> CTA.",
+    )
+    est_seconds: float = Field(
+        default=0.0,
+        ge=0.0,
+        description="Duração estimada da fala em segundos. O servidor recalcula pela cadência.",
+    )
+    scene_prompt: str = Field(
+        default="",
+        description=(
+            "Prompt curto de cena para o Flow, derivado do beat e do conteúdo da fala: "
+            "o que mostrar (ambiente, ação, enquadramento). Sem texto na tela, sem "
+            "marca e sem pessoa real específica."
+        ),
+    )
+
+    @field_validator("beat_role", mode="before")
+    @classmethod
+    def _coerce_block_beat(cls, value: Any) -> Any:
+        if value is None:
+            return "none"
+        normalized = str(value).strip().lower()
+        return normalized if normalized in _BEAT_PHASE else "none"
+
+
+class SceneScript(BaseModel):
+    """Roteiro de cenas gerado a partir da copy aprovada."""
+
+    blocks: List[SpeechBlock] = Field(description="Cenas em ordem, do hook ao CTA")
+    summary: str = Field(default="", description="Resumo de uma linha do ângulo da copy")
+
+
+copy_to_blocks_system_prompt = """You turn an approved marketing copy into an ordered list of short-form video SCENES ("blocks"), each one a single speech block mapped to a retention beat. This feeds a scene generator (Google Flow). You organize existing copy; you do not invent a new product, facts, ingredients, or studies.
+
+OUTPUT CONTRACT:
+- Return valid JSON only: an object with "blocks" (ordered list) and "summary".
+- Each block has: "text", "beat_role", "est_seconds", "scene_prompt".
+- Write everything in the SAME language as the copy.
+
+SPEECH BLOCK RULES (anti-abrupt-cut):
+1. Each block's "text" must end at a sentence boundary. Never split a sentence across blocks or cut it mid-way.
+2. Consolidate short adjacent lines of the SAME idea into one block, up to about 8-9 seconds of speech, before opening a new block.
+3. Open a short isolated block only when it is intentional: a question, a punchline, or a reveal that deserves its own beat.
+4. The speech should fill almost the whole scene (avoids repetition/loops in generation).
+
+RETENTION ARC (one beat per scene):
+- Order the scenes as a retention arc: hook -> callout -> problema -> mecanismo -> vilao -> solucao -> cta. Not every beat must appear, but the first scene is almost always "hook" and the last is "cta" when the copy asks for action.
+- "beat_role" is exactly one of: hook, callout, problema, mecanismo, vilao, solucao, cta, none.
+- One beat per scene. Change scenery between beats (scene churn keeps hold-rate high).
+
+DURATION CALIBRATION (by target length given in the task):
+- ~15-20s total: 4-5 scenes. ~30s: 5-6 scenes. ~45-60s: 7+ scenes.
+- "est_seconds" = roughly words divided by speaking cadence; the server recomputes it, so a rough number is fine.
+
+SCENE PROMPTS ("scene_prompt"):
+- One short visual instruction for Flow derived from the beat and what the line says: setting, action, framing/shot.
+- No on-screen text, no brand names, no specific real person. Concrete and filmable.
+
+COMPLIANCE (health/supplement niches):
+- Prefer benefit/sensation language over absolute medical claims. Do not invent ingredients, mechanisms, or studies that are not in the copy.
+- Keep a disclaimer line as its own scene when the niche needs it.
+- If the user's copy already contains a hard medical/earnings claim, keep their wording (it is their decision) but never ADD one that is not in the copy.
+
+GROUNDING:
+- Use only what the copy provides. Rephrasing for flow is fine; inventing facts is not.
+- "summary" is one short line naming the angle. Stay grounded."""
+
+
+_blocks_agent: Optional[Agent[None, SceneScript]] = None
+_blocks_agent_signature: Optional[tuple[str | None, ...]] = None
+
+
+def get_blocks_agent() -> Agent[None, SceneScript]:
+    """Get or create the copy-to-blocks agent (lazy initialization)."""
+    global _blocks_agent, _blocks_agent_signature
+    runtime_config = get_config()
+    model_name = getattr(runtime_config, "blocks_llm", None) or runtime_config.llm
+    provider, _ = _split_llm_name(model_name)
+    signature = (
+        model_name,
+        runtime_config.openai_api_key,
+        runtime_config.openrouter_api_key,
+        runtime_config.openrouter_fallback_model,
+        runtime_config.google_api_key,
+        runtime_config.anthropic_api_key,
+        runtime_config.ollama_base_url,
+        runtime_config.ollama_api_key,
+    )
+    if _blocks_agent is None or _blocks_agent_signature != signature:
+        apply_settings_to_process_env(runtime_config.as_runtime_settings())
+        config_error = _get_missing_llm_key_error(model_name, runtime_config)
+        if config_error:
+            raise RuntimeError(config_error)
+
+        _blocks_agent = Agent[None, SceneScript](
+            model=_build_transcript_model(runtime_config, model_name),
+            output_type=NativeOutput(SceneScript, strict=True) if provider == "openrouter" else SceneScript,
+            system_prompt=copy_to_blocks_system_prompt,
+            output_retries=2,
+        )
+        _blocks_agent_signature = signature
+    return _blocks_agent
+
+
+def _estimate_block_seconds(text: str, cadence: float) -> float:
+    words = len([w for w in re.split(r"\s+", (text or "").strip()) if w])
+    if words == 0:
+        return 0.0
+    # fala ÷ cadência + pequeno buffer de respiro (início/fim da cena)
+    return round(words / max(cadence, 1.0) + 0.6, 1)
+
+
+async def copy_to_blocks(
+    copy: str,
+    target_seconds: float = 30.0,
+    *,
+    cadence: float | None = None,
+    agent: Any = None,
+) -> SceneScript:
+    """Transforma a copy aprovada em cenas organizadas por beat, prontas para o Flow.
+
+    ``agent`` é injetável para teste; por padrão usa get_blocks_agent().
+    O ``est_seconds`` de cada bloco é recalculado no servidor pela cadência,
+    para não depender da conta da IA.
+    """
+    text = (copy or "").strip()
+    if len(text) < 10:
+        raise ValueError("Cole uma copy com pelo menos uma frase para gerar as cenas.")
+    target = max(8.0, min(float(target_seconds or 30.0), 90.0))
+    if cadence is None:
+        cadence = getattr(get_config(), "scene_cadence", 2.75)
+
+    runner = agent if agent is not None else get_blocks_agent()
+    prompt = (
+        f"Target total length: about {int(target)} seconds.\n"
+        f"Turn this approved copy into ordered scenes (speech blocks) as specified.\n\n"
+        f"COPY:\n{text}"
+    )
+    result = await runner.run(prompt)
+    script: SceneScript = getattr(result, "output", None) or getattr(result, "data", result)
+    for block in script.blocks:
+        block.est_seconds = _estimate_block_seconds(block.text, cadence)
+    return script
+
+
 def build_candidate_rerank_prompt(candidates: List[TranscriptSegment]) -> str:
     """Describe every candidate in full so the reranker can compare them."""
     blocks = []
