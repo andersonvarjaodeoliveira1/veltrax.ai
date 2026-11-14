@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { FlowLibrary } from "@/components/app/flow-library";
 import { CloneWizard } from "@/components/app/clone-wizard";
 import { CreativeSource } from "@/components/app/creative-source";
+import { SceneGenerator } from "@/components/app/scene-generator";
 import { aiErrorText } from "@/lib/ai-errors";
 
 type Status = "copy" | "awaiting" | "ready";
@@ -309,6 +310,7 @@ export default function AutomationPage() {
       )}
 
       {tab === "criar" && <CreativeSource />}
+      {tab === "criar" && <SceneGenerator />}
       {tab === "criar" && (
         <section className="relative space-y-5 overflow-hidden rounded-[22px] border border-[#7B3FE4]/30 bg-gradient-to-br from-card via-card to-[#7B3FE4]/10 p-6 shadow-[0_24px_60px_-34px_#7B3FE4]">
           <span aria-hidden className="pointer-events-none absolute -right-16 -top-16 size-48 rounded-full bg-[#7B3FE4]/20 blur-3xl" />

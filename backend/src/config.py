@@ -33,6 +33,17 @@ class Config:
         self.llm = self._get_runtime_setting("LLM") or self._infer_default_llm()
         # Optional separate model for the cross-window candidate rerank pass.
         self.rerank_llm = self._get_optional_env("RERANK_LLM") or self.llm
+        # AntiGravity: modelo opcional para transformar copy em blocos de cena
+        # (default: o mesmo LLM).
+        self.blocks_llm = self._get_optional_env("BLOCKS_LLM") or self.llm
+        # AntiGravity: palavras por segundo para estimar a duração de cada bloco
+        # de fala (cadência de locução). Entre 1.5 e 4.0; default 2.75.
+        try:
+            self.scene_cadence = float(os.getenv("SCENE_CADENCE", "2.75"))
+        except (TypeError, ValueError):
+            self.scene_cadence = 2.75
+        if not (1.5 <= self.scene_cadence <= 4.0):
+            self.scene_cadence = 2.75
         self.assembly_ai_api_key = self._get_runtime_setting("ASSEMBLY_AI_API_KEY")
         self.assembly_ai_http_timeout_seconds = int(
             os.getenv("ASSEMBLY_AI_HTTP_TIMEOUT_SECONDS", "900")

@@ -528,6 +528,44 @@ async def features(request: Request, db: AsyncSession = Depends(get_db)):
     return {"cards": bool(_cards_url())}
 
 
+@router.post("/scenes")
+async def generate_scenes(request: Request, db: AsyncSession = Depends(get_db)):
+    """AntiGravity: transforma a copy aprovada em cenas organizadas por beat (Flow)."""
+    await _user_id(request, db)
+    body = await request.json()
+    copy = str(body.get("copy") or "").strip()
+    if len(copy) < 10:
+        raise HTTPException(status_code=400, detail="Cole uma copy com pelo menos uma frase.")
+    try:
+        target = float(body.get("target_seconds") or 30)
+    except (TypeError, ValueError):
+        target = 30.0
+
+    from ...ai import copy_to_blocks  # import tardio (dependências pesadas de IA)
+
+    try:
+        script = await copy_to_blocks(copy, target)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001 — devolve erro legível à interface
+        logger.exception("copy_to_blocks falhou")
+        raise HTTPException(status_code=502, detail=f"Falha ao gerar as cenas: {exc}") from exc
+
+    return {
+        "summary": script.summary,
+        "scenes": [
+            {
+                "idx": i,
+                "text": b.text,
+                "beat_role": b.beat_role,
+                "est_seconds": b.est_seconds,
+                "scene_prompt": b.scene_prompt,
+            }
+            for i, b in enumerate(script.blocks)
+        ],
+    }
+
+
 @router.post("/jobs")
 async def create_job(request: Request, db: AsyncSession = Depends(get_db)):
     user_id = await _user_id(request, db)
