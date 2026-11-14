@@ -9,6 +9,18 @@ import { toast } from "sonner";
 import { clipspy, type Creative } from "@/lib/clipspy";
 import { saveRecipe } from "@/lib/winner-recipe";
 
+// A Ad Library devolve um registro por anúncio, e o mesmo criativo costuma rodar
+// em vários. Mostra um card por anunciante+texto (o primeiro, que roda há mais tempo).
+function dedupe(items: Creative[]) {
+  const seen = new Set<string>();
+  return items.filter((c) => {
+    const key = `${c.advertiser}|${(c.title || "").trim()}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function runLabel(c: Creative) {
   const d = c.metrics?.run_days ?? 0;
   return d > 0 ? `${d} ${d === 1 ? "dia ativo" : "dias ativo"}` : "ativo";
@@ -204,7 +216,7 @@ export function ClipSpyPanel() {
     try {
       const cs = countries.split(",").map((s) => s.trim()).filter(Boolean);
       const { results } = await clipspy.search(term.trim(), cs, 30);
-      setResults(results);
+      setResults(dedupe(results));
       if (!results.length) toast("Nada ativo encontrado para esse termo nesses países.");
     } catch (e) {
       const msg = (e as Error).message;
@@ -224,7 +236,7 @@ export function ClipSpyPanel() {
     if (view !== "biblioteca") return;
     let alive = true;
     clipspy.bank({ champion: onlyChampions })
-      .then((r) => { if (alive) setLibrary(r.items); })
+      .then((r) => { if (alive) setLibrary(dedupe(r.items)); })
       .catch((e) => toast.error((e as Error).message));
     return () => { alive = false; };
   }, [view, onlyChampions]);
@@ -242,7 +254,7 @@ export function ClipSpyPanel() {
       if (!recipe?.beats?.length) { toast("Não consegui extrair a estrutura desse anúncio."); return; }
       saveRecipe(advertiser || c.advertiser, recipe);
       toast.success("Estrutura do vencedor pronta. Abrindo o Gerador de Cenas…");
-      window.location.href = "/automacao";
+      window.location.href = "/automacao?aba=criar";
     } catch (e) { toast.error((e as Error).message); } finally { setBusyId(null); }
   }
   async function archive(c: Creative) {
