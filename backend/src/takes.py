@@ -166,10 +166,17 @@ def plan_takes(
             "hook_title": (seg.get("hook_title") or "").strip() or None,
             "text": seg.get("text") or "",
             "score": float(seg.get("score", 0.0) or 0.0),
+            "beat_role": (str(seg.get("beat_role") or "none").strip().lower() or "none"),
         })
 
-    # resolve sobreposições: por nota desc, aceita quem não encosta num já aceito
-    candidates.sort(key=lambda c: (-c["score"], c["start"]))
+    # resolve sobreposições: por nota desc, aceita quem não encosta num já aceito.
+    # Empate (ou quase) favorece quem abre num HOOK — bônus pequeno (0.05 numa
+    # escala 0-1) para não sobrescrever um take claramente melhor.
+    def _rank(c: dict[str, Any]) -> tuple[float, float]:
+        hook_bonus = 0.05 if c.get("beat_role") == "hook" else 0.0
+        return (-(c["score"] + hook_bonus), c["start"])
+
+    candidates.sort(key=_rank)
     accepted: list[dict[str, Any]] = []
     for cand in candidates:
         if all(cand["end"] <= acc["start"] + 1e-6 or cand["start"] >= acc["end"] - 1e-6 for acc in accepted):
@@ -210,6 +217,7 @@ async def takes_from_bounds(
             "hook_title": get("hook_title", None),
             "text": get("text", "") or "",
             "score": float(get("relevance_score", 0.0) or 0.0),
+            "beat_role": get("beat_role", "none") or "none",
         })
     return plan_takes(segments, bounds, min_len=min_len, max_len=max_len)
 
