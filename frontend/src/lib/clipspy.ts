@@ -39,4 +39,12 @@ export const clipspy = {
   },
   setStatus: (id: string, status: "novo" | "salvo" | "usado" | "arquivado") =>
     call<{ ok: boolean }>(`bank/${id}/status`, { method: "POST", body: { status } }),
+  // Extrai a "receita" de beats do texto de um vencedor para modelar a copy.
+  recipe: (id: string) =>
+    call<{ advertiser: string; recipe: WinnerRecipe }>(`bank/${id}/recipe`, { method: "POST", body: {} }),
+};
+
+export type WinnerRecipe = {
+  beats: { beat_role: string; weight: number }[];
+  summary: string;
 };

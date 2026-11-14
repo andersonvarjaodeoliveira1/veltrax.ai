@@ -3,10 +3,11 @@
 // AntiGravity (Fase 2): transforma a copy aprovada em CENAS organizadas por beat
 // (Hook → Retenção → CTA), com o prompt de cada cena pronto para o Flow.
 // O "cérebro" roda no backend (copy_to_blocks); aqui é só entrada + exibição.
-import { ClipboardCopy, Clapperboard, Loader2, Wand2 } from "lucide-react";
-import { useState } from "react";
+import { ClipboardCopy, Clapperboard, Loader2, Wand2, X } from "lucide-react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { clearRecipe, readRecipe, type StoredRecipe } from "@/lib/winner-recipe";
 
 type Scene = {
   idx: number;
@@ -33,6 +34,12 @@ export function SceneGenerator({ initialCopy = "" }: { initialCopy?: string }) {
   const [loading, setLoading] = useState(false);
   const [scenes, setScenes] = useState<Scene[] | null>(null);
   const [summary, setSummary] = useState("");
+  // Receita de um vencedor do ClipSpy (se o usuário clicou em "Modelar este vencedor").
+  const [winner, setWinner] = useState<StoredRecipe | null>(null);
+
+  useEffect(() => { setWinner(readRecipe()); }, []);
+
+  function dropWinner() { clearRecipe(); setWinner(null); }
 
   async function generate() {
     if (copy.trim().length < 10) {
@@ -44,7 +51,7 @@ export function SceneGenerator({ initialCopy = "" }: { initialCopy?: string }) {
       const res = await fetch("/api/multiplier/scenes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ copy: copy.trim(), target_seconds: target }),
+        body: JSON.stringify({ copy: copy.trim(), target_seconds: target, template: winner?.recipe ?? null }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.detail || data.error || "Falha ao gerar as cenas");
@@ -80,6 +87,16 @@ export function SceneGenerator({ initialCopy = "" }: { initialCopy?: string }) {
           <p className="text-xs text-white/50">Vira sua copy em cenas organizadas por beat, com o prompt pronto pro Flow.</p>
         </div>
       </div>
+
+      {winner && (
+        <div className="flex flex-wrap items-center gap-2 rounded-[12px] border border-white/10 bg-white/[0.04] px-3 py-2">
+          <span className="text-xs text-white/80">Modelando a estrutura do texto de: <span className="font-medium text-white">{winner.advertiser || "vencedor do ClipSpy"}</span></span>
+          <span className="text-[11px] text-white/45">{winner.recipe.beats.map((b) => beatLabel(b.beat_role).label).join(" → ")}</span>
+          <button type="button" onClick={dropWinner} className="ml-auto inline-flex items-center gap-1 rounded-full border border-white/15 px-2 py-1 text-[11px] text-white/70">
+            <X className="size-3" /> Usar estrutura padrão
+          </button>
+        </div>
+      )}
 
       <label className="block text-xs text-white/60">Copy aprovada</label>
       <textarea

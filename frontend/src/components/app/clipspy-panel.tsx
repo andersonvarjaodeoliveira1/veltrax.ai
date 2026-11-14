@@ -3,10 +3,11 @@
 // ClipSpy — radar de criativos vencedores. Pesquisa anúncios ativos na Meta Ad Library
 // por termo (os que estão rodando há mais tempo = prováveis vencedores) e guarda os
 // escolhidos numa biblioteca interna para modelar depois na criação de vídeos.
-import { Archive, Bookmark, ExternalLink, KeyRound, Loader2, RefreshCw, Search, Star } from "lucide-react";
+import { Archive, Bookmark, ExternalLink, KeyRound, Loader2, RefreshCw, Search, Star, Wand2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { clipspy, type Creative } from "@/lib/clipspy";
+import { saveRecipe } from "@/lib/winner-recipe";
 
 function runLabel(c: Creative) {
   const d = c.metrics?.run_days ?? 0;
@@ -40,7 +41,7 @@ function isConfigError(message: string) {
   );
 }
 
-function Card({ c, onSave, onArchive, busy }: { c: Creative; onSave?: () => void; onArchive?: () => void; busy?: boolean }) {
+function Card({ c, onSave, onArchive, onModel, busy }: { c: Creative; onSave?: () => void; onArchive?: () => void; onModel?: () => void; busy?: boolean }) {
   return (
     <div className="rounded-[14px] border border-white/10 bg-[#1a191d] p-3">
       <div className="mb-1 flex items-center gap-2">
@@ -64,6 +65,12 @@ function Card({ c, onSave, onArchive, busy }: { c: Creative; onSave?: () => void
           <button type="button" disabled={busy} onClick={onSave}
             className="inline-flex items-center gap-1 rounded-full border border-white/15 px-3 py-1 text-xs disabled:opacity-60">
             <Bookmark className="size-3.5" /> {c.status === "salvo" ? "Salvo" : "Salvar"}
+          </button>
+        )}
+        {onModel && (c.title || "").trim().length >= 10 && (
+          <button type="button" disabled={busy} onClick={onModel}
+            className="inline-flex items-center gap-1 rounded-full border border-white/15 px-3 py-1 text-xs text-white/80 disabled:opacity-60">
+            <Wand2 className="size-3.5" /> Modelar este vencedor
           </button>
         )}
         {onArchive && (
@@ -227,6 +234,17 @@ export function ClipSpyPanel() {
     try { await clipspy.setStatus(c.id, "salvo"); setResults((r) => (r ?? []).map((x) => x.id === c.id ? { ...x, status: "salvo" } : x)); toast.success("Salvo na biblioteca"); }
     catch (e) { toast.error((e as Error).message); } finally { setBusyId(null); }
   }
+  // Extrai a receita de beats do texto do vencedor e leva para o Gerador de Cenas.
+  async function model(c: Creative) {
+    setBusyId(c.id);
+    try {
+      const { advertiser, recipe } = await clipspy.recipe(c.id);
+      if (!recipe?.beats?.length) { toast("Não consegui extrair a estrutura desse anúncio."); return; }
+      saveRecipe(advertiser || c.advertiser, recipe);
+      toast.success("Estrutura do vencedor pronta. Abrindo o Gerador de Cenas…");
+      window.location.href = "/automacao";
+    } catch (e) { toast.error((e as Error).message); } finally { setBusyId(null); }
+  }
   async function archive(c: Creative) {
     setBusyId(c.id);
     try { await clipspy.setStatus(c.id, "arquivado"); setLibrary((l) => (l ?? []).filter((x) => x.id !== c.id)); }
@@ -275,7 +293,7 @@ export function ClipSpyPanel() {
             results && (
               results.length === 0 ? <p className="text-sm text-white/60">Nada ativo para esse termo nesses países. Tente outro termo ou inclua países da UE.</p> :
               <div className="grid gap-3 md:grid-cols-2">
-                {results.map((c) => <Card key={c.id} c={c} onSave={() => save(c)} busy={busyId === c.id} />)}
+                {results.map((c) => <Card key={c.id} c={c} onSave={() => save(c)} onModel={() => model(c)} busy={busyId === c.id} />)}
               </div>
             )
           }
@@ -289,7 +307,7 @@ export function ClipSpyPanel() {
           {library === null ? <ResultsSkeleton /> :
             library.length === 0 ? <p className="text-sm text-white/60">Sua biblioteca está vazia. Pesquise um termo e salve os vencedores.</p> :
             <div className="grid gap-3 md:grid-cols-2">
-              {library.map((c) => <Card key={c.id} c={c} onArchive={() => archive(c)} busy={busyId === c.id} />)}
+              {library.map((c) => <Card key={c.id} c={c} onArchive={() => archive(c)} onModel={() => model(c)} busy={busyId === c.id} />)}
             </div>
           }
         </div>

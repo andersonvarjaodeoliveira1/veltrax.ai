@@ -117,6 +117,38 @@ async def bank(request: Request, champion: int = 0, source: str = "", db: AsyncS
     return {"items": [_row(r) for r in rows]}
 
 
+@router.post("/bank/{item_id}/recipe")
+async def recipe(item_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    """Extrai a receita de beats do TEXTO de um criativo vencedor (modelagem).
+
+    Usa o texto do anúncio (não o vídeo, que a Ad Library não entrega): devolve a
+    sequência de beats e os pesos para modelar a copy do usuário no Gerador de Cenas.
+    """
+    user_id = await _user_id(request, db)
+    row = (await db.execute(text(
+        "SELECT advertiser, title FROM creative_bank WHERE id = :id AND user_id = :u"
+    ), {"id": item_id, "u": user_id})).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Criativo não encontrado")
+    ad_text = (row.title or "").strip()
+    if len(ad_text) < 10:
+        raise HTTPException(status_code=400, detail="Esse anúncio não tem texto suficiente para modelar.")
+
+    from ...ai import extract_recipe  # import tardio (dependências pesadas de IA)
+
+    try:
+        beat_recipe = await extract_recipe(ad_text)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Falha ao extrair a receita: {exc}") from exc
+
+    return {
+        "advertiser": row.advertiser or "",
+        "recipe": {"beats": beat_recipe.beats, "summary": beat_recipe.summary},
+    }
+
+
 @router.post("/bank/{item_id}/status")
 async def set_status(item_id: str, request: Request, db: AsyncSession = Depends(get_db)):
     """Marca um criativo como salvo, usado ou arquivado."""
