@@ -175,6 +175,7 @@ def _take_json(row: Any) -> dict[str, Any]:
     return {
         "id": row.id, "idx": row.idx, "hook_title": row.hook_title, "text": row.text,
         "start": start, "end": end, "duration": round(end - start, 1), "score": float(row.score),
+        "beat_role": getattr(row, "beat_role", None) or "none",
     }
 
 
@@ -182,7 +183,7 @@ def _take_json(row: Any) -> dict[str, Any]:
 async def list_takes(job_id: str, request: Request, db: AsyncSession = Depends(get_db)):
     user_id = await _user_id(request, db)
     rows = (await db.execute(text(
-        "SELECT id, idx, hook_title, text, start_seconds, end_seconds, score FROM video_takes "
+        "SELECT id, idx, hook_title, text, start_seconds, end_seconds, score, beat_role FROM video_takes "
         "WHERE final_video_id = :id AND user_id = :u ORDER BY idx"
     ), {"id": _uuid(job_id), "u": user_id})).all()
     return {"takes": [_take_json(r) for r in rows]}
@@ -248,14 +249,16 @@ async def make_takes(job_id: str, request: Request, db: AsyncSession = Depends(g
             continue
         idx = len(saved)
         take_id = str(uuid.uuid4())
+        beat_role = str(take.get("beat_role") or "none").strip().lower() or "none"
         await db.execute(text(
-            "INSERT INTO video_takes (id, user_id, final_video_id, idx, path, hook_title, text, start_seconds, end_seconds, score) "
-            "VALUES (:id, :u, :fv, :i, :p, :h, :t, :s, :e, :sc)"
+            "INSERT INTO video_takes (id, user_id, final_video_id, idx, path, hook_title, text, start_seconds, end_seconds, score, beat_role) "
+            "VALUES (:id, :u, :fv, :i, :p, :h, :t, :s, :e, :sc, :br)"
         ), {"id": take_id, "u": user_id, "fv": row.id, "i": idx, "p": str(cut),
             "h": (take.get("hook_title") or "")[:200] or None, "t": take.get("text") or "",
-            "s": start, "e": end, "sc": float(take.get("score") or 0.0)})
+            "s": start, "e": end, "sc": float(take.get("score") or 0.0), "br": beat_role})
         saved.append({"id": take_id, "idx": idx, "hook_title": take.get("hook_title"),
-                      "start": start, "end": end, "duration": round(end - start, 1), "score": float(take.get("score") or 0.0)})
+                      "start": start, "end": end, "duration": round(end - start, 1),
+                      "score": float(take.get("score") or 0.0), "beat_role": beat_role})
     await db.commit()
     if not saved:
         raise HTTPException(status_code=400, detail="Não consegui cortar nenhum take deste vídeo")

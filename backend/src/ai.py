@@ -30,7 +30,7 @@ IDEAL_CLIP_MIN_SECONDS = 25
 IDEAL_CLIP_MAX_SECONDS = 50
 MIN_ACCEPTED_CLIP_SECONDS = 15
 MAX_ACCEPTED_CLIP_SECONDS = 60
-TRANSCRIPT_ANALYSIS_CACHE_VERSION = "windowed-rerank-v6"
+TRANSCRIPT_ANALYSIS_CACHE_VERSION = "windowed-rerank-v7-beats"
 TRANSCRIPT_ANALYSIS_MAX_ATTEMPTS = 3
 TRANSCRIPT_ANALYSIS_TIMEOUT_SECONDS = 600
 # Long transcripts are analysed in overlapping windows so every part of the
@@ -203,6 +203,30 @@ def _default_virality_analysis() -> ViralityAnalysis:
     return ViralityAnalysis()
 
 
+# Beat roles for the retention arc (Hook -> Retenção -> CTA). The granular beats
+# come from the storyboard-viral-3d framework; beat_phase() collapses them into
+# the three-phase arc used to order takes so a clip opens on the hook.
+BeatRole = Literal[
+    "hook", "callout", "problema", "mecanismo", "vilao", "solucao", "cta", "none"
+]
+
+_BEAT_PHASE: Dict[str, str] = {
+    "hook": "hook",
+    "callout": "retencao",
+    "problema": "retencao",
+    "mecanismo": "retencao",
+    "vilao": "retencao",
+    "solucao": "retencao",
+    "cta": "cta",
+    "none": "none",
+}
+
+
+def beat_phase(role: Optional[str]) -> str:
+    """Collapse a granular beat role into the Hook -> Retenção -> CTA arc."""
+    return _BEAT_PHASE.get((role or "none").strip().lower(), "none")
+
+
 class TranscriptSegment(BaseModel):
     """Represents a relevant segment of transcript with precise timing and virality analysis."""
 
@@ -251,6 +275,25 @@ class TranscriptSegment(BaseModel):
         default=None,
         description="Optional MM:SS end of that hook line (null with hook_start_time).",
     )
+
+    beat_role: Optional[BeatRole] = Field(
+        default="none",
+        validation_alias=AliasChoices("beat_role", "beat", "role"),
+        description=(
+            "Where this segment sits in the retention arc: 'hook' (0-2s pattern "
+            "interrupt / strongest opener), one of callout/problema/mecanismo/"
+            "vilao/solucao (retention body), 'cta' (call to action / ask), or "
+            "'none' when it fits no clear beat."
+        ),
+    )
+
+    @field_validator("beat_role", mode="before")
+    @classmethod
+    def _coerce_beat_role(cls, value: Any) -> Any:
+        if value is None:
+            return "none"
+        normalized = str(value).strip().lower()
+        return normalized if normalized in _BEAT_PHASE else "none"
 
     @field_validator("relevance_score", mode="before")
     @classmethod
@@ -321,7 +364,7 @@ OUTPUT CONTRACT:
 - Return valid JSON only. Do not output Markdown, headings, bullets, prose, code fences, explanations, or commentary outside the JSON object.
 - The top-level JSON object must include: "most_relevant_segments", "summary", and "key_topics".
 - Set "broll_opportunities" to null when B-roll was not requested.
-- Each item in "most_relevant_segments" must include: "start_time", "end_time", "text", "relevance_score", "reasoning", "virality", and "hook_title".
+- Each item in "most_relevant_segments" must include: "start_time", "end_time", "text", "relevance_score", "reasoning", "virality", "hook_title", and "beat_role".
 - Do not use "segment" as an output field. Use "text".
 - "virality" must include: "hook_score", "engagement_score", "value_score", "shareability_score", "total_score", "hook_type", and "virality_reasoning".
 - Every returned segment must be 15-60 seconds long. Prefer 25-50 seconds.
@@ -414,6 +457,18 @@ HOOK TYPES to identify:
 - "story": Starts with narrative/anecdote
 - "contrast": Before/after or problem/solution framing
 - "none": No clear hook pattern
+
+RETENTION ARC ("beat_role" per segment):
+Classify where the segment sits in a short-form retention arc (Hook -> Retenção -> CTA). Use exactly one of these tokens:
+- "hook": a pattern interrupt / strongest opener (0-2s energy), bold claim, question, or shocking line that makes someone stop scrolling
+- "callout": names or addresses the target viewer or their situation ("if you do X...")
+- "problema": states the pain, problem, or stakes
+- "mecanismo": explains the how / the mechanism / the reason behind the problem or solution
+- "vilao": blames an external villain, myth, or mistake
+- "solucao": the turn, proof, before/after, or payoff that resolves the tension
+- "cta": an ask or next step (comment a keyword, follow, click, buy)
+- "none": fits no clear beat
+This is a classification of the content that already exists in the span, not a rewrite. Judge by what is actually said. A segment that opens on its strongest line is usually "hook"; a closing ask is "cta". When unsure, use the nearest body beat or "none".
 
 B-ROLL OPPORTUNITIES:
 Identify 2-4 moments in each segment where B-roll footage could enhance the video:
