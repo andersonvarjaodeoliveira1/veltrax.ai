@@ -39,6 +39,7 @@ from ...facebook import (
     set_page_picture_file,
     set_page_profile,
 )
+from ...facebook_reading import parse_countries, read_page
 from ...runtime_settings import decrypt_setting_value, encrypt_setting_value
 
 logger = logging.getLogger(__name__)
@@ -276,6 +277,9 @@ def _page_values(body: dict[str, Any]) -> dict[str, Any]:
         if body["status"] not in PAGE_STATUS:
             raise HTTPException(status_code=400, detail="Situação inválida")
         out["status"] = body["status"]
+    if "countries" in body:
+        # países que podem ver os posts; vazio volta a mostrar para todos
+        out["countries"] = ",".join(parse_countries(body["countries"]))
     return out
 
 
@@ -795,6 +799,22 @@ async def add_clips(page_id: str, request: Request, db: AsyncSession = Depends(g
         await add_event(db, user_id, f"{len(times)} {'vídeo entrou' if len(times) == 1 else 'vídeos entraram'} na agenda, até {last}", page_id=page_id)
     await db.commit()
     return {"agendados": len(times), "primeiro": times[0].isoformat() if times else None}
+
+
+@router.get("/pages/{page_id}/reading")
+async def page_reading(page_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    """Leitura da página: média de visualizações, vídeos que se destacaram e o próximo passo."""
+    user_id = await _admin(request, db)
+    page = await _own(db, "fb_pages", page_id, user_id)
+    if not page.get("meta_token_enc") or not page.get("meta_page_id"):
+        return {"status": "sem_conexao", "base": 0, "total": 0, "videos": [],
+                "message": "A página não está conectada à Meta.", "next": "Conecte a página para ler as visualizações de cada vídeo."}
+    rows = (await db.execute(text("""SELECT fb_video_id AS id, title, link, published_at, views FROM fb_video_stats
+        WHERE page_id = :p ORDER BY published_at DESC NULLS LAST LIMIT 60"""), {"p": page_id})).mappings().all()
+    if not rows and page.get("views_error"):
+        return {"status": "sem_leitura", "base": 0, "total": 0, "videos": [], "error": page["views_error"],
+                "message": "O Facebook não entregou as visualizações desta página.", "next": "Entre com o Facebook de novo para renovar as permissões."}
+    return {**read_page([dict(r) for r in rows]), "synced_at": _iso(page.get("fb_synced_at"))}
 
 
 @router.get("/pages/{page_id}/posts")

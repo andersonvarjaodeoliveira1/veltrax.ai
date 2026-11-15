@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { brDateTime, fb, type FbAccount, type FbClip, type FbPage, type FbPost, type FbVideo } from "@/lib/facebook";
+import { brDateTime, fb, TIER_ONE_COUNTRIES, type FbAccount, type FbClip, type FbPage, type FbPost, type FbVideo } from "@/lib/facebook";
 import { ManualPostDialog, RegisterPostsDialog } from "./manual-post";
 import { goToFacebookLogin, MetaCard, MetaSetupDialog, useMetaStatus } from "./meta-connect";
 import { PagePlanSteps } from "./page-plan";
+import { PageReading } from "./page-reading";
 import { PhotoSwap } from "./photo-swap";
 import { ProfileStandardize } from "./profile-standardize";
 import { cn } from "@/lib/utils";
@@ -84,6 +85,7 @@ function PageCard({ page: p, onClips, onMeta, onChange }: { page: FbPage; onClip
   const [manual, setManual] = useState<FbPost | null>(null);
   const [editing, setEditing] = useState(false);
   const [register, setRegister] = useState(false);
+  const [reading, setReading] = useState(false);
   const missing = [!p.has_photo && "foto", !p.has_cover && "capa"].filter(Boolean) as string[];
   const open = p.todos.filter((t) => !t.done_at);
 
@@ -123,10 +125,12 @@ function PageCard({ page: p, onClips, onMeta, onChange }: { page: FbPage; onClip
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" className={secondary} onClick={onClips}>Adicionar vídeos</button>
         {p.meta_connected ? <button type="button" className={secondary} onClick={onMeta}>Conectada à Meta</button> : null}
+        <button type="button" className={secondary} aria-expanded={reading} onClick={() => setReading((x) => !x)}>{reading ? "Fechar a leitura" : "Ler a página"}</button>
         <button type="button" className={secondary} onClick={() => setEditing(true)}>Editar assunto</button>
         {!p.meta_connected ? <button type="button" className={secondary} onClick={() => setRegister(true)}>Registrar posts feitos no Facebook</button> : null}
         <span className="text-xs text-white/50">{p.meta_error ? p.meta_error : p.meta_connected ? "Posta sozinho no horário" : "Sem conexão: abra a Agenda e use Postar à mão"}</span>
       </div>
+      {reading ? <PageReading page={p} onConnect={onMeta} /> : null}
       {manual ? <ManualPostDialog page={p} post={manual} onClose={() => setManual(null)} onDone={async () => { await loadPosts(); await onChange(); }} /> : null}
       {editing ? <EditPageDialog page={p} onClose={() => setEditing(false)} onDone={onChange} /> : null}
       {register ? <RegisterPostsDialog page={p} onClose={() => setRegister(false)} onDone={onChange} /> : null}
@@ -187,6 +191,10 @@ export function ClipsDialog({ page, pages = [], onClose, onDone, preselect }: { 
   const [busy, setBusy] = useState(false);
   useEffect(() => { fb.library().then(setLib).catch((problem) => { toast.error((problem as Error).message); setLib({ clips: [], videos: [] }); }); }, []);
   const total = picked.length + videos.length;
+  // mesmo arquivo indo para outra página: selecionado para várias agora, ou já usado em outra antes
+  const repeated = total > 0 && (also.length > 0
+    || (lib?.clips ?? []).some((c) => picked.includes(c.id) && c.used_in && c.used_in !== page.name)
+    || (lib?.videos ?? []).some((v) => videos.includes(`${v.source}:${v.id}`) && v.used_in && v.used_in !== page.name));
   const save = async () => {
     setBusy(true);
     try {
@@ -248,6 +256,7 @@ export function ClipsDialog({ page, pages = [], onClose, onDone, preselect }: { 
           </div>
         </details>
       ) : null}
+      {repeated ? <p className="text-xs text-amber-300">Atenção: o mesmo arquivo em mais de uma página costuma derrubar a entrega no Facebook. Prefira gerar uma variação para cada página.</p> : null}
       <div className="flex justify-end"><button type="button" className={primary} disabled={!total || busy} onClick={() => void save()}>{busy ? "Colocando…" : `Colocar na agenda (${total})`}</button></div>
     </Modal>
   );
@@ -257,8 +266,9 @@ export function ClipsDialog({ page, pages = [], onClose, onDone, preselect }: { 
 function EditPageDialog({ page, onClose, onDone }: { page: FbPage; onClose: () => void; onDone: () => Promise<void> }) {
   const [niche, setNiche] = useState(page.niche);
   const [language, setLanguage] = useState(["en", "es"].includes(page.language) ? page.language : "pt-BR");
+  const [countries, setCountries] = useState(page.countries || "");
   const save = async () => {
-    try { await fb.updatePage(page.id, { niche: niche.trim(), language }); toast.success("Assunto salvo"); onClose(); await onDone(); }
+    try { await fb.updatePage(page.id, { niche: niche.trim(), language, countries }); toast.success("Assunto salvo"); onClose(); await onDone(); }
     catch (problem) { toast.error((problem as Error).message); }
   };
   return (
@@ -267,6 +277,10 @@ function EditPageDialog({ page, onClose, onDone }: { page: FbPage; onClose: () =
         <input className={field} value={niche} maxLength={80} onChange={(e) => setNiche(e.target.value)} placeholder="Ex.: curiosidades do Brasil" /></label>
       <label className="block space-y-1.5"><span className="text-xs font-medium text-white/80">Idioma dos conteúdos</span>
         <select className={field} value={language} onChange={(e) => setLanguage(e.target.value)}><option value="pt-BR">Português</option><option value="en">Inglês</option><option value="es">Espanhol</option></select></label>
+      <label className="block space-y-1.5"><span className="text-xs font-medium text-white/80">Países que podem ver os posts</span>
+        <input className={field} value={countries} maxLength={80} onChange={(e) => setCountries(e.target.value.toUpperCase())} placeholder="Vazio mostra para todos. Ex.: US, CA, GB" />
+        <span className="block text-xs text-white/50">Códigos de 2 letras separados por vírgula. Vale para os próximos posts enviados pelo ClipGringa; quem está fora desses países não vê o post.</span></label>
+      <div><button type="button" className={secondary} onClick={() => setCountries(TIER_ONE_COUNTRIES.replaceAll(",", ", "))}>Usar Estados Unidos, Canadá, Reino Unido, Austrália e Nova Zelândia</button></div>
       <div className="flex justify-end"><button type="button" className={primary} onClick={() => void save()}>Salvar assunto</button></div>
     </Modal>
   );

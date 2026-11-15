@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
 import random
@@ -21,6 +22,7 @@ import httpx
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .facebook_reading import parse_countries
 from .runtime_settings import decrypt_setting_value
 
 logger = logging.getLogger(__name__)
@@ -198,9 +200,14 @@ async def set_page_profile(client: httpx.AsyncClient, *, page_id: str, token: st
         raise ValueError(_graph_error(body, r.status_code))
 
 
-async def send_post(client: httpx.AsyncClient, *, page_id: str, token: str, kind: str, file_path: str | None, caption: str, when: datetime | None) -> str:
-    """Manda um post para a página. `when` None publica agora. Devolve o id do post no Facebook."""
+async def send_post(client: httpx.AsyncClient, *, page_id: str, token: str, kind: str, file_path: str | None, caption: str, when: datetime | None,
+                    countries: list[str] | None = None) -> str:
+    """Manda um post para a página. `when` None publica agora. Devolve o id do post no Facebook.
+
+    `countries` limita quem pode ver o post a esses países (códigos de 2 letras); vazio mostra para todos."""
     data: dict[str, str] = {"access_token": token}
+    if countries:
+        data["targeting"] = json.dumps({"geo_locations": {"countries": countries}})
     if when is not None:
         data["published"] = "false"
         data["scheduled_publish_time"] = str(int(when.timestamp()))
@@ -233,7 +240,7 @@ async def publish_due(db: AsyncSession, *, user_id: str | None = None, now: date
         params["u"] = user_id
     rows = (await db.execute(text(f"""
         SELECT p.id, p.user_id, p.page_id, p.kind, p.file_path, p.caption, p.title, p.scheduled_at, p.attempts,
-               g.meta_page_id, g.meta_token_enc, g.name AS page_name
+               g.meta_page_id, g.meta_token_enc, g.name AS page_name, g.countries
         FROM fb_posts p JOIN fb_pages g ON g.id = p.page_id LEFT JOIN fb_accounts a ON a.id = g.account_id
         WHERE p.status = 'pendente' AND p.attempts < :max AND g.meta_token_enc IS NOT NULL AND g.status = 'ativa'
           AND (a.id IS NULL OR a.status = 'ativa')
@@ -249,7 +256,8 @@ async def publish_due(db: AsyncSession, *, user_id: str | None = None, now: date
             schedule = when > now + SCHEDULE_AHEAD
             try:
                 token = decrypt_setting_value(row["meta_token_enc"])
-                fb_id = await send_post(client, page_id=row["meta_page_id"], token=token, kind=row["kind"], file_path=row["file_path"], caption=row["caption"], when=when if schedule else None)
+                fb_id = await send_post(client, page_id=row["meta_page_id"], token=token, kind=row["kind"], file_path=row["file_path"], caption=row["caption"], when=when if schedule else None,
+                                           countries=parse_countries(row["countries"]))
                 await db.execute(text("UPDATE fb_posts SET status = :s, fb_post_id = :f, error = NULL, updated_at = NOW() WHERE id = :id"),
                                  {"s": "agendado" if schedule else "publicado", "f": fb_id, "id": row["id"]})
                 hora = when.astimezone(BR).strftime("%d/%m %H:%M")
