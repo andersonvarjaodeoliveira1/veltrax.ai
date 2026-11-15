@@ -10,6 +10,8 @@ it("escolhe o estilo, cria o vídeo final e mostra o resultado com o botão de b
   let polls = 0;
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
     if (init?.method === "POST") { bodies.push(JSON.parse(String(init.body))); return new Response(JSON.stringify({ id: "abc", status: "processing" }), { status: 200 }); }
+    // a tela também busca as páginas do Facebook ao abrir: isso não conta como consulta do vídeo final
+    if (!String(url).includes("/api/multiplier/final/")) return new Response(JSON.stringify({ pages: [] }), { status: 200 });
     polls += 1;
     const done = polls > 1;
     return new Response(JSON.stringify({ id: "abc", status: done ? "done" : "processing", step: "Criando a legenda", error: null, warning: "", duration: 14.2 }), { status: 200 });

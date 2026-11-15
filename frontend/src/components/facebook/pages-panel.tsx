@@ -36,6 +36,7 @@ export function PagesPanel({ pages, accounts, onChange }: { pages: FbPage[]; acc
       <MetaCard onChange={onChange} />
       {creating ? <NewPage accounts={accounts} onDone={async () => { setCreating(false); await onChange(); }} /> : null}
 
+      <ReadingSummary pages={pages} />
       {pages.length === 0 && !creating ? <p className="rounded-[16px] border border-dashed border-white/15 p-4 text-sm text-white/70">Nenhuma página ainda. Clique em Nova página e cadastre a primeira.</p> : null}
       {pages.map((p) => <PageCard key={p.id} page={p} onClips={() => setClipsFor(p)} onMeta={() => setMetaFor(p)} onChange={onChange} />)}
 
@@ -118,6 +119,9 @@ function PageCard({ page: p, onClips, onMeta, onChange }: { page: FbPage; onClip
         {p.next_at ? <span>Próximo {brDateTime(p.next_at)}</span> : null}
         {p.until_at ? <span>Posts até {brDateTime(p.until_at).slice(0, 5)}</span> : <span>Sem posts na agenda</span>}
         {p.failed ? <span className="text-[#F0466B]">{p.failed} {p.failed === 1 ? "falhou" : "falharam"}</span> : null}
+        {p.reading?.status === "encher" ? <span className="text-emerald-300">Formato para repetir</span> : null}
+        {p.ramp ? <span>Começando devagar</span> : null}
+        {p.post_window === "noite" ? <span>Posts à noite</span> : null}
       </p>
 
       <PagePlanSteps page={p} onChange={onChange} onVideos={onClips} onMeta={onMeta} />
@@ -262,13 +266,39 @@ export function ClipsDialog({ page, pages = [], onClose, onDone, preselect }: { 
   );
 }
 
+/** Resumo da leitura de todas as páginas conectadas: quantas pedem repetir o formato e quantas ainda estão testando. */
+function ReadingSummary({ pages }: { pages: FbPage[] }) {
+  const read = pages.filter((p) => p.reading);
+  const fill = read.filter((p) => p.reading?.status === "encher");
+  const spread = read.filter((p) => p.reading?.status === "espalhar");
+  const few = read.filter((p) => p.reading?.status === "poucos");
+  if (!read.length) return null;
+  const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  return (
+    <section className={cn(card, "space-y-1")} aria-label="Leitura das páginas">
+      <p className="text-sm font-medium text-white">Leitura das páginas</p>
+      <p className="text-sm text-white/70">
+        {[fill.length ? `${count(fill.length, "página com formato para repetir", "páginas com formato para repetir")}` : "",
+          spread.length ? `${count(spread.length, "testando formatos", "testando formatos")}` : "",
+          few.length ? `${count(few.length, "com poucos vídeos para ler", "com poucos vídeos para ler")}` : ""].filter(Boolean).join(", ") || "Sem leitura ainda."}
+      </p>
+      {fill.length ? <p className="text-xs text-white/50">Repetir o formato em: {fill.map((p) => p.name).join(", ")}. Abra Ler a página para ver o vídeo que se destacou.</p> : null}
+    </section>
+  );
+}
+
 /** Assunto da página: é o que guia as ideias de temas e a prévia de viralização. */
 function EditPageDialog({ page, onClose, onDone }: { page: FbPage; onClose: () => void; onDone: () => Promise<void> }) {
   const [niche, setNiche] = useState(page.niche);
   const [language, setLanguage] = useState(["en", "es"].includes(page.language) ? page.language : "pt-BR");
   const [countries, setCountries] = useState(page.countries || "");
+  const [ramp, setRamp] = useState(Boolean(page.ramp));
+  const [postWindow, setPostWindow] = useState(page.post_window || "");
   const save = async () => {
-    try { await fb.updatePage(page.id, { niche: niche.trim(), language, countries }); toast.success("Assunto salvo"); onClose(); await onDone(); }
+    // a rampa só vai no pedido quando muda, para não recomeçar a contagem a cada salvar
+    const body: Record<string, unknown> = { niche: niche.trim(), language, countries, post_window: postWindow };
+    if (ramp !== Boolean(page.ramp)) body.ramp = ramp;
+    try { await fb.updatePage(page.id, body); toast.success("Assunto salvo"); onClose(); await onDone(); }
     catch (problem) { toast.error((problem as Error).message); }
   };
   return (
@@ -281,6 +311,16 @@ function EditPageDialog({ page, onClose, onDone }: { page: FbPage; onClose: () =
         <input className={field} value={countries} maxLength={80} onChange={(e) => setCountries(e.target.value.toUpperCase())} placeholder="Vazio mostra para todos. Ex.: US, CA, GB" />
         <span className="block text-xs text-white/50">Códigos de 2 letras separados por vírgula. Vale para os próximos posts enviados pelo ClipGringa; quem está fora desses países não vê o post.</span></label>
       <div><button type="button" className={secondary} onClick={() => setCountries(TIER_ONE_COUNTRIES.replaceAll(",", ", "))}>Usar Estados Unidos, Canadá, Reino Unido, Austrália e Nova Zelândia</button></div>
+      <label className="block space-y-1.5"><span className="text-xs font-medium text-white/80">Horário dos posts</span>
+        <select className={field} value={postWindow} onChange={(e) => setPostWindow(e.target.value)}>
+          <option value="">Espalhados pelo dia</option>
+          <option value="noite">Concentrados à noite, bom para público dos Estados Unidos</option>
+        </select>
+        <span className="block text-xs text-white/50">Horário de Brasília. Vale para os próximos vídeos colocados na agenda.</span></label>
+      <label className="flex cursor-pointer items-start gap-2 text-sm text-white">
+        <input type="checkbox" className="mt-0.5 size-4 accent-violet-500" checked={ramp} onChange={(e) => setRamp(e.target.checked)} />
+        <span>Começar devagar<span className="block text-xs text-white/50">1 post por dia nos 2 primeiros dias, 2 até o 5º dia, depois o ritmo da página. Conta a partir de hoje.</span></span>
+      </label>
       <div className="flex justify-end"><button type="button" className={primary} onClick={() => void save()}>Salvar assunto</button></div>
     </Modal>
   );

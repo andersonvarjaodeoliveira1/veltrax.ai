@@ -28,6 +28,7 @@ from ...facebook import (
     ACCOUNT_STATUS,
     BR,
     PAGE_STATUS,
+    POST_WINDOWS,
     add_event,
     caption_for,
     check_page_token,
@@ -136,10 +137,17 @@ async def overview(request: Request, db: AsyncSession = Depends(get_db)):
     todos = (await db.execute(text("SELECT id, page_id, text, done_at, created_at FROM fb_todos WHERE user_id = :u AND (done_at IS NULL OR done_at > :since) ORDER BY created_at"),
                               {"u": user_id, "since": now.replace(hour=0, minute=0)})).mappings().all()
     events = (await db.execute(text("SELECT id, page_id, account_id, actor, text, created_at FROM fb_events WHERE user_id = :u ORDER BY created_at DESC LIMIT 300"), {"u": user_id})).mappings().all()
+    stats = (await db.execute(text("""SELECT page_id, fb_video_id AS id, title, link, published_at, views
+        FROM fb_video_stats WHERE user_id = :u ORDER BY published_at DESC NULLS LAST LIMIT 2000"""), {"u": user_id})).mappings().all()
     out_pages = []
     for p in pages:
         item = _row(p, drop=("meta_token_enc",))
         item["meta_connected"] = bool(p["meta_token_enc"])
+        # leitura resumida: se é hora de testar formatos ou de repetir o que se destacou
+        if p["meta_token_enc"]:
+            reading = read_page([dict(r) for r in stats if r["page_id"] == p["id"]])
+            item["reading"] = {"status": reading["status"], "base": reading["base"], "lead": reading.get("lead")}
+        item["ramp"] = p.get("ramp_start") is not None
         item["ideas"] = _ideas_of(p)
         item["todos"] = [_row(t) for t in todos if t["page_id"] == p["id"]]
         item["events"] = [_row(e) for e in events if e["page_id"] == p["id"]][:15]
@@ -277,6 +285,13 @@ def _page_values(body: dict[str, Any]) -> dict[str, Any]:
         if body["status"] not in PAGE_STATUS:
             raise HTTPException(status_code=400, detail="Situação inválida")
         out["status"] = body["status"]
+    if "post_window" in body:
+        if body["post_window"] not in POST_WINDOWS:
+            raise HTTPException(status_code=400, detail="Horário inválido")
+        out["post_window"] = body["post_window"]
+    if "ramp" in body:
+        # começar devagar: a rampa conta a partir de hoje; desligar volta ao ritmo da página
+        out["ramp_start"] = datetime.now(BR).date() if body["ramp"] else None
     if "countries" in body:
         # países que podem ver os posts; vazio volta a mostrar para todos
         out["countries"] = ",".join(parse_countries(body["countries"]))
@@ -788,7 +803,8 @@ async def add_clips(page_id: str, request: Request, db: AsyncSession = Depends(g
     taken = [r[0] for r in (await db.execute(text("SELECT scheduled_at FROM fb_posts WHERE page_id = :p AND status IN ('pendente','agendado','publicado') AND scheduled_at > :d"),
                                               {"p": page_id, "d": now})).all()]
     per_day = int(body.get("posts_per_day") or page["posts_per_day"])
-    times = plan_times(page_id, max(1, min(4, per_day)), len(clips), taken, now)
+    times = plan_times(page_id, max(1, min(4, per_day)), len(clips), taken, now,
+                       window=str(page.get("post_window") or ""), ramp_start=page.get("ramp_start"))
     for clip, when in zip(clips, times):
         await db.execute(text("""INSERT INTO fb_posts (id, user_id, page_id, kind, source, task_id, clip_id, file_path, title, caption, scheduled_at)
             VALUES (:id, :u, :p, 'video', :src, :t, :c, :f, :title, :cap, :w)"""),
