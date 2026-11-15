@@ -83,7 +83,7 @@ jobs:
         run: cd frontend && pnpm run test:coverage
 
   e2e:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # o Playwright desta versão não tem navegador para o Ubuntu 26.04 do ubuntu-latest
     needs:
       - backend
       - frontend
