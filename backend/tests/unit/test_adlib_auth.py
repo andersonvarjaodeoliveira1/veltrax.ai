@@ -21,6 +21,10 @@ class FakeGraph:
             if info is None:
                 raise aa.GraphError("Session has expired", 190)
             return {"data": {"is_valid": info.get("valid", True), "expires_at": info["expires_at"], "app_id": info.get("app_id", APP[0])}}
+        if path == "ads_archive":
+            if not self.tokens.get(params["access_token"], {}).get("adlib", True):
+                raise aa.GraphError("Application does not have permission for this action", 10)
+            return {"data": []}
         assert path == "oauth/access_token" and params["grant_type"] == "fb_exchange_token"
         assert params["client_id"] == APP[0] and params["client_secret"] == APP[1]
         if isinstance(self.exchange, Exception):
@@ -45,11 +49,17 @@ def clean(monkeypatch):
         alerts.append(now)
         return True
 
+    logins: list[tuple[str, str]] = []
+
+    async def fake_logins(_factory):
+        return list(logins)
+
+    monkeypatch.setattr(aa, "_login_candidates", fake_logins)
     monkeypatch.setattr(aa, "_seeds", lambda: list(seeds))
     monkeypatch.setattr(aa, "_save", fake_save)
     monkeypatch.setattr(aa, "_maybe_alert", fake_alert)
     monkeypatch.setattr(aa, "app_credentials", lambda: APP)
-    return {"seeds": seeds, "saved": saved, "alerts": alerts}
+    return {"seeds": seeds, "saved": saved, "alerts": alerts, "logins": logins}
 
 
 async def test_short_token_is_exchanged_for_a_long_one_right_away(clean):
@@ -169,6 +179,56 @@ async def test_a_newly_pasted_token_replaces_the_stored_one(clean):
     assert aa._state["token"] == "novo" and aa._state["source"] == "admin"
 
 
+async def test_facebook_login_of_an_admin_is_used_when_nothing_was_pasted(clean):
+    clean["logins"].append(("facebook: Jaah Alves", "login"))
+    graph = FakeGraph({"login": {"expires_at": int(NOW + 58 * DAY)}})
+
+    snap = await aa.tick(None, now=NOW, graph=graph)
+
+    assert aa.current_token() == "login"
+    assert snap["status"] == "ok" and snap["auto"] is True and snap["source"] == "facebook: Jaah Alves"
+
+
+async def test_expired_pasted_token_falls_back_to_the_facebook_login(clean):
+    clean["seeds"].append(("ambiente", "morto"))
+    graph = FakeGraph({"login": {"expires_at": int(NOW + 58 * DAY)}})
+    assert (await aa.tick(None, now=NOW, graph=graph))["status"] == "expirado"
+
+    clean["logins"].append(("facebook: Jaah Alves", "login"))
+    snap = await aa.tick(None, now=NOW + 60, graph=graph)
+
+    assert aa.current_token() == "login" and snap["status"] == "ok"
+
+
+async def test_login_without_ad_library_access_is_skipped_and_explained(clean):
+    clean["logins"].extend([("facebook: Perfil Novo", "sem-acesso"), ("facebook: Jaah Alves", "login")])
+    graph = FakeGraph({"sem-acesso": {"expires_at": int(NOW + 58 * DAY), "adlib": False}, "login": {"expires_at": int(NOW + 58 * DAY)}})
+
+    await aa.tick(None, now=NOW, graph=graph)
+    assert aa.current_token() == "login"
+
+    aa._state.clear()
+    clean["logins"].pop()
+    snap = await aa.tick(None, now=NOW, graph=graph)
+
+    assert aa.current_token() is None and snap["status"] == "ausente"
+    assert "Perfil Novo" in snap["detail"]
+    graph.calls.clear()
+    await aa.tick(None, now=NOW + 60, graph=graph)
+    assert graph.calls == []  # não testa de novo o acesso que já não serviu
+
+
+async def test_healthy_token_does_not_look_at_facebook_logins(clean):
+    clean["seeds"].append(("admin", "longo"))
+    clean["logins"].append(("facebook: Jaah Alves", "login"))
+    graph = FakeGraph({"longo": {"expires_at": int(NOW + 59 * DAY)}, "login": {"expires_at": int(NOW + 58 * DAY)}})
+
+    await aa.tick(None, now=NOW, graph=graph)
+    await aa.tick(None, now=NOW + 7 * 3600, graph=graph)
+
+    assert aa.current_token() == "longo" and "ads_archive" not in graph.calls
+
+
 async def test_snapshot_never_carries_the_token(clean):
     clean["seeds"].append(("admin", "segredo-do-token"))
     graph = FakeGraph({"segredo-do-token": {"expires_at": int(NOW + 59 * DAY)}})
@@ -176,7 +236,7 @@ async def test_snapshot_never_carries_the_token(clean):
     snap = await aa.tick(None, now=NOW, graph=graph)
 
     assert "segredo-do-token" not in repr(snap)
-    assert set(snap) == {"status", "days_left", "never_expires", "auto", "detail", "checked_at", "renewed_at"}
+    assert set(snap) == {"status", "days_left", "never_expires", "auto", "detail", "source", "checked_at", "renewed_at"}
 
 
 async def test_alert_email_explains_what_to_do():

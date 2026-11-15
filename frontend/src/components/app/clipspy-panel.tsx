@@ -151,22 +151,24 @@ function ConfigScreen({ term, onRecheck, rechecking, access }: { term: string; o
         <h3 className="text-base font-semibold text-white">{expired ? "O acesso à Ad Library venceu" : "ClipSpy ainda não está configurado"}</h3>
       </div>
       <p className="text-sm text-white/70">
-        A mineração automática usa a Ad Library API oficial da Meta, que precisa de um token.
-        Ele é colado uma vez no Admin e fica criptografado no servidor. Daí em diante o servidor renova sozinho.
+        A mineração automática usa a Ad Library API oficial da Meta, com o acesso do perfil que confirmou a identidade na Meta.
+        O acesso fica criptografado no servidor, que renova sozinho.
       </p>
       <div className="mt-3 rounded-[12px] border border-white/10 bg-black/30 p-3 text-sm text-white/70">
-        <p className="mb-1 font-medium text-white/85">Para liberar:</p>
+        <p className="mb-1 font-medium text-white/85">Para liberar, um clique:</p>
         <ol className="list-decimal space-y-1 pl-5">
-          <li>No Explorador da Graph API, escolha o app do ClipGringa, clique em <span className="text-white/90">Generate Access Token</span> e copie o token.</li>
-          <li>Abra <a href="/admin" className="text-white/90 underline">Admin, Configurações</a> e cole no campo <span className="text-white/90">Token da Ad Library</span>.</li>
-          <li>Salve. O servidor troca por um de 60 dias e renova antes de vencer.</li>
+          <li>Abra <a href="/facebook" className="text-white/90 underline">Facebook</a> e clique em <span className="text-white/90">Entrar com o Facebook</span>, com o perfil que confirmou a identidade.</li>
+          <li>Volte aqui e clique em verificar de novo.</li>
         </ol>
+        <p className="mt-2 text-xs text-white/50">
+          Outra forma: colar um token do Explorador da Graph API em <a href="/admin" className="underline">Admin, Configurações</a>, no campo Token da Ad Library.
+        </p>
       </div>
       {access?.detail ? <p className="mt-3 text-xs text-white/60">{access.detail}</p> : null}
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <button type="button" onClick={onRecheck} disabled={rechecking}
           className="inline-flex items-center gap-2 rounded-full border border-white/15 px-4 py-1.5 text-sm text-white/80 disabled:opacity-60">
-          {rechecking ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />} Já colei, verificar de novo
+          {rechecking ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />} Verificar de novo
         </button>
         {term.trim().length >= 2 && (
           <a href={adLibraryUrl(term)} target="_blank" rel="noopener noreferrer"
