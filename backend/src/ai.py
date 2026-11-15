@@ -917,6 +917,161 @@ async def copy_to_blocks(
     return script
 
 
+# ---------------------------------------------------------------------------
+# Variações de cenas: mesmo texto, uma coisa trocada por vez
+# ---------------------------------------------------------------------------
+
+VARIATION_AXES: Dict[str, str] = {
+    "pessoa": (
+        "PRESENTER: a different person (face, hair, skin tone, build) in the SAME age range, "
+        "same role and same everyday, believable style as the original. Never a celebrity or a real person."
+    ),
+    "roupa": "WARDROBE: the same type of clothing in a different color or small detail. Nothing flashy or out of place.",
+    "ambiente": (
+        "SETTING: a different place. Either another location of the same kind, or a clearly different "
+        "but plausible one (kitchen, balcony, garage, car, garden). Same framing and action."
+    ),
+    "elenco": (
+        "CAST: who is on screen. Add or remove a second person, or swap who performs the action "
+        "and who receives it. The action itself stays the same."
+    ),
+}
+
+
+class SceneVariant(BaseModel):
+    """Uma variação: os mesmos textos, com os prompts de cena refeitos trocando um eixo."""
+
+    label: str = Field(description="O que mudou nesta variação, em português, de 3 a 8 palavras.")
+    axis: str = Field(default="", description="Eixo trocado: pessoa, roupa, ambiente ou elenco.")
+    scene_prompts: List[str] = Field(
+        default_factory=list,
+        description="Um prompt de cena por cena original, na mesma ordem e na mesma quantidade.",
+    )
+
+
+class SceneVariations(BaseModel):
+    variants: List[SceneVariant] = Field(default_factory=list)
+
+
+variations_system_prompt = """You create VARIATIONS of an approved short-video shot list.
+
+You receive the scenes of one video: for each scene, the spoken text (frozen) and the visual
+scene prompt. You return N variants. A variant is the SAME video re-shot with exactly ONE thing
+changed, so it becomes a new file while the proven format stays intact.
+
+RULES
+- The spoken text is frozen. Never rewrite, translate, shorten or extend it. You only write
+  visual scene prompts.
+- Each variant changes exactly ONE axis (named in the request) and keeps everything else
+  identical to the original: same action, same framing, same props, same order, same number of
+  scenes, same mood.
+- The change must be applied consistently across ALL scenes of that variant (the same new
+  presenter in every scene, the same new place in every scene).
+- Variants must be clearly different from each other and from the original.
+- Keep each scene prompt in the same language and about the same length as the original prompt.
+- Never add claims, on-screen text, logos, brands, or props that change the message.
+- People are ordinary and believable. Never a celebrity, a public figure or a real person.
+- `label` says what changed, in Brazilian Portuguese, 3 to 8 words (for example
+  "Outra apresentadora, cabelo curto grisalho" or "Mesma cena na varanda").
+- `axis` is the axis you changed, exactly as named in the request.
+- Return exactly one scene prompt per original scene, in the same order.
+"""
+
+_variations_agent: Optional[Agent[None, SceneVariations]] = None
+_variations_agent_signature: Optional[tuple[str | None, ...]] = None
+
+
+def get_variations_agent() -> Agent[None, SceneVariations]:
+    """Get or create the scene-variations agent (lazy initialization)."""
+    global _variations_agent, _variations_agent_signature
+    runtime_config = get_config()
+    model_name = getattr(runtime_config, "blocks_llm", None) or runtime_config.llm
+    provider, _ = _split_llm_name(model_name)
+    signature = (
+        model_name,
+        runtime_config.openai_api_key,
+        runtime_config.openrouter_api_key,
+        runtime_config.openrouter_fallback_model,
+        runtime_config.google_api_key,
+        runtime_config.anthropic_api_key,
+        runtime_config.ollama_base_url,
+        runtime_config.ollama_api_key,
+    )
+    if _variations_agent is None or _variations_agent_signature != signature:
+        apply_settings_to_process_env(runtime_config.as_runtime_settings())
+        config_error = _get_missing_llm_key_error(model_name, runtime_config)
+        if config_error:
+            raise RuntimeError(config_error)
+
+        _variations_agent = Agent[None, SceneVariations](
+            model=_build_transcript_model(runtime_config, model_name),
+            output_type=NativeOutput(SceneVariations, strict=True) if provider == "openrouter" else SceneVariations,
+            system_prompt=variations_system_prompt,
+            output_retries=2,
+        )
+        _variations_agent_signature = signature
+    return _variations_agent
+
+
+def plan_variation_axes(axes: Optional[List[str]], count: int) -> List[str]:
+    """Um eixo por variação, alternando entre os escolhidos (todos, se nenhum for válido)."""
+    chosen = [a for a in dict.fromkeys(str(x).strip().lower() for x in (axes or [])) if a in VARIATION_AXES]
+    chosen = chosen or list(VARIATION_AXES)
+    return [chosen[i % len(chosen)] for i in range(count)]
+
+
+async def vary_scenes(
+    scenes: List[Dict[str, Any]],
+    count: int = 5,
+    axes: Optional[List[str]] = None,
+    note: str = "",
+    *,
+    agent: Any = None,
+) -> SceneVariations:
+    """Gera variações de um roteiro de cenas: mesmo texto, um eixo trocado por variação.
+
+    ``scenes`` são as cenas já geradas ([{text, scene_prompt}]). ``agent`` é injetável para teste.
+    O resultado sempre tem um prompt por cena original; variação igual ao original é descartada.
+    """
+    base = [
+        {"text": str(s.get("text") or "").strip(), "scene_prompt": str(s.get("scene_prompt") or "").strip()}
+        for s in scenes
+        if isinstance(s, dict)
+    ]
+    base = [s for s in base if s["scene_prompt"]][:20]
+    if not base:
+        raise ValueError("Gere as cenas primeiro: as variações partem dos prompts de cena.")
+    count = max(1, min(int(count or 5), 10))
+    plan = plan_variation_axes(axes, count)
+
+    listing = "\n\n".join(
+        f"SCENE {i + 1}\nspoken text (frozen): {s['text'] or '(no speech)'}\nscene prompt: {s['scene_prompt']}"
+        for i, s in enumerate(base)
+    )
+    wanted = "\n".join(f"- variant {i + 1}: change {axis} -> {VARIATION_AXES[axis]}" for i, axis in enumerate(plan))
+    extra = f"\n\nNOTES FROM THE USER (follow when compatible with the rules): {note.strip()[:400]}" if note and note.strip() else ""
+    prompt = (
+        f"Create {count} variants of this shot list. One axis per variant, as listed:\n{wanted}{extra}\n\n"
+        f"ORIGINAL ({len(base)} scenes):\n{listing}"
+    )
+    runner = agent if agent is not None else get_variations_agent()
+    result = await runner.run(prompt)
+    raw: SceneVariations = getattr(result, "output", None) or getattr(result, "data", result)
+
+    originals = [s["scene_prompt"] for s in base]
+    kept: List[SceneVariant] = []
+    for i, variant in enumerate(raw.variants[:count]):
+        prompts = [str(p or "").strip() for p in variant.scene_prompts][: len(originals)]
+        # cena que a IA não devolveu fica com o prompt original, para o roteiro continuar inteiro
+        prompts += originals[len(prompts):]
+        prompts = [p or originals[j] for j, p in enumerate(prompts)]
+        if prompts == originals or any(prompts == k.scene_prompts for k in kept):
+            continue
+        axis = variant.axis.strip().lower() if variant.axis.strip().lower() in VARIATION_AXES else plan[min(i, len(plan) - 1)]
+        kept.append(SceneVariant(label=(variant.label or "").strip()[:80] or f"Variação {len(kept) + 1}", axis=axis, scene_prompts=prompts))
+    return SceneVariations(variants=kept)
+
+
 class BeatRecipe(BaseModel):
     """Receita de beats extraída do TEXTO de um anúncio vencedor do ClipSpy.
 

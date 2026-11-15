@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { clearRecipe, readRecipe, type StoredRecipe } from "@/lib/winner-recipe";
+import { SceneVariations } from "./scene-variations";
 
 type Scene = {
   idx: number;
@@ -159,6 +160,7 @@ export function SceneGenerator({ initialCopy = "" }: { initialCopy?: string }) {
                 </div>
               );
             })}
+            {scenes.some((s) => s.scene_prompt) ? <SceneVariations scenes={scenes.filter((s) => s.scene_prompt)} /> : null}
           </div>
         )
       )}
