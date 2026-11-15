@@ -122,6 +122,38 @@ async def search(request: Request, db: AsyncSession = Depends(get_db)):
     return {"results": results, "count": len(results)}
 
 
+@router.post("/references")
+async def add_reference(request: Request, db: AsyncSession = Depends(get_db)):
+    """Arquivo de referências manual: guarda um vídeo que a pessoa achou navegando, com o que ela anotou.
+
+    Nada é lido do link pelo servidor. Colar o mesmo link de novo atualiza a referência."""
+    user_id = await _user_id(request, db)
+    from ...clipspy_references import manual_reference
+
+    try:
+        ref = manual_reference(await request.json())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    row = (await db.execute(text(
+        """
+        INSERT INTO creative_bank
+          (id, user_id, source, external_id, advertiser, title, permalink, thumbnail, metrics, score, is_champion, term, status)
+        VALUES
+          (:id, :u, :src, :ext, :adv, :title, :link, '', :metrics, :score, :champ, :term, 'salvo')
+        ON CONFLICT (user_id, source, external_id) DO UPDATE SET
+          advertiser = EXCLUDED.advertiser, title = EXCLUDED.title, permalink = EXCLUDED.permalink,
+          metrics = EXCLUDED.metrics, score = EXCLUDED.score, is_champion = EXCLUDED.is_champion, status = 'salvo'
+        RETURNING id, source, external_id, advertiser, title, permalink, thumbnail, metrics, score, is_champion, term, status
+        """
+    ), {
+        "id": str(uuid.uuid4()), "u": user_id, "src": ref["source"], "ext": ref["external_id"], "adv": ref["advertiser"],
+        "title": ref["title"], "link": ref["permalink"], "metrics": json.dumps(ref["metrics"]), "score": ref["score"],
+        "champ": ref["is_champion"], "term": ref["term"],
+    })).first()
+    await db.commit()
+    return _row(row)
+
+
 @router.get("/bank")
 async def bank(request: Request, champion: int = 0, source: str = "", db: AsyncSession = Depends(get_db)):
     """Lista a biblioteca de criativos salva (opcionalmente só os campeões)."""
