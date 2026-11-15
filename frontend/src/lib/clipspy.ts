@@ -20,6 +20,8 @@ export type AdLibAccess = {
   never_expires: boolean;
   auto: boolean;
   detail: string;
+  // De onde veio o acesso em uso: "admin", "ambiente" ou "facebook: <perfil>".
+  source?: string;
 };
 export type ClipSpyStatus = { configured: boolean; access?: AdLibAccess };
 

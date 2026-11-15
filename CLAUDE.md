@@ -197,7 +197,9 @@ O token da Ad Library é colado uma vez em Admin, Configurações ("Token da Ad 
 chave `META_ADLIB_TOKEN`; o ambiente também vale). `backend/src/adlib_auth.py` adota o
 token colado mais recente, troca pelo de longa duração (`fb_exchange_token`, com
 `META_APP_ID`/`META_APP_SECRET` do Admin, ou `META_ADLIB_APP_ID`/`META_ADLIB_APP_SECRET`
-no ambiente quando o app for outro) e renova antes de vencer. O token vivo fica
+no ambiente quando o app for outro) e renova antes de vencer. Sem token colado que sirva, adota o acesso de
+"Entrar com o Facebook" (`fb_meta_auth`) de um administrador, desde que consiga pesquisar
+na Ad Library; reconectar o Facebook refaz o acesso com um clique. O token vivo fica
 criptografado em `app_settings` (`META_ADLIB_TOKEN_AUTO`) e nunca volta para a tela.
 O laço `renew_forever` roda no processo da API (lifespan). `GET /clipspy/status` devolve
 `access` (validade, renovação) só para administrador; `POST /clipspy/access/check` confere

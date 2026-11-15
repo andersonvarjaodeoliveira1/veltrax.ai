@@ -4,7 +4,9 @@ A Meta não tem "refresh token": o token de usuário de longa duração (cerca d
 é ele mesmo a chave para pedir outro. Este módulo:
 
 1. recebe o token colado pelo administrador (Admin, Configurações, ou META_ADLIB_TOKEN
-   no ambiente), mesmo o curto de 1 a 2 horas do Explorador da Graph API;
+   no ambiente), mesmo o curto de 1 a 2 horas do Explorador da Graph API; sem token
+   colado que sirva, usa o acesso de "Entrar com o Facebook" de um administrador, que
+   já nasce de longa duração e se refaz com um clique;
 2. troca na hora por um de longa duração (grant fb_exchange_token, com o ID e a chave
    secreta do app da Meta já configurados no Admin);
 3. renova antes de vencer, guarda criptografado em app_settings e nunca devolve o valor;
@@ -101,6 +103,68 @@ def app_credentials() -> tuple[str, str] | None:
     return (app_id, secret) if app_id and secret else None
 
 
+async def _login_candidates(session_factory) -> list[tuple[str, str]]:
+    """Acessos de "Entrar com o Facebook" dos administradores, do mais recente para o mais antigo."""
+    from sqlalchemy import text
+
+    from .runtime_settings import decrypt_setting_value
+
+    async with session_factory() as db:
+        rows = (await db.execute(text(
+            """
+            SELECT m.token_enc, m.fb_user_name FROM fb_meta_auth m
+            JOIN users u ON u.id = m.user_id
+            WHERE u.is_admin = TRUE ORDER BY m.connected_at DESC LIMIT 8
+            """
+        ))).all()
+    out: list[tuple[str, str]] = []
+    for token_enc, name in rows:
+        try:
+            token = decrypt_setting_value(token_enc).strip()
+        except Exception:  # noqa: BLE001 - acesso guardado com outra chave; ignora
+            continue
+        if token:
+            out.append((f"facebook: {name or 'perfil conectado'}", token))
+    return out
+
+
+async def _can_search(token: str, graph: GraphCall) -> bool:
+    """O perfil tem acesso à Ad Library? (exige identidade confirmada na Meta)"""
+    try:
+        await graph("ads_archive", {"access_token": token, "search_terms": "a", "ad_type": "ALL", "ad_active_status": "ACTIVE",
+                                    "ad_reached_countries": '["DE"]', "fields": "id", "limit": "1"})
+        return True
+    except GraphError:
+        return False
+
+
+async def _try_logins(session_factory, graph: GraphCall) -> bool:
+    """Sem token colado que sirva: adota o primeiro acesso de login que consegue pesquisar."""
+    tried = list(_state.get("login_seen") or [])
+    try:
+        candidates = await _login_candidates(session_factory)
+    except Exception:  # noqa: BLE001 - tabela ausente ou banco fora; tenta no próximo ciclo
+        logger.warning("não foi possível ler os acessos de Entrar com o Facebook", exc_info=True)
+        return False
+    for source, token in candidates:
+        if _fp(token) in tried:
+            continue
+        try:
+            await _expiry_of(token, app_credentials(), graph)
+            works = await _can_search(token, graph)
+        except GraphError:
+            works = False  # vencido ou revogado: não tenta de novo
+        except Exception:  # noqa: BLE001 - rede; tenta este mesmo acesso no próximo ciclo
+            return False
+        tried.append(_fp(token))
+        _state["login_seen"] = tried[-20:]
+        if works:
+            _adopt(source, token)
+            return True
+        _state["login_note"] = f"O perfil de {source.removeprefix('facebook: ')} está conectado, mas a Meta não liberou a Ad Library para ele."
+    return False
+
+
 def mark_stale() -> None:
     """Uma busca recebeu erro de token: confere de novo no próximo minuto."""
     _state["checked_at"] = 0
@@ -112,12 +176,16 @@ def snapshot(now: float | None = None) -> dict[str, Any]:
     expires_at = int(_state.get("expires_at") or 0)
     status = str(_state.get("status") or ("novo" if current_token() else "ausente"))
     never = status == "ok" and expires_at == 0 and bool(_state.get("token"))
+    detail = str(_state.get("detail") or "")
+    if status in ("expirado", "ausente", "vencendo") and _state.get("login_note"):
+        detail = f"{detail} {_state['login_note']}".strip()
     return {
         "status": status,
         "days_left": None if never or not expires_at else max(0, int((expires_at - now) // DAY)),
         "never_expires": never,
         "auto": bool(_state.get("auto")),
-        "detail": str(_state.get("detail") or ""),
+        "detail": detail,
+        "source": str(_state.get("source") or ""),
         "checked_at": int(_state.get("checked_at") or 0),
         "renewed_at": int(_state.get("renewed_at") or 0),
     }
@@ -186,7 +254,7 @@ def _adopt(source: str, token: str) -> None:
         if _fp(seed) not in seen:
             seen.append(_fp(seed))
     _state.update(token=token, source=source, expires_at=0, renewed_at=0, checked_at=0,
-                  status="novo", detail="", auto=False, alerted_at=0, seen=seen[-12:])
+                  status="novo", detail="", auto=False, alerted_at=0, seen=seen[-12:], login_note="")
 
 
 async def _expiry_of(token: str, app: tuple[str, str] | None, graph: GraphCall) -> tuple[int, str]:
@@ -316,6 +384,13 @@ async def tick(session_factory, *, now: float | None = None, graph: GraphCall | 
     fresh = _new_seed()
     if fresh:
         _adopt(*fresh)
+    elif not _state.get("token") or _state.get("status") in ("expirado", "vencendo"):
+        # Nada colado que sirva: vale o acesso de "Entrar com o Facebook" de um administrador.
+        tried_before = list(_state.get("login_seen") or [])
+        if await _try_logins(session_factory, graph):
+            fresh = (str(_state.get("source")), str(_state.get("token")))
+        elif tried_before != list(_state.get("login_seen") or []):
+            await _save(session_factory)  # lembra os acessos que não serviram, para não testar de novo
     if not _state.get("token"):
         return snapshot(now)
     wait = RETRY_EVERY if _state.get("status") in ("novo", "erro") else CHECK_EVERY
