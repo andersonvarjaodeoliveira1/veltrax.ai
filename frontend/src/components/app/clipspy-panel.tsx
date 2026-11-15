@@ -6,7 +6,7 @@
 import { Archive, Bookmark, ExternalLink, KeyRound, Loader2, RefreshCw, Search, Star, Wand2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { clipspy, type Creative } from "@/lib/clipspy";
+import { clipspy, type AdLibAccess, type Creative } from "@/lib/clipspy";
 import { saveRecipe } from "@/lib/winner-recipe";
 
 // A Ad Library devolve um registro por anúncio, e o mesmo criativo costuma rodar
@@ -125,34 +125,48 @@ function ResultsSkeleton() {
   );
 }
 
-// Tela de configuração: aparece quando o servidor ainda não tem o token da
-// Ad Library. Não há campo de token aqui de propósito — é um segredo de
-// servidor e nunca passa pelo navegador. A visualização (deep-link) continua.
-function ConfigScreen({ term, onRecheck, rechecking }: { term: string; onRecheck: () => void; rechecking: boolean }) {
+// Frase curta sobre a validade do acesso, só para o administrador.
+function accessLine(access: AdLibAccess): { text: string; warn: boolean } {
+  const days = access.days_left;
+  const left = access.never_expires ? "sem data de validade" : days === null ? "" : `válido por ${days} ${days === 1 ? "dia" : "dias"}`;
+  if (access.status === "expirado") return { text: "O acesso à Ad Library venceu. Cole um token novo no Admin.", warn: true };
+  if (access.status === "vencendo") return { text: `Acesso à Ad Library ${left}. ${access.detail}`.trim(), warn: true };
+  if (access.status === "ok" && access.auto) return { text: `Acesso à Ad Library ${left}, renovação automática ligada.`, warn: false };
+  if (access.status === "novo" || access.status === "erro") return { text: access.detail || "Conferindo o acesso à Ad Library.", warn: false };
+  return { text: `Acesso à Ad Library ${left}, sem renovação automática. ${access.detail}`.trim(), warn: true };
+}
+
+// Tela de configuração: aparece quando o servidor não tem um token válido da
+// Ad Library. O token é colado uma vez no Admin (campo de senha, guardado
+// criptografado no servidor); daí em diante o servidor troca pelo de 60 dias
+// e renova sozinho. A visualização (deep-link) continua funcionando.
+function ConfigScreen({ term, onRecheck, rechecking, access }: { term: string; onRecheck: () => void; rechecking: boolean; access?: AdLibAccess }) {
+  const expired = access?.status === "expirado";
   return (
     <div className="rounded-[18px] border border-[#7B3FE4]/30 bg-[#1a191d] p-5">
       <div className="mb-2 flex items-center gap-2">
         <span className="inline-flex size-8 items-center justify-center rounded-full bg-[#7B3FE4]/20 text-[#C9BBFA]">
           <KeyRound className="size-4" />
         </span>
-        <h3 className="text-base font-semibold text-white">ClipSpy ainda não está configurado</h3>
+        <h3 className="text-base font-semibold text-white">{expired ? "O acesso à Ad Library venceu" : "ClipSpy ainda não está configurado"}</h3>
       </div>
       <p className="text-sm text-white/70">
-        A mineração automática usa a Ad Library API oficial da Meta, que precisa de um token no servidor.
-        Por segurança, esse token fica só no servidor e nunca no navegador — então não dá para colá-lo aqui.
+        A mineração automática usa a Ad Library API oficial da Meta, que precisa de um token.
+        Ele é colado uma vez no Admin e fica criptografado no servidor. Daí em diante o servidor renova sozinho.
       </p>
       <div className="mt-3 rounded-[12px] border border-white/10 bg-black/30 p-3 text-sm text-white/70">
-        <p className="mb-1 font-medium text-white/85">Para liberar (feito uma vez, no servidor):</p>
+        <p className="mb-1 font-medium text-white/85">Para liberar:</p>
         <ol className="list-decimal space-y-1 pl-5">
-          <li>Gere um token no Graph API Explorer do app ClipGringa com a permissão <span className="text-white/90">ads_read</span>.</li>
-          <li>Garanta que o app esteja habilitado na Ad Library API (identidade confirmada e termos aceitos).</li>
-          <li>Defina <span className="text-white/90">META_ADLIB_TOKEN</span> no ambiente do servidor e reinicie o backend.</li>
+          <li>No Explorador da Graph API, escolha o app do ClipGringa, clique em <span className="text-white/90">Generate Access Token</span> e copie o token.</li>
+          <li>Abra <a href="/admin" className="text-white/90 underline">Admin, Configurações</a> e cole no campo <span className="text-white/90">Token da Ad Library</span>.</li>
+          <li>Salve. O servidor troca por um de 60 dias e renova antes de vencer.</li>
         </ol>
       </div>
+      {access?.detail ? <p className="mt-3 text-xs text-white/60">{access.detail}</p> : null}
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <button type="button" onClick={onRecheck} disabled={rechecking}
           className="inline-flex items-center gap-2 rounded-full border border-white/15 px-4 py-1.5 text-sm text-white/80 disabled:opacity-60">
-          {rechecking ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />} Já configurei, verificar de novo
+          {rechecking ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />} Já colei, verificar de novo
         </button>
         {term.trim().length >= 2 && (
           <a href={adLibraryUrl(term)} target="_blank" rel="noopener noreferrer"
@@ -162,7 +176,7 @@ function ConfigScreen({ term, onRecheck, rechecking }: { term: string; onRecheck
         )}
       </div>
       <p className="mt-3 text-[11px] text-white/40">
-        Enquanto não configurar, a visualização na Ad Library (deep-link) funciona normalmente — só a biblioteca interna não é populada.
+        Enquanto isso, a visualização na Ad Library (deep-link) funciona normalmente. Só a biblioteca interna não é populada.
       </p>
     </div>
   );
@@ -180,13 +194,20 @@ export function ClipSpyPanel() {
   // null = ainda verificando; true/false = resposta do servidor.
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [rechecking, setRechecking] = useState(false);
+  // Validade do acesso; o servidor só manda para o administrador.
+  const [access, setAccess] = useState<AdLibAccess | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
 
-  const checkStatus = useCallback(async () => {
+  const checkStatus = useCallback(async (force = false) => {
     try {
-      const { configured } = await clipspy.status();
-      setConfigured(configured);
-      return configured;
+      // force: o administrador pede a conferência na hora (troca e renova se for o caso).
+      const first = await clipspy.status();
+      const { configured, access } = force && first.access ? await clipspy.checkAccess() : first;
+      // Token vencido conta como "não configurado": a busca falharia de qualquer jeito.
+      const usable = configured && access?.status !== "expirado";
+      setAccess(access);
+      setConfigured(usable);
+      return usable;
     } catch {
       // Falha ao checar status não deve travar a tela: deixa o fluxo seguir e o
       // próprio search dirá se há problema de configuração.
@@ -199,10 +220,10 @@ export function ClipSpyPanel() {
 
   async function recheck() {
     setRechecking(true);
-    const ok = await checkStatus();
+    const ok = await checkStatus(true);
     setRechecking(false);
-    if (ok) toast.success("Token encontrado. ClipSpy liberado.");
-    else toast("Ainda sem token no servidor.");
+    if (ok) toast.success("Acesso confirmado. ClipSpy liberado.");
+    else toast("Ainda sem um token válido no servidor.");
   }
 
   async function run() {
@@ -272,7 +293,7 @@ export function ClipSpyPanel() {
 
       {view === "buscar" ? (
         configured === false ? (
-          <ConfigScreen term={term} onRecheck={recheck} rechecking={rechecking} />
+          <ConfigScreen term={term} onRecheck={recheck} rechecking={rechecking} access={access} />
         ) : (
         <div className="space-y-3">
           <div className="rounded-[18px] border border-white/10 bg-[#1a191d] p-4">
@@ -290,6 +311,9 @@ export function ClipSpyPanel() {
             <input value={countries} onChange={(e) => setCountries(e.target.value)}
               className="mt-1 w-full rounded-full border border-white/15 bg-black/30 px-4 py-1.5 text-xs text-white/80 outline-none" />
             <p className="mt-2 text-[11px] text-white/40">Ao pesquisar, abre a Ad Library da Meta numa nova aba (visão global) e guarda os vencedores aqui na sua biblioteca. Mostra anúncios ainda ativos, dos que rodam há mais tempo (prováveis vencedores) para os mais novos.</p>
+            {access && access.status !== "ausente" ? (
+              <p className={`mt-2 text-[11px] ${accessLine(access).warn ? "text-[#F5B454]" : "text-white/40"}`}>{accessLine(access).text}</p>
+            ) : null}
           </div>
 
           {loading ? <ResultsSkeleton /> :

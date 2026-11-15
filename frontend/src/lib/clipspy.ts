@@ -14,6 +14,15 @@ export type Creative = {
   status: string;
 };
 
+export type AdLibAccess = {
+  status: "ok" | "novo" | "ausente" | "vencendo" | "expirado" | "sem_app" | "outro_app" | "falha_renovacao" | "erro";
+  days_left: number | null;
+  never_expires: boolean;
+  auto: boolean;
+  detail: string;
+};
+export type ClipSpyStatus = { configured: boolean; access?: AdLibAccess };
+
 async function call<T>(path: string, init?: { method?: string; body?: unknown }): Promise<T> {
   const res = await fetch(`/api/clipspy/${path}`, {
     method: init?.method ?? "GET",
@@ -27,7 +36,10 @@ async function call<T>(path: string, init?: { method?: string; body?: unknown })
 
 export const clipspy = {
   // Diz se o servidor tem o token da Ad Library configurado (nunca devolve o valor).
-  status: () => call<{ configured: boolean }>("status"),
+  // Para o administrador vem também a validade e se a renovação automática está ligada.
+  status: () => call<ClipSpyStatus>("status"),
+  // Confere agora a validade e renova se for hora (só administrador).
+  checkAccess: () => call<ClipSpyStatus>("access/check", { method: "POST", body: {} }),
   search: (term: string, countries?: string[], limit?: number) =>
     call<{ results: Creative[]; count: number }>("search", { method: "POST", body: { term, countries, limit } }),
   bank: (opts?: { champion?: boolean; source?: string }) => {

@@ -91,11 +91,15 @@ def create_app(
 
             from .security_alerts import alert_forever
 
+            from .adlib_auth import renew_forever
+
             sweeper = asyncio.create_task(sweep_forever(AsyncSessionLocal))
             alerter = asyncio.create_task(alert_forever())
+            adlib_renewer = asyncio.create_task(renew_forever(AsyncSessionLocal))
             yield
             sweeper.cancel()
             alerter.cancel()
+            adlib_renewer.cancel()
         finally:
             logger.info("🛑 Shutting down ClipGringa API...")
             await close_db()
