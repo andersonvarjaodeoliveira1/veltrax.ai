@@ -85,6 +85,21 @@ async def test_send_post_schedules_video(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_send_post_limits_the_audience_to_the_page_countries():
+    seen = {}
+
+    def handler(request):
+        seen["body"] = request.content.decode()
+        return httpx.Response(200, json={"id": "1_2"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        await send_post(client, page_id="55", token="tok", kind="texto", file_path=None, caption="hi", when=None, countries=["US", "GB"])
+        assert "targeting=" in seen["body"] and "geo_locations" in seen["body"] and "GB" in seen["body"]
+        await send_post(client, page_id="55", token="tok", kind="texto", file_path=None, caption="hi", when=None)
+        assert "targeting" not in seen["body"]
+
+
+@pytest.mark.asyncio
 async def test_send_post_translates_meta_errors(tmp_path):
     def handler(request):
         return httpx.Response(400, json={"error": {"code": 190, "message": "expired"}})

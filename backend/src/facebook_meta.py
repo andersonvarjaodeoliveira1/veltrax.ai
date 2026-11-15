@@ -183,6 +183,30 @@ async def page_stats(page_id: str, token: str, client: httpx.AsyncClient) -> dic
             "category": str(info.get("category") or "")[:80], "language": guess_language(texts)}
 
 
+async def page_videos(page_id: str, token: str, client: httpx.AsyncClient, limit: int = 50) -> list[dict[str, Any]]:
+    """Vídeos publicados na página com as visualizações de cada um, do mais novo para o mais antigo."""
+    data = await _get(client, f"{page_id}/videos", {"type": "uploaded", "fields": "id,title,description,created_time,permalink_url,views",
+                                                    "limit": str(max(1, min(limit, 100))), "access_token": token})
+    out: list[dict[str, Any]] = []
+    for item in data.get("data") or []:
+        if not item.get("id"):
+            continue
+        link = str(item.get("permalink_url") or "")
+        out.append({"id": str(item["id"]), "title": str(item.get("title") or item.get("description") or "")[:300].strip(),
+                    "link": (f"https://www.facebook.com{link}" if link.startswith("/") else link)[:400],
+                    "published_at": _when(str(item.get("created_time") or "")), "views": int(item.get("views") or 0)})
+    return out
+
+
+async def save_video_stats(db: AsyncSession, user_id: str, page_id: str, videos: list[dict[str, Any]]) -> None:
+    for v in videos:
+        await db.execute(text("""INSERT INTO fb_video_stats (id, user_id, page_id, fb_video_id, title, link, published_at, views)
+            VALUES (:id, :u, :p, :vid, :title, :link, :at, :views)
+            ON CONFLICT (page_id, fb_video_id) DO UPDATE SET title = EXCLUDED.title, link = EXCLUDED.link,
+              published_at = COALESCE(EXCLUDED.published_at, fb_video_stats.published_at), views = EXCLUDED.views, synced_at = NOW()"""),
+            {"id": str(uuid.uuid4()), "u": user_id, "p": page_id, "vid": v["id"], "title": v["title"], "link": v["link"], "at": v["published_at"], "views": v["views"]})
+
+
 def same_name(a: str, b: str) -> bool:
     def norm(s: str) -> str:
         return " ".join((s or "").lower().split())
@@ -295,6 +319,12 @@ async def sync_page(db: AsyncSession, row: Any, client: httpx.AsyncClient, fresh
          "photo": st.get("has_photo"), "cover": st.get("has_cover"), "cat": str(st.get("category") or "")[:80]})
     if fresh:
         await db.execute(text("UPDATE fb_pages SET language = :l WHERE id = :id"), {"l": st.get("language") or "pt-BR", "id": row["id"]})
+    try:
+        # visualizações por vídeo, para a leitura da página; sem a permissão, os outros números seguem valendo
+        await save_video_stats(db, row["user_id"], row["id"], await page_videos(row["meta_page_id"], token, client))
+        await db.execute(text("UPDATE fb_pages SET views_error = NULL WHERE id = :id"), {"id": row["id"]})
+    except (ValueError, httpx.HTTPError) as exc:
+        await db.execute(text("UPDATE fb_pages SET views_error = :e WHERE id = :id"), {"e": (str(exc) or type(exc).__name__)[:300], "id": row["id"]})
     try:
         outbox: list[dict[str, str]] = []
         # página recém-mapeada: os comentários que já existiam entram só para o histórico, sem mensagem

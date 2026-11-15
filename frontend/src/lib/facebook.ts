@@ -29,8 +29,16 @@ export type FbPage = {
   // nossos registros: posts normais (texto e imagem), vídeos com CTA (Vídeo orgânico), cortes e vídeos feitos à mão
   posts_normal: number; videos_cta: number; videos_cut: number; videos_manual: number;
   // lidos do Facebook quando a página está conectada
-  fb_followers: number | null; fb_posts_normal: number | null; fb_posts_video: number | null; fb_scheduled: number | null; fb_synced_at: string | null;
+  fb_followers: number | null; fb_posts_normal: number | null; fb_posts_video: number | null; fb_scheduled: number | null; fb_synced_at: string | null;  // países que podem ver os posts (códigos separados por vírgula; vazio = todos)
+  countries?: string;
 };
+export type ReadingVideo = { id: string; title: string; link: string; published_at: string | null; views: number; times: number; tag: "" | "sinal" | "viral" };
+export type PageReading = {
+  status: "sem_conexao" | "sem_leitura" | "poucos" | "espalhar" | "encher"; base: number; total: number;
+  message: string; next: string; error?: string; lead?: ReadingVideo; videos: ReadingVideo[];
+};
+// Países de maior poder de compra em inglês: Estados Unidos, Canadá, Reino Unido, Austrália e Nova Zelândia
+export const TIER_ONE_COUNTRIES = "US,CA,GB,AU,NZ";
 /** Números de uma página: os do Facebook quando existem, senão os registrados aqui. */
 export function pageNumbers(p: FbPage) {
   const synced = p.fb_synced_at !== null && p.fb_posts_normal !== null;
@@ -90,6 +98,7 @@ export const fb = {
   addPage: (body: Record<string, unknown>) => call<{ id: string }>("pages", { method: "POST", body }),
   updatePage: (id: string, body: Record<string, unknown>) => call("pages/" + id, { method: "PATCH", body }),
   removePage: (id: string) => call("pages/" + id, { method: "DELETE" }),
+  reading: (id: string) => call<PageReading>(`pages/${id}/reading`),
   connectMeta: (id: string, token: string) => call<{ page: string }>(`pages/${id}/meta`, { method: "POST", body: { token } }),
   getPageProfile: (id: string) => call<{ about: string; description: string; category: string }>(`pages/${id}/profile`),
   applyPageProfile: (id: string, body: { about?: string; description?: string }) => call<{ ok: boolean }>(`pages/${id}/profile`, { method: "POST", body }),
