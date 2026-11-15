@@ -8,13 +8,15 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { clipspy, type AdLibAccess, type Creative } from "@/lib/clipspy";
 import { saveRecipe } from "@/lib/winner-recipe";
+import { ReferenceForm } from "./clipspy-reference-form";
 
 // A Ad Library devolve um registro por anúncio, e o mesmo criativo costuma rodar
 // em vários. Mostra um card por anunciante+texto (o primeiro, que roda há mais tempo).
 function dedupe(items: Creative[]) {
   const seen = new Set<string>();
   return items.filter((c) => {
-    const key = `${c.advertiser}|${(c.title || "").trim()}`;
+    // Referência manual é sempre um card: duas sem texto não são o mesmo criativo.
+    const key = c.source === "manual" ? c.id : `${c.advertiser}|${(c.title || "").trim()}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -22,6 +24,12 @@ function dedupe(items: Creative[]) {
 }
 
 function runLabel(c: Creative) {
+  if (c.source === "manual") {
+    // Referência manual: mostra os números que a pessoa anotou.
+    const n = (v?: number) => (v ?? 0).toLocaleString("pt-BR");
+    const parts = [c.metrics?.views ? `${n(c.metrics.views)} visualizações` : "", c.metrics?.comments ? `${n(c.metrics.comments)} comentários` : ""].filter(Boolean);
+    return parts.length ? parts.join(", ") : "referência";
+  }
   const d = c.metrics?.run_days ?? 0;
   return d > 0 ? `${d} ${d === 1 ? "dia ativo" : "dias ativo"}` : "ativo";
 }
@@ -66,11 +74,12 @@ function Card({ c, onSave, onArchive, onModel, busy }: { c: Creative; onSave?: (
         <span className="ml-auto text-[11px] text-white/40">{c.advertiser}</span>
       </div>
       <p className="line-clamp-3 text-sm text-white/85">{c.title || "(sem texto)"}</p>
+      {c.metrics?.note ? <p className="mt-1 text-xs text-white/50">{c.metrics.note}</p> : null}
       <div className="mt-2 flex flex-wrap items-center gap-2">
         {c.permalink && (
           <a href={c.permalink} target="_blank" rel="noopener noreferrer"
             className="inline-flex items-center gap-1 rounded-full border border-white/15 px-3 py-1 text-xs text-white/80">
-            <ExternalLink className="size-3.5" /> Ver anúncio
+            <ExternalLink className="size-3.5" /> {c.source === "manual" ? "Abrir o vídeo" : "Ver anúncio"}
           </a>
         )}
         {onSave && (
@@ -185,7 +194,7 @@ function ConfigScreen({ term, onRecheck, rechecking, access }: { term: string; o
 }
 
 export function ClipSpyPanel() {
-  const [view, setView] = useState<"buscar" | "biblioteca">("buscar");
+  const [view, setView] = useState<"buscar" | "biblioteca" | "referencia">("buscar");
   const [term, setTerm] = useState("");
   const [countries, setCountries] = useState("DE, FR, IT, ES, NL, PT");
   const [results, setResults] = useState<Creative[] | null>(null);
@@ -291,6 +300,7 @@ export function ClipSpyPanel() {
       <div className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.03] p-1">
         <button type="button" onClick={() => setView("buscar")} className={`rounded-full px-4 py-1.5 text-sm ${view === "buscar" ? "bg-white/10 text-white" : "text-white/60"}`}>Pesquisar</button>
         <button type="button" onClick={() => setView("biblioteca")} className={`rounded-full px-4 py-1.5 text-sm ${view === "biblioteca" ? "bg-white/10 text-white" : "text-white/60"}`}>Biblioteca</button>
+        <button type="button" onClick={() => setView("referencia")} className={`rounded-full px-4 py-1.5 text-sm ${view === "referencia" ? "bg-white/10 text-white" : "text-white/60"}`}>Adicionar referência</button>
       </div>
 
       {view === "buscar" ? (
@@ -337,13 +347,15 @@ export function ClipSpyPanel() {
           }
         </div>
         )
+      ) : view === "referencia" ? (
+        <ReferenceForm onSaved={() => setView("biblioteca")} onModel={(c) => void model(c)} />
       ) : (
         <div className="space-y-3">
           <label className="flex items-center gap-2 text-xs text-white/70">
             <input type="checkbox" checked={onlyChampions} onChange={(e) => setOnlyChampions(e.target.checked)} /> Só os campeões
           </label>
           {library === null ? <ResultsSkeleton /> :
-            library.length === 0 ? <p className="text-sm text-white/60">Sua biblioteca está vazia. Pesquise um termo e salve os vencedores.</p> :
+            library.length === 0 ? <p className="text-sm text-white/60">Sua biblioteca está vazia. Pesquise um termo e salve os vencedores, ou adicione uma referência pelo link.</p> :
             <div className="grid gap-3 md:grid-cols-2">
               {library.map((c) => <Card key={c.id} c={c} onArchive={() => archive(c)} onModel={() => model(c)} busy={busyId === c.id} />)}
             </div>

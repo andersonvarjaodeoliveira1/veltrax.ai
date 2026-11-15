@@ -7,7 +7,7 @@ export type Creative = {
   title: string;
   permalink: string;
   thumbnail: string;
-  metrics: { run_days?: number; views?: number; likes?: number; comments?: number; shares?: number };
+  metrics: { run_days?: number; views?: number; likes?: number; comments?: number; shares?: number; note?: string };
   score: number;
   is_champion: boolean;
   term: string;
@@ -40,6 +40,9 @@ export const clipspy = {
   // Diz se o servidor tem o token da Ad Library configurado (nunca devolve o valor).
   // Para o administrador vem também a validade e se a renovação automática está ligada.
   status: () => call<ClipSpyStatus>("status"),
+  // Arquivo de referências manual: guarda um vídeo achado navegando, com o que a pessoa anotou.
+  addReference: (body: { link: string; text: string; advertiser: string; views: string; comments: string; note: string; champion: boolean }) =>
+    call<Creative>("references", { method: "POST", body }),
   // Confere agora a validade e renova se for hora (só administrador).
   checkAccess: () => call<ClipSpyStatus>("access/check", { method: "POST", body: {} }),
   search: (term: string, countries?: string[], limit?: number) =>
