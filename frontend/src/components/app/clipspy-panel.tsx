@@ -348,7 +348,7 @@ export function ClipSpyPanel() {
         </div>
         )
       ) : view === "referencia" ? (
-        <ReferenceForm onSaved={() => setView("biblioteca")} onModel={(c) => void model(c)} />
+        <ReferenceForm onSaved={() => { setOnlyChampions(false); setView("biblioteca"); }} onModel={(c) => void model(c)} />
       ) : (
         <div className="space-y-3">
           <label className="flex items-center gap-2 text-xs text-white/70">
