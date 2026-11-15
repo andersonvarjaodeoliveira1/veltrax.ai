@@ -74,6 +74,11 @@ function Card({ c, onSave, onArchive, onModel, busy }: { c: Creative; onSave?: (
         <span className="ml-auto text-[11px] text-white/40">{c.advertiser}</span>
       </div>
       <p className="line-clamp-3 text-sm text-white/85">{c.title || "(sem texto)"}</p>
+      {c.source === "manual" && (c.metrics?.hook || c.metrics?.feeling || c.metrics?.cta) ? (
+        <p className="mt-1 text-xs text-white/60">
+          {[c.metrics.hook ? `Hook: ${c.metrics.hook}` : "", c.metrics.feeling ? `Sentimento: ${c.metrics.feeling}` : "", c.metrics.cta ? `CTA: ${c.metrics.cta}` : ""].filter(Boolean).join(", ")}
+        </p>
+      ) : null}
       {c.metrics?.note ? <p className="mt-1 text-xs text-white/50">{c.metrics.note}</p> : null}
       <div className="mt-2 flex flex-wrap items-center gap-2">
         {c.permalink && (
@@ -88,7 +93,7 @@ function Card({ c, onSave, onArchive, onModel, busy }: { c: Creative; onSave?: (
             <Bookmark className="size-3.5" /> {c.status === "salvo" ? "Salvo" : "Salvar"}
           </button>
         )}
-        {onModel && (c.title || "").trim().length >= 10 && (
+        {onModel && ((c.title || "").trim().length >= 10 || `${c.metrics?.hook ?? ""} ${c.metrics?.cta ?? ""}`.trim().length >= 10) && (
           <button type="button" disabled={busy} onClick={onModel}
             className="inline-flex items-center gap-1 rounded-full border border-white/15 px-3 py-1 text-xs text-white/80 disabled:opacity-60">
             <Wand2 className="size-3.5" /> Modelar este vencedor
@@ -242,6 +247,9 @@ export function ClipSpyPanel() {
     // Abre a Ad Library global ANTES de qualquer await, ainda dentro do clique,
     // para o navegador não tratar como popup e bloquear a aba. Isso não depende
     // de token, então acontece mesmo quando a mineração está indisponível.
+    // Avisa a extensão que a próxima aba da Ad Library veio daqui, para ela rolar sozinha.
+    // (O marcador cg=1 da URL é removido pelo Facebook; sem a extensão, o aviso não faz nada.)
+    try { window.postMessage({ source: "clipgringa-page", type: "adlib-scroll" }, window.location.origin); } catch { /* sem janela */ }
     window.open(adLibraryUrl(term), "_blank", "noopener,noreferrer");
     setLoading(true);
     setError(null);

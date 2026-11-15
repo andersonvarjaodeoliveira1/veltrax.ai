@@ -14,6 +14,7 @@ from urllib.parse import parse_qs, urlparse
 SOURCE = "manual"
 # Parâmetros que identificam o vídeo em links do tipo watch?v=...; o resto da query é rastreio.
 ID_PARAMS = ("v", "story_fbid", "fbid", "id")
+NOTE_FIELDS = (("hook", 200), ("feeling", 60), ("cta", 200), ("note", 300))
 MULTIPLIERS = (("milhões", 1_000_000), ("milhão", 1_000_000), ("milhoes", 1_000_000), ("milhao", 1_000_000),
                ("mil", 1_000), ("mi", 1_000_000), ("k", 1_000), ("m", 1_000_000))
 
@@ -62,9 +63,11 @@ def manual_reference(body: dict[str, Any]) -> dict[str, Any]:
             raise ValueError("Escreva os números como aparecem na tela. Ex.: 224 mil, 1.500 ou 12k")
         if count is not None:
             metrics[key] = count
-    note = " ".join(str(body.get("note") or "").split())[:300]
-    if note:
-        metrics["note"] = note
+    # Anotações de quem assistiu: o que prendeu no começo, o sentimento do vídeo, a chamada final e uma observação livre.
+    for key, limit in NOTE_FIELDS:
+        value = " ".join(str(body.get(key) or "").split())[:limit]
+        if value:
+            metrics[key] = value
     host = re.sub(r"^(www|m|web|mbasic)\.", "", parsed.netloc.lower())
     return {
         "source": SOURCE,
@@ -77,3 +80,17 @@ def manual_reference(body: dict[str, Any]) -> dict[str, Any]:
         "is_champion": bool(body.get("champion")),
         "term": host[:80],
     }
+
+
+def reference_notes(metrics: dict[str, Any]) -> dict[str, str]:
+    """As anotações que guiam a modelagem (hook, sentimento e CTA), só as preenchidas."""
+    return {key: str(metrics[key]) for key in ("hook", "feeling", "cta") if str(metrics.get(key) or "").strip()}
+
+
+def modeling_text(title: str, metrics: dict[str, Any]) -> str:
+    """Texto usado para tirar a estrutura: o texto do vídeo; sem ele, o hook e a CTA anotados."""
+    text = (title or "").strip()
+    if len(text) >= 10:
+        return text
+    parts = [str(metrics.get("hook") or "").strip(), text, str(metrics.get("cta") or "").strip()]
+    return " ".join(p if p.endswith((".", "!", "?")) else f"{p}." for p in parts if p)

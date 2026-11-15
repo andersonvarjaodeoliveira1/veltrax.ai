@@ -38,8 +38,11 @@ WINDOWS = [(time(8, 0), time(11, 30)), (time(12, 0), time(17, 0)), (time(18, 0),
 # recuam no dia mantendo pelo menos 90 minutos entre elas. Bom para público dos Estados Unidos.
 NIGHT_WINDOWS = [(time(22, 10), time(23, 40)), (time(19, 0), time(20, 40)), (time(15, 50), time(17, 30)), (time(12, 40), time(14, 20))]
 POST_WINDOWS = {"": WINDOWS, "noite": NIGHT_WINDOWS}
-# Começar devagar: 1 post por dia nos 2 primeiros dias, 2 até o 5º dia, depois o ritmo da página
+# Subida progressiva dos posts por dia, contada do dia em que a rampa foi ligada:
+# gradual = 1 post por dia nos 2 primeiros dias, 2 até o 5º dia, depois o ritmo da página
+# rápida  = 1 post no primeiro dia, 2 no segundo, depois o ritmo da página
 RAMP_STEPS = ((2, 1), (5, 2))
+RAMP_FAST_STEPS = ((1, 1), (2, 2))
 MIN_GAP = timedelta(minutes=90)
 SCHEDULE_AHEAD = timedelta(minutes=15)   # menos que isso: publica na hora
 MAX_AHEAD = timedelta(days=29)
@@ -68,19 +71,19 @@ def day_slots(page_id: str, day: date, per_day: int, window: str = "") -> list[d
     return sorted(slots)
 
 
-def ramp_per_day(per_day: int, day: date, ramp_start: date | None) -> int:
-    """Posts do dia quando a página está começando devagar; sem rampa, o ritmo da página."""
+def ramp_per_day(per_day: int, day: date, ramp_start: date | None, fast: bool = False) -> int:
+    """Posts do dia quando a página está subindo aos poucos; sem rampa, o ritmo da página."""
     if ramp_start is None:
         return per_day
     age = (day - ramp_start).days
-    for until, limit in RAMP_STEPS:
+    for until, limit in (RAMP_FAST_STEPS if fast else RAMP_STEPS):
         if age < until:
             return min(per_day, limit)
     return per_day
 
 
 def plan_times(page_id: str, per_day: int, count: int, taken: Iterable[datetime], now: datetime, *,
-               window: str = "", ramp_start: date | None = None) -> list[datetime]:
+               window: str = "", ramp_start: date | None = None, ramp_fast: bool = False) -> list[datetime]:
     """Próximos `count` horários livres da página, a partir de 30 minutos depois de agora."""
     taken = sorted(t.astimezone(BR) for t in taken)
     earliest = now.astimezone(BR) + timedelta(minutes=30)
@@ -89,7 +92,7 @@ def plan_times(page_id: str, per_day: int, count: int, taken: Iterable[datetime]
     for _ in range(120):
         if len(out) >= count:
             break
-        today = ramp_per_day(per_day, day, ramp_start)
+        today = ramp_per_day(per_day, day, ramp_start, ramp_fast)
         used_today = [t for t in taken + out if t.date() == day]
         free = max(0, today - len(used_today))
         for slot in day_slots(page_id, day, today, window):

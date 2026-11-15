@@ -27,7 +27,8 @@ WINDOW = 60.0
 LIMIT_PER_MINUTE = 240       # por IP, para quem chega direto (sem ser o próprio site do ClipGringa)
 PROBE_STRIKES = 6            # 404 seguidos em 1 minuto = suspeito
 BAN_SECONDS = 600
-_EXEMPT = ("/health",)
+# O webhook da Meta chega de poucos IPs e em rajada; ele é protegido pela assinatura do app, não pelo limite por IP.
+_EXEMPT = ("/health", "/facebook/webhook")
 
 
 class Guard:

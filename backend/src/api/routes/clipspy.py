@@ -181,11 +181,18 @@ async def recipe(item_id: str, request: Request, db: AsyncSession = Depends(get_
     """
     user_id = await _user_id(request, db)
     row = (await db.execute(text(
-        "SELECT advertiser, title FROM creative_bank WHERE id = :id AND user_id = :u"
+        "SELECT advertiser, title, metrics FROM creative_bank WHERE id = :id AND user_id = :u"
     ), {"id": item_id, "u": user_id})).first()
     if not row:
         raise HTTPException(status_code=404, detail="Criativo não encontrado")
-    ad_text = (row.title or "").strip()
+    from ...clipspy_references import modeling_text, reference_notes
+
+    try:
+        metrics = json.loads(row.metrics) if row.metrics else {}
+    except (ValueError, TypeError):
+        metrics = {}
+    # Referência manual pode vir sem o texto inteiro: o hook e a CTA anotados já dão a estrutura.
+    ad_text = modeling_text(row.title or "", metrics)
     if len(ad_text) < 10:
         raise HTTPException(status_code=400, detail="Esse anúncio não tem texto suficiente para modelar.")
 
@@ -200,7 +207,8 @@ async def recipe(item_id: str, request: Request, db: AsyncSession = Depends(get_
 
     return {
         "advertiser": row.advertiser or "",
-        "recipe": {"beats": beat_recipe.beats, "summary": beat_recipe.summary},
+        # notes: o que a pessoa anotou do vencedor (hook, sentimento, CTA); o Gerador de Cenas usa como direção.
+        "recipe": {"beats": beat_recipe.beats, "summary": beat_recipe.summary, "notes": reference_notes(metrics)},
     }
 
 

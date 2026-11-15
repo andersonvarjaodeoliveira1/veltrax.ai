@@ -34,8 +34,12 @@ export type FbPage = {
   // leitura resumida (só em página conectada): testar formatos ou repetir o que se destacou
   reading?: { status: PageReading["status"]; base: number; lead?: ReadingVideo };
   // começar devagar (1 post por dia, depois 2, depois o ritmo) e horário dos posts ("" espalhado, "noite")
-  ramp?: boolean;
+  ramp?: "" | "gradual" | "rapida";
   post_window?: string;
+  // resposta automática da caixa de mensagens (webhook da Meta)
+  inbox_on?: boolean;
+  inbox_reply?: string;
+  inbox_error?: string | null;
 };
 export type ReadingVideo = { id: string; title: string; link: string; published_at: string | null; views: number; times: number; tag: "" | "sinal" | "viral" };
 export type PageReading = {
@@ -104,6 +108,7 @@ export const fb = {
   updatePage: (id: string, body: Record<string, unknown>) => call("pages/" + id, { method: "PATCH", body }),
   removePage: (id: string) => call("pages/" + id, { method: "DELETE" }),
   reading: (id: string) => call<PageReading>(`pages/${id}/reading`),
+  setInbox: (id: string, body: { on: boolean; reply: string }) => call<{ ok: boolean; on: boolean }>(`pages/${id}/inbox`, { method: "POST", body }),
   connectMeta: (id: string, token: string) => call<{ page: string }>(`pages/${id}/meta`, { method: "POST", body: { token } }),
   getPageProfile: (id: string) => call<{ about: string; description: string; category: string }>(`pages/${id}/profile`),
   applyPageProfile: (id: string, body: { about?: string; description?: string }) => call<{ ok: boolean }>(`pages/${id}/profile`, { method: "POST", body }),

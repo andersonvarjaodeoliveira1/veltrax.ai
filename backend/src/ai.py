@@ -880,12 +880,28 @@ def _format_template_beats(template_beats: Optional[List[Dict[str, Any]]]) -> st
     )
 
 
+def _format_template_notes(notes: Optional[Dict[str, Any]]) -> str:
+    """Anotações de quem analisou o vencedor (hook, sentimento, CTA) como direção de tom."""
+    if not isinstance(notes, dict):
+        return ""
+    labels = (("hook", "What grabbed attention in its opening"), ("feeling", "Emotional tone of the video"), ("cta", "Call to action it used"))
+    lines = [f"- {label}: {str(notes[key]).strip()[:200]}" for key, label in labels if str(notes.get(key) or "").strip()]
+    if not lines:
+        return ""
+    return (
+        "\n\nREFERENCE NOTES (the user's own analysis of the winning video). Use them as direction for the "
+        "opening style, the emotional tone and the shape of the final call to action. Keep the user's copy as the "
+        "content: never copy the winner's words and never add a claim the copy does not make:\n" + "\n".join(lines)
+    )
+
+
 async def copy_to_blocks(
     copy: str,
     target_seconds: float = 30.0,
     *,
     cadence: float | None = None,
     template_beats: Optional[List[Dict[str, Any]]] = None,
+    template_notes: Optional[Dict[str, Any]] = None,
     agent: Any = None,
 ) -> SceneScript:
     """Transforma a copy aprovada em cenas organizadas por beat, prontas para o Flow.
@@ -907,7 +923,7 @@ async def copy_to_blocks(
     prompt = (
         f"Target total length: about {int(target)} seconds.\n"
         f"Turn this approved copy into ordered scenes (speech blocks) as specified."
-        f"{_format_template_beats(template_beats)}\n\n"
+        f"{_format_template_beats(template_beats)}{_format_template_notes(template_notes)}\n\n"
         f"COPY:\n{text}"
     )
     result = await runner.run(prompt)

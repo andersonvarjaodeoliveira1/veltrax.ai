@@ -9,13 +9,15 @@ import { clipspy, type Creative } from "@/lib/clipspy";
 
 const field = "w-full rounded-[12px] border border-white/15 bg-black/30 px-3 py-2 text-sm text-white outline-none placeholder:text-white/35";
 const label = "mb-1 block text-xs text-white/60";
-const EMPTY = { link: "", text: "", advertiser: "", views: "", comments: "", note: "", champion: false };
+const EMPTY = { link: "", text: "", advertiser: "", views: "", comments: "", hook: "", feeling: "", cta: "", note: "", champion: false };
+const FEELINGS = ["Curiosidade", "Medo", "Desejo", "Urgência", "Alívio", "Esperança", "Indignação", "Identificação"];
 
 export function ReferenceForm({ onSaved, onModel }: { onSaved: (c: Creative) => void; onModel: (c: Creative) => void }) {
   const [form, setForm] = useState(EMPTY);
   const [busy, setBusy] = useState<"" | "save" | "model">("");
   const set = (patch: Partial<typeof EMPTY>) => setForm((f) => ({ ...f, ...patch }));
-  const canModel = form.text.trim().length >= 10;
+  // Dá para modelar com o texto do vídeo ou, sem ele, com o hook e a CTA anotados.
+  const canModel = form.text.trim().length >= 10 || `${form.hook} ${form.cta}`.trim().length >= 10;
 
   async function submit(mode: "save" | "model") {
     if (!/^https?:\/\/\S+\.\S+/.test(form.link.trim())) { toast.error("Cole o link completo do vídeo, começando com https://"); return; }
@@ -61,6 +63,22 @@ export function ReferenceForm({ onSaved, onModel }: { onSaved: (c: Creative) => 
           <input id="ref-comments" className={field} value={form.comments} onChange={(e) => set({ comments: e.target.value })} placeholder="Ex.: 1.500" />
         </div>
       </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div>
+          <label className={label} htmlFor="ref-hook">O que chamou atenção (hook)</label>
+          <input id="ref-hook" className={field} maxLength={200} value={form.hook} onChange={(e) => set({ hook: e.target.value })} placeholder="Ex.: começa com uma pergunta direta" />
+        </div>
+        <div>
+          <label className={label} htmlFor="ref-feeling">Sentimento do vídeo</label>
+          <input id="ref-feeling" className={field} maxLength={60} list="ref-feelings" value={form.feeling} onChange={(e) => set({ feeling: e.target.value })} placeholder="Ex.: Curiosidade" />
+          <datalist id="ref-feelings">{FEELINGS.map((f) => <option key={f} value={f} />)}</datalist>
+        </div>
+        <div>
+          <label className={label} htmlFor="ref-cta">CTA utilizada</label>
+          <input id="ref-cta" className={field} maxLength={200} value={form.cta} onChange={(e) => set({ cta: e.target.value })} placeholder="Ex.: comente SIM que eu envio" />
+        </div>
+      </div>
+      <p className="text-xs text-white/45">O hook, o sentimento e a CTA entram como direção quando você modelar: o roteiro novo segue esse estilo de abertura, esse tom e esse tipo de chamada.</p>
       <div>
         <label className={label} htmlFor="ref-note">Observação</label>
         <input id="ref-note" className={field} maxLength={300} value={form.note} onChange={(e) => set({ note: e.target.value })} placeholder="Ex.: formato de entrevista, cenário de cozinha" />
@@ -77,7 +95,7 @@ export function ReferenceForm({ onSaved, onModel }: { onSaved: (c: Creative) => 
           className="inline-flex items-center gap-2 rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-5 py-2 text-sm font-semibold text-white disabled:opacity-60">
           {busy === "model" ? <Loader2 className="size-4 animate-spin" /> : <Wand2 className="size-4" />} Salvar e modelar
         </button>
-        {!canModel ? <span className="text-xs text-white/45">Para modelar, escreva o texto do vídeo.</span> : null}
+        {!canModel ? <span className="text-xs text-white/45">Para modelar, escreva o texto do vídeo, ou o hook e a CTA.</span> : null}
       </div>
     </div>
   );

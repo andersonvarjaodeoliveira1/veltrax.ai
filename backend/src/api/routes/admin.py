@@ -178,6 +178,15 @@ async def admin_health(
     return {"status": "ok"}
 
 
+@router.get("/status-board")
+async def status_board(request: Request, fresh: int = 0, db: AsyncSession = Depends(get_db)):
+    """Quadro de status: acesso à Ad Library, referências manuais, permissões do app na Meta e leitura das páginas."""
+    await require_admin_user(request, db, get_config())
+    from ...status_board import build
+
+    return await build(db, fresh=bool(fresh))
+
+
 @router.get("/runtime-settings")
 async def get_runtime_settings(request: Request, db: AsyncSession = Depends(get_db)):
     await require_admin_user(request, db, get_config())

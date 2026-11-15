@@ -7,7 +7,8 @@ export type Creative = {
   title: string;
   permalink: string;
   thumbnail: string;
-  metrics: { run_days?: number; views?: number; likes?: number; comments?: number; shares?: number; note?: string };
+  // hook, feeling e cta: anotações de quem assistiu a uma referência manual
+  metrics: { run_days?: number; views?: number; likes?: number; comments?: number; shares?: number; note?: string; hook?: string; feeling?: string; cta?: string };
   score: number;
   is_champion: boolean;
   term: string;
@@ -41,7 +42,7 @@ export const clipspy = {
   // Para o administrador vem também a validade e se a renovação automática está ligada.
   status: () => call<ClipSpyStatus>("status"),
   // Arquivo de referências manual: guarda um vídeo achado navegando, com o que a pessoa anotou.
-  addReference: (body: { link: string; text: string; advertiser: string; views: string; comments: string; note: string; champion: boolean }) =>
+  addReference: (body: { link: string; text: string; advertiser: string; views: string; comments: string; hook: string; feeling: string; cta: string; note: string; champion: boolean }) =>
     call<Creative>("references", { method: "POST", body }),
   // Confere agora a validade e renova se for hora (só administrador).
   checkAccess: () => call<ClipSpyStatus>("access/check", { method: "POST", body: {} }),
@@ -64,4 +65,6 @@ export const clipspy = {
 export type WinnerRecipe = {
   beats: { beat_role: string; weight: number }[];
   summary: string;
+  // o que a pessoa anotou do vencedor (hook, sentimento, CTA), usado como direção no Gerador de Cenas
+  notes?: { hook?: string; feeling?: string; cta?: string };
 };

@@ -1,7 +1,7 @@
 """Arquivo de referências manual do ClipSpy: só entra o que a pessoa digitou."""
 import pytest
 
-from src.clipspy_references import link_key, manual_reference, parse_count
+from src.clipspy_references import link_key, manual_reference, modeling_text, parse_count, reference_notes
 
 
 def test_counts_are_read_the_way_they_show_on_screen():
@@ -40,3 +40,18 @@ def test_bad_link_and_bad_numbers_explain_what_to_fix():
         manual_reference({"link": "javascript:alert(1)"})
     with pytest.raises(ValueError, match="números"):
         manual_reference({"link": "https://www.facebook.com/reel/1", "views": "bastante"})
+
+
+def test_hook_feeling_and_cta_are_kept_and_guide_the_modeling():
+    ref = manual_reference({"link": "https://www.facebook.com/reel/9", "hook": "  Manequim com a barriga aberta ", "feeling": "Curiosidade",
+                            "cta": "Comente YES que eu mando a receita", "note": "consultório"})
+
+    assert ref["metrics"] == {"hook": "Manequim com a barriga aberta", "feeling": "Curiosidade", "cta": "Comente YES que eu mando a receita", "note": "consultório"}
+    assert reference_notes(ref["metrics"]) == {"hook": "Manequim com a barriga aberta", "feeling": "Curiosidade", "cta": "Comente YES que eu mando a receita"}
+    assert reference_notes({"views": 10, "note": "só observação"}) == {}
+
+
+def test_modeling_uses_the_video_text_or_falls_back_to_hook_and_cta():
+    assert modeling_text("Stop scrolling if your knees hurt.", {"hook": "x"}) == "Stop scrolling if your knees hurt."
+    assert modeling_text("", {"hook": "Manequim com a barriga aberta", "cta": "Comente YES"}) == "Manequim com a barriga aberta. Comente YES."
+    assert modeling_text("", {}) == ""
