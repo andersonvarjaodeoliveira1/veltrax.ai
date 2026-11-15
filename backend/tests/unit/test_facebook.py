@@ -6,7 +6,7 @@ import pytest
 
 from src import facebook
 from src.api.routes import facebook as routes
-from src.facebook import BR, caption_for, day_slots, plan_times, send_post
+from src.facebook import BR, caption_for, day_slots, plan_times, ramp_per_day, send_post
 
 
 def test_routes_are_registered():
@@ -57,6 +57,30 @@ def test_account_age():
     assert routes.account_age(date(2023, 1, 10), date(2026, 3, 9)) == "3 anos e 1 mês"
     assert routes.account_age(date(2026, 11, 1), date(2026, 11, 11)) == "10 dias"
     assert routes.account_age(None) == ""
+
+
+def test_night_window_puts_the_single_post_late_and_keeps_the_gap():
+    one = day_slots("p", date(2026, 11, 16), 1, "noite")
+    assert len(one) == 1 and (one[0].hour, one[0].minute) >= (22, 10)
+    three = day_slots("p", date(2026, 11, 16), 3, "noite")
+    assert three == sorted(three) and three[-1].hour >= 22
+    assert all((b - a).total_seconds() >= 90 * 60 for a, b in zip(three, three[1:]))
+
+
+def test_ramp_starts_with_one_post_a_day_then_grows_to_the_page_rhythm():
+    start = date(2026, 11, 16)
+    assert [ramp_per_day(3, start + timedelta(days=d), start) for d in range(7)] == [1, 1, 2, 2, 2, 3, 3]
+    assert ramp_per_day(1, start + timedelta(days=3), start) == 1  # nunca passa do ritmo da página
+    assert ramp_per_day(3, start, None) == 3
+
+
+def test_plan_times_follows_the_ramp_day_by_day():
+    now = datetime(2026, 11, 16, 6, 0, tzinfo=BR)
+    times = plan_times("p", 3, 9, [], now, ramp_start=date(2026, 11, 16))
+    per_day = {}
+    for t in times:
+        per_day[t.date()] = per_day.get(t.date(), 0) + 1
+    assert list(per_day.values())[:5] == [1, 1, 2, 2, 2]
 
 
 def test_parse_date_accepts_brazilian_format():

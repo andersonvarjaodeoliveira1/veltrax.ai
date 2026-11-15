@@ -7,6 +7,7 @@ import { ClipboardCopy, Loader2, Shuffle } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { costText, FlowSendButton } from "./flow-send";
 
 export type VariationScene = { idx: number; text: string; scene_prompt: string };
 type Variant = { label: string; axis: string; scenes: VariationScene[] };
@@ -20,7 +21,7 @@ const AXES: Array<{ key: string; label: string }> = [
 const COUNTS = [3, 5, 10];
 const axisLabel = (key: string) => AXES.find((a) => a.key === key)?.label ?? key;
 
-export function SceneVariations({ scenes }: { scenes: VariationScene[] }) {
+export function SceneVariations({ scenes, flowModel, label }: { scenes: VariationScene[]; flowModel: string; label: string }) {
   const [axes, setAxes] = useState<string[]>(["pessoa"]);
   const [count, setCount] = useState(5);
   const [note, setNote] = useState("");
@@ -93,6 +94,7 @@ export function SceneVariations({ scenes }: { scenes: VariationScene[] }) {
               className="inline-flex items-center gap-1 rounded-full border border-white/15 px-2 py-1 text-[11px] text-white/70">
               <ClipboardCopy className="size-3" /> Copiar todos
             </button>
+            <FlowSendButton videos={[{ title: v.label, scenes: v.scenes }]} label={`${label}, ${v.label}`} modelId={flowModel}>Mandar para o Flow</FlowSendButton>
           </summary>
           <ol className="mt-2 space-y-2">
             {v.scenes.map((s) => (
@@ -110,6 +112,15 @@ export function SceneVariations({ scenes }: { scenes: VariationScene[] }) {
           </ol>
         </details>
       ))}
+      {variants && variants.length > 1 ? (
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <span className="text-xs text-white/50">{costText(variants.map((v) => ({ title: v.label, scenes: v.scenes })), flowModel)}</span>
+          <FlowSendButton videos={variants.map((v) => ({ title: v.label, scenes: v.scenes }))} label={`${label}, ${variants.length} variações`} modelId={flowModel}
+            className="inline-flex items-center gap-2 rounded-full border border-white/20 px-4 py-2 text-xs font-medium text-white hover:bg-white/5 disabled:opacity-60">
+            Mandar as {variants.length} para o Flow
+          </FlowSendButton>
+        </div>
+      ) : null}
     </div>
   );
 }

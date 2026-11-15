@@ -8,6 +8,9 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { clearRecipe, readRecipe, type StoredRecipe } from "@/lib/winner-recipe";
+import { FLOW_MODELS, readFlowCategory } from "@/lib/flow-models";
+import { FLOW_CLIP_SECONDS } from "@/lib/scene-flow";
+import { costText, FlowModelSelect, FlowSendButton } from "./flow-send";
 import { SceneVariations } from "./scene-variations";
 
 type Scene = {
@@ -38,7 +41,16 @@ export function SceneGenerator({ initialCopy = "" }: { initialCopy?: string }) {
   // Receita de um vencedor do ClipSpy (se o usuário clicou em "Modelar este vencedor").
   const [winner, setWinner] = useState<StoredRecipe | null>(null);
 
-  useEffect(() => { setWinner(readRecipe()); }, []);
+  // Modelo do Flow para mandar as cenas direto para a extensão (fica salvo para a próxima vez).
+  const [flowModel, setFlowModel] = useState<string>(FLOW_MODELS[0].id);
+
+  useEffect(() => {
+    setWinner(readRecipe());
+    setFlowModel(readFlowCategory() ?? FLOW_MODELS[0].id);
+    // Vindo da leitura da página ("Gerar variações deste formato"): a legenda do vídeo já entra como ponto de partida.
+    const seed = new URLSearchParams(window.location.search).get("copy");
+    if (seed) setCopy((current) => current || seed);
+  }, []);
 
   function dropWinner() { clearRecipe(); setWinner(null); }
 
@@ -76,6 +88,8 @@ export function SceneGenerator({ initialCopy = "" }: { initialCopy?: string }) {
   }
 
   const totalSeconds = scenes?.reduce((s, c) => s + (c.est_seconds || 0), 0) ?? 0;
+  // Nome do envio no Flow e na biblioteca: o começo da copy.
+  const flowLabel = copy.trim().slice(0, 50) || "Roteiro de cenas";
 
   return (
     <section className="space-y-4 rounded-[22px] border border-[#7B3FE4]/30 bg-[#19191b] p-6">
@@ -160,7 +174,22 @@ export function SceneGenerator({ initialCopy = "" }: { initialCopy?: string }) {
                 </div>
               );
             })}
-            {scenes.some((s) => s.scene_prompt) ? <SceneVariations scenes={scenes.filter((s) => s.scene_prompt)} /> : null}
+            {scenes.some((s) => s.scene_prompt) ? (
+              <>
+                <div className="flex flex-wrap items-center gap-3 rounded-[14px] border border-white/10 bg-black/20 p-3">
+                  <FlowModelSelect value={flowModel} onChange={setFlowModel} />
+                  <span className="text-xs text-white/50">{costText([{ title: flowLabel, scenes }], flowModel)}</span>
+                  <FlowSendButton videos={[{ title: flowLabel, scenes }]} label={flowLabel} modelId={flowModel}
+                    className="ml-auto inline-flex items-center gap-2 rounded-full border border-white/20 px-4 py-2 text-xs font-medium text-white hover:bg-white/5 disabled:opacity-60">
+                    Mandar este roteiro para o Flow
+                  </FlowSendButton>
+                </div>
+                {scenes.some((s) => s.est_seconds > FLOW_CLIP_SECONDS) ? (
+                  <p className="text-xs text-[#F5B454]">Atenção: há cena com fala de mais de {FLOW_CLIP_SECONDS} segundos. O Flow gera clipes de cerca de {FLOW_CLIP_SECONDS} segundos e pode cortar o fim da fala. Uma duração alvo menor resolve.</p>
+                ) : null}
+                <SceneVariations scenes={scenes.filter((s) => s.scene_prompt)} flowModel={flowModel} label={flowLabel} />
+              </>
+            ) : null}
           </div>
         )
       )}

@@ -31,6 +31,11 @@ export type FbPage = {
   // lidos do Facebook quando a página está conectada
   fb_followers: number | null; fb_posts_normal: number | null; fb_posts_video: number | null; fb_scheduled: number | null; fb_synced_at: string | null;  // países que podem ver os posts (códigos separados por vírgula; vazio = todos)
   countries?: string;
+  // leitura resumida (só em página conectada): testar formatos ou repetir o que se destacou
+  reading?: { status: PageReading["status"]; base: number; lead?: ReadingVideo };
+  // começar devagar (1 post por dia, depois 2, depois o ritmo) e horário dos posts ("" espalhado, "noite")
+  ramp?: boolean;
+  post_window?: string;
 };
 export type ReadingVideo = { id: string; title: string; link: string; published_at: string | null; views: number; times: number; tag: "" | "sinal" | "viral" };
 export type PageReading = {

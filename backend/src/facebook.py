@@ -34,6 +34,12 @@ GRAPH_VERSION = os.getenv("META_GRAPH_VERSION", "v21.0")
 
 # Janelas do dia (horário de Brasília): manhã, tarde, noite e uma extra no fim da noite
 WINDOWS = [(time(8, 0), time(11, 30)), (time(12, 0), time(17, 0)), (time(18, 0), time(22, 0)), (time(22, 0), time(23, 30))]
+# Perfil "noite": a janela mais forte é o fim da noite (a única usada com 1 post por dia), e as outras
+# recuam no dia mantendo pelo menos 90 minutos entre elas. Bom para público dos Estados Unidos.
+NIGHT_WINDOWS = [(time(22, 10), time(23, 40)), (time(19, 0), time(20, 40)), (time(15, 50), time(17, 30)), (time(12, 40), time(14, 20))]
+POST_WINDOWS = {"": WINDOWS, "noite": NIGHT_WINDOWS}
+# Começar devagar: 1 post por dia nos 2 primeiros dias, 2 até o 5º dia, depois o ritmo da página
+RAMP_STEPS = ((2, 1), (5, 2))
 MIN_GAP = timedelta(minutes=90)
 SCHEDULE_AHEAD = timedelta(minutes=15)   # menos que isso: publica na hora
 MAX_AHEAD = timedelta(days=29)
@@ -44,12 +50,14 @@ ACCOUNT_STATUS = ("ativa", "confirmacao", "restricao", "bloqueada")
 PAGE_STATUS = ("ativa", "restricao", "bloqueada")
 
 
-def day_slots(page_id: str, day: date, per_day: int) -> list[datetime]:
-    """Horários do dia para a página: um por janela, minuto variado e nunca redondo. Sempre os mesmos para a mesma página e dia."""
+def day_slots(page_id: str, day: date, per_day: int, window: str = "") -> list[datetime]:
+    """Horários do dia para a página: um por janela, minuto variado e nunca redondo. Sempre os mesmos para a mesma página e dia.
+
+    `window` escolhe o perfil de horário ("" espalha pelo dia, "noite" concentra no fim do dia). Vêm em ordem de horário."""
     seed = int(hashlib.sha256(f"{page_id}|{day.isoformat()}".encode()).hexdigest()[:12], 16)
     rnd = random.Random(seed)
     slots = []
-    for start, end in WINDOWS[: max(1, min(4, per_day))]:
+    for start, end in POST_WINDOWS.get(window, WINDOWS)[: max(1, min(4, per_day))]:
         a = start.hour * 60 + start.minute
         b = end.hour * 60 + end.minute
         while True:
@@ -57,10 +65,22 @@ def day_slots(page_id: str, day: date, per_day: int) -> list[datetime]:
             if m % 5:  # evita 9:00, 9:15, 9:30...
                 break
         slots.append(datetime.combine(day, time(m // 60, m % 60), tzinfo=BR))
-    return slots
+    return sorted(slots)
 
 
-def plan_times(page_id: str, per_day: int, count: int, taken: Iterable[datetime], now: datetime) -> list[datetime]:
+def ramp_per_day(per_day: int, day: date, ramp_start: date | None) -> int:
+    """Posts do dia quando a página está começando devagar; sem rampa, o ritmo da página."""
+    if ramp_start is None:
+        return per_day
+    age = (day - ramp_start).days
+    for until, limit in RAMP_STEPS:
+        if age < until:
+            return min(per_day, limit)
+    return per_day
+
+
+def plan_times(page_id: str, per_day: int, count: int, taken: Iterable[datetime], now: datetime, *,
+               window: str = "", ramp_start: date | None = None) -> list[datetime]:
     """Próximos `count` horários livres da página, a partir de 30 minutos depois de agora."""
     taken = sorted(t.astimezone(BR) for t in taken)
     earliest = now.astimezone(BR) + timedelta(minutes=30)
@@ -69,9 +89,10 @@ def plan_times(page_id: str, per_day: int, count: int, taken: Iterable[datetime]
     for _ in range(120):
         if len(out) >= count:
             break
+        today = ramp_per_day(per_day, day, ramp_start)
         used_today = [t for t in taken + out if t.date() == day]
-        free = max(0, per_day - len(used_today))
-        for slot in day_slots(page_id, day, per_day):
+        free = max(0, today - len(used_today))
+        for slot in day_slots(page_id, day, today, window):
             if free <= 0 or len(out) >= count:
                 break
             if slot < earliest or any(abs(slot - t) < MIN_GAP for t in taken + out):

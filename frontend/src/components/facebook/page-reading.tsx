@@ -3,6 +3,7 @@
 // Leitura da página: média de visualizações, vídeos que se destacaram e o próximo passo.
 // Segue o método "espalhar, achar, encher": sem destaque, testa formatos; com destaque,
 // repete aquele formato com variações e arquivo novo.
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { fb, brDateTime, type FbPage, type PageReading as Reading } from "@/lib/facebook";
 import { Pill, secondary } from "./ui";
@@ -37,6 +38,9 @@ export function PageReading({ page, onConnect }: { page: FbPage; onConnect: () =
           Destaque: {data.lead.link ? <a className="underline" href={data.lead.link} target="_blank" rel="noopener noreferrer">{data.lead.title || "vídeo sem título"}</a> : data.lead.title || "vídeo sem título"},
           {" "}{views(data.lead.views)} visualizações
         </p>
+      ) : null}
+      {data.status === "encher" && data.lead ? (
+        <p><Link className={secondary} href={`/automacao?aba=criar&copy=${encodeURIComponent(data.lead.title.slice(0, 600))}`}>Gerar variações deste formato</Link></p>
       ) : null}
       {list.length ? (
         <ul className="divide-y divide-white/5 text-sm">
