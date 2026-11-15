@@ -571,6 +571,43 @@ async def generate_scenes(request: Request, db: AsyncSession = Depends(get_db)):
     }
 
 
+@router.post("/scenes/variations")
+async def generate_scene_variations(request: Request, db: AsyncSession = Depends(get_db)):
+    """Variações de um roteiro de cenas: o texto fica igual e cada variação troca uma coisa só."""
+    await _user_id(request, db)
+    body = await request.json()
+    scenes = body.get("scenes")
+    if not isinstance(scenes, list) or not scenes:
+        raise HTTPException(status_code=400, detail="Gere as cenas primeiro.")
+    try:
+        count = int(body.get("count") or 5)
+    except (TypeError, ValueError):
+        count = 5
+    axes = body.get("axes") if isinstance(body.get("axes"), list) else None
+
+    from ...ai import vary_scenes  # import tardio (dependências pesadas de IA)
+
+    try:
+        result = await vary_scenes(scenes, count, axes, str(body.get("note") or ""))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001 — devolve erro legível à interface
+        logger.exception("vary_scenes falhou")
+        raise HTTPException(status_code=502, detail=f"Falha ao gerar as variações: {exc}") from exc
+
+    texts = [str(s.get("text") or "") for s in scenes if isinstance(s, dict) and str(s.get("scene_prompt") or "").strip()]
+    return {
+        "variants": [
+            {
+                "label": v.label,
+                "axis": v.axis,
+                "scenes": [{"idx": i, "text": texts[i] if i < len(texts) else "", "scene_prompt": p} for i, p in enumerate(v.scene_prompts)],
+            }
+            for v in result.variants
+        ]
+    }
+
+
 @router.post("/jobs")
 async def create_job(request: Request, db: AsyncSession = Depends(get_db)):
     user_id = await _user_id(request, db)
