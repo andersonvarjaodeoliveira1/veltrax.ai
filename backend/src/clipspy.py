@@ -23,11 +23,19 @@ CHAMPION_MIN_DAYS = int(os.getenv("CLIPSPY_CHAMPION_MIN_DAYS", "14"))
 
 
 def adlib_token() -> str | None:
-    return (os.getenv("META_ADLIB_TOKEN") or "").strip() or None
+    """Token em uso: o colado pelo administrador ou o já renovado pelo servidor (adlib_auth)."""
+    from .adlib_auth import current_token
+
+    return current_token()
 
 
 def _graph_error(body: dict[str, Any], status: int) -> str:
     err = (body or {}).get("error") or {}
+    if int(err.get("code") or 0) == 190:
+        # Token vencido ou revogado: a renovação automática confere de novo no próximo minuto.
+        from .adlib_auth import mark_stale
+
+        mark_stale()
     msg = err.get("message") or f"Erro {status} na Ad Library"
     return str(msg)
 
@@ -56,7 +64,7 @@ async def search_ad_library(
     token = adlib_token()
     if not token:
         raise ValueError(
-            "Ad Library não configurada: defina META_ADLIB_TOKEN no servidor para buscar anúncios."
+            "Ad Library não configurada: cole o token em Admin, Configurações (META_ADLIB_TOKEN) para buscar anúncios."
         )
     own = client is None
     client = client or httpx.AsyncClient(timeout=httpx.Timeout(45, connect=20))

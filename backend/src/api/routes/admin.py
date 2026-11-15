@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -18,6 +19,7 @@ from ...runtime_settings import (
     load_runtime_settings_cache,
 )
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
@@ -121,6 +123,11 @@ SETTING_METADATA = {
         "label": "Mensagem privada para quem comenta (opcional)",
         "description": "Escreva 1 só depois de adicionar a permissão pages_messaging no app da Meta. O login passa a pedir essa permissão.",
         "input_type": "text",
+    },
+    "META_ADLIB_TOKEN": {
+        "label": "Token da Ad Library (ClipSpy)",
+        "description": "Cole o token gerado no Explorador da Graph API, no mesmo app da Meta acima. O servidor troca por um de 60 dias e renova sozinho antes de vencer. Fica criptografado e nunca volta para a tela.",
+        "input_type": "password",
     },
 }
 
@@ -266,6 +273,16 @@ async def update_runtime_settings(
 
     await db.commit()
     await load_runtime_settings_cache(db)
+
+    if "META_ADLIB_TOKEN" in payload.updates:
+        # Token novo da Ad Library: já troca pelo de 60 dias, sem esperar o próximo ciclo.
+        try:
+            from ...adlib_auth import tick
+            from ...database import AsyncSessionLocal
+
+            await tick(AsyncSessionLocal, force=True)
+        except Exception:  # noqa: BLE001 - o ciclo de fundo tenta de novo em um minuto
+            logger.warning("falha ao trocar o token da Ad Library logo após salvar", exc_info=True)
 
     rows = await get_runtime_setting_rows(db)
     return {

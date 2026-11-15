@@ -191,6 +191,19 @@ table (one per user, `slug` cleared on decline).
   "App Store code added" and the creator page shows `appStoreRedeemUrl(code)`.
   The app's paywall opens Apple's redeem sheet ("Have a creator code?").
 
+## ClipSpy: acesso à Ad Library (renovação automática)
+
+O token da Ad Library é colado uma vez em Admin, Configurações ("Token da Ad Library",
+chave `META_ADLIB_TOKEN`; o ambiente também vale). `backend/src/adlib_auth.py` adota o
+token colado mais recente, troca pelo de longa duração (`fb_exchange_token`, com
+`META_APP_ID`/`META_APP_SECRET` do Admin, ou `META_ADLIB_APP_ID`/`META_ADLIB_APP_SECRET`
+no ambiente quando o app for outro) e renova antes de vencer. O token vivo fica
+criptografado em `app_settings` (`META_ADLIB_TOKEN_AUTO`) e nunca volta para a tela.
+O laço `renew_forever` roda no processo da API (lifespan). `GET /clipspy/status` devolve
+`access` (validade, renovação) só para administrador; `POST /clipspy/access/check` confere
+na hora. A Meta não tem refresh token: senha trocada ou acesso revogado pedem um token
+novo, e o servidor avisa por e-mail (mesmos destinatários dos alertas de segurança).
+
 ## Environment Variables
 
 Required in `.env` (root) or `backend/.env`:

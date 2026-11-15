@@ -27,8 +27,31 @@ async def status(request: Request, db: AsyncSession = Depends(get_db)):
     A interface usa isso para mostrar a tela de configuracao em vez de disparar
     uma busca que falharia.
     """
-    await _user_id(request, db)  # exige sessão válida
-    return {"configured": adlib_token() is not None}
+    user_id = await _user_id(request, db)  # exige sessão válida
+    out: dict[str, Any] = {"configured": adlib_token() is not None}
+    if await _is_admin(db, user_id):
+        # Só o administrador vê a validade e a renovação (sem o valor do token).
+        from ...adlib_auth import snapshot
+
+        out["access"] = snapshot()
+    return out
+
+
+async def _is_admin(db: AsyncSession, user_id: str) -> bool:
+    row = (await db.execute(text("SELECT is_admin FROM users WHERE id = :u"), {"u": user_id})).first()
+    return bool(row and row[0])
+
+
+@router.post("/access/check")
+async def check_access(request: Request, db: AsyncSession = Depends(get_db)):
+    """Confere agora a validade do acesso à Ad Library e renova se for hora (só administrador)."""
+    user_id = await _user_id(request, db)
+    if not await _is_admin(db, user_id):
+        raise HTTPException(status_code=403, detail="Só o administrador confere o acesso")
+    from ...adlib_auth import tick
+    from ...database import AsyncSessionLocal
+
+    return {"configured": adlib_token() is not None, "access": await tick(AsyncSessionLocal, force=True)}
 
 # A UE tem cobertura comercial completa na Ad Library (DSA); por isso o default.
 DEFAULT_COUNTRIES = ["DE", "FR", "IT", "ES", "NL", "PT"]
