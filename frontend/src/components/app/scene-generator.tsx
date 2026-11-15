@@ -107,6 +107,11 @@ export function SceneGenerator({ initialCopy = "" }: { initialCopy?: string }) {
         <div className="flex flex-wrap items-center gap-2 rounded-[12px] border border-white/10 bg-white/[0.04] px-3 py-2">
           <span className="text-xs text-white/80">Modelando a estrutura do texto de: <span className="font-medium text-white">{winner.advertiser || "vencedor do ClipSpy"}</span></span>
           <span className="text-[11px] text-white/45">{winner.recipe.beats.map((b) => beatLabel(b.beat_role).label).join(" → ")}</span>
+          {winner.recipe.notes && Object.values(winner.recipe.notes).some(Boolean) ? (
+            <span className="basis-full text-[11px] text-white/45">
+              Direção anotada: {[winner.recipe.notes.hook ? `hook "${winner.recipe.notes.hook}"` : "", winner.recipe.notes.feeling ? `sentimento ${winner.recipe.notes.feeling.toLowerCase()}` : "", winner.recipe.notes.cta ? `CTA "${winner.recipe.notes.cta}"` : ""].filter(Boolean).join(", ")}
+            </span>
+          ) : null}
           <button type="button" onClick={dropWinner} className="ml-auto inline-flex items-center gap-1 rounded-full border border-white/15 px-2 py-1 text-[11px] text-white/70">
             <X className="size-3" /> Usar estrutura padrão
           </button>

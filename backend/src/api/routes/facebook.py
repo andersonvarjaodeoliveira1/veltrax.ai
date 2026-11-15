@@ -6,6 +6,7 @@ manda a lista de perfis para cá; o resto (agenda, publicação pela Meta) roda 
 """
 from __future__ import annotations
 
+import hmac
 import json
 import logging
 import os
@@ -15,7 +16,7 @@ from typing import Any
 
 import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -147,7 +148,7 @@ async def overview(request: Request, db: AsyncSession = Depends(get_db)):
         if p["meta_token_enc"]:
             reading = read_page([dict(r) for r in stats if r["page_id"] == p["id"]])
             item["reading"] = {"status": reading["status"], "base": reading["base"], "lead": reading.get("lead")}
-        item["ramp"] = p.get("ramp_start") is not None
+        item["ramp"] = ("rapida" if p.get("ramp_fast") else "gradual") if p.get("ramp_start") is not None else ""
         item["ideas"] = _ideas_of(p)
         item["todos"] = [_row(t) for t in todos if t["page_id"] == p["id"]]
         item["events"] = [_row(e) for e in events if e["page_id"] == p["id"]][:15]
@@ -290,8 +291,12 @@ def _page_values(body: dict[str, Any]) -> dict[str, Any]:
             raise HTTPException(status_code=400, detail="Horário inválido")
         out["post_window"] = body["post_window"]
     if "ramp" in body:
-        # começar devagar: a rampa conta a partir de hoje; desligar volta ao ritmo da página
-        out["ramp_start"] = datetime.now(BR).date() if body["ramp"] else None
+        # subida progressiva: conta a partir de hoje; "rapida" sobe um post por dia, "gradual" (ou true) sobe mais devagar; desligar volta ao ritmo
+        mode = body["ramp"]
+        if mode not in (False, True, None, "", "gradual", "rapida"):
+            raise HTTPException(status_code=400, detail="Rampa inválida")
+        out["ramp_start"] = datetime.now(BR).date() if mode else None
+        out["ramp_fast"] = mode == "rapida"
     if "countries" in body:
         # países que podem ver os posts; vazio volta a mostrar para todos
         out["countries"] = ",".join(parse_countries(body["countries"]))
@@ -804,7 +809,7 @@ async def add_clips(page_id: str, request: Request, db: AsyncSession = Depends(g
                                               {"p": page_id, "d": now})).all()]
     per_day = int(body.get("posts_per_day") or page["posts_per_day"])
     times = plan_times(page_id, max(1, min(4, per_day)), len(clips), taken, now,
-                       window=str(page.get("post_window") or ""), ramp_start=page.get("ramp_start"))
+                       window=str(page.get("post_window") or ""), ramp_start=page.get("ramp_start"), ramp_fast=bool(page.get("ramp_fast")))
     for clip, when in zip(clips, times):
         await db.execute(text("""INSERT INTO fb_posts (id, user_id, page_id, kind, source, task_id, clip_id, file_path, title, caption, scheduled_at)
             VALUES (:id, :u, :p, 'video', :src, :t, :c, :f, :title, :cap, :w)"""),
@@ -815,6 +820,61 @@ async def add_clips(page_id: str, request: Request, db: AsyncSession = Depends(g
         await add_event(db, user_id, f"{len(times)} {'vídeo entrou' if len(times) == 1 else 'vídeos entraram'} na agenda, até {last}", page_id=page_id)
     await db.commit()
     return {"agendados": len(times), "primeiro": times[0].isoformat() if times else None}
+
+
+# ---------- caixa de mensagens (webhook da Meta) ----------
+@router.get("/webhook")
+async def webhook_verify(request: Request):
+    """Verificação do webhook pela Meta: devolve o desafio quando a frase de verificação confere."""
+    from ...facebook_inbox import verify_token
+
+    q = request.query_params
+    if q.get("hub.mode") == "subscribe" and q.get("hub.challenge") and hmac.compare_digest(q.get("hub.verify_token") or "", verify_token()):
+        return PlainTextResponse(q["hub.challenge"])
+    raise HTTPException(status_code=403, detail="Verificação recusada")
+
+
+@router.post("/webhook")
+async def webhook_receive(request: Request, db: AsyncSession = Depends(get_db)):
+    """Aviso da Meta de mensagem nova na caixa de uma Página. Só vale com a assinatura do app."""
+    from ...facebook_inbox import handle, valid_signature
+
+    body = await request.body()
+    app = meta.meta_app()
+    if not app or not valid_signature(body, request.headers.get("x-hub-signature-256"), app[1]):
+        raise HTTPException(status_code=403, detail="Assinatura inválida")
+    try:
+        payload = json.loads(body.decode("utf-8") or "{}")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Corpo inválido")
+    async with httpx.AsyncClient(timeout=httpx.Timeout(10, connect=5)) as client:
+        return await handle(db, payload, client)
+
+
+@router.post("/pages/{page_id}/inbox")
+async def set_inbox(page_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    """Liga ou desliga a resposta automática da caixa de mensagens e guarda a resposta padrão da página."""
+    user_id = await _admin(request, db)
+    page = await _own(db, "fb_pages", page_id, user_id)
+    body = await request.json()
+    on = bool(body.get("on"))
+    reply = _s(body.get("reply"), 1000)
+    if on:
+        if not page.get("meta_token_enc") or not page.get("meta_page_id"):
+            raise HTTPException(status_code=400, detail="Conecte a página à Meta antes de ligar a resposta automática")
+        from ...facebook_inbox import subscribe_page
+
+        try:
+            async with httpx.AsyncClient(timeout=20) as client:
+                await subscribe_page(page["meta_page_id"], decrypt_setting_value(page["meta_token_enc"]), client)
+        except ValueError as exc:
+            await db.execute(text("UPDATE fb_pages SET inbox_error = :e WHERE id = :id"), {"e": str(exc)[:300], "id": page_id})
+            await db.commit()
+            raise HTTPException(status_code=400, detail=f"A Meta não deixou ligar os avisos de mensagem desta página: {str(exc)[:200]}") from exc
+    await db.execute(text("UPDATE fb_pages SET inbox_on = :on, inbox_reply = :r, inbox_error = NULL, updated_at = NOW() WHERE id = :id"), {"on": on, "r": reply, "id": page_id})
+    await add_event(db, user_id, "Resposta automática da caixa de mensagens ligada" if on else "Resposta automática da caixa de mensagens desligada", page_id=page_id, actor="voce")
+    await db.commit()
+    return {"ok": True, "on": on}
 
 
 @router.get("/pages/{page_id}/reading")

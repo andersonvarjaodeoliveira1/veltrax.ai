@@ -30,6 +30,12 @@
     window.postMessage({ source: "clipgringa-flow", type: "package-ack", ok }, window.location.origin);
   });
 
+  // O ClipSpy vai abrir a Ad Library: guarda um aviso com a hora, para a aba nova saber que veio daqui e rolar sozinha.
+  on(async (event) => {
+    if (event.source !== window || !event.data || event.data.source !== "clipgringa-page" || event.data.type !== "adlib-scroll") return;
+    try { await chrome.storage.local.set({ "clipgringa-adlib-scroll-v1": { at: Date.now() } }); } catch (_e) { /* extensão recarregada */ }
+  });
+
   // O site pede para ler um anúncio da Shopee no navegador da pessoa (a Shopee bloqueia o servidor, não o navegador).
   on((event) => {
     if (event.source !== window || !event.data || event.data.source !== "clipgringa-page" || event.data.type !== "shopee-read") return;

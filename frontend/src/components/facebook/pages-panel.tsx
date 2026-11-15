@@ -87,6 +87,7 @@ function PageCard({ page: p, onClips, onMeta, onChange }: { page: FbPage; onClip
   const [editing, setEditing] = useState(false);
   const [register, setRegister] = useState(false);
   const [reading, setReading] = useState(false);
+  const [inbox, setInbox] = useState(false);
   const missing = [!p.has_photo && "foto", !p.has_cover && "capa"].filter(Boolean) as string[];
   const open = p.todos.filter((t) => !t.done_at);
 
@@ -120,7 +121,7 @@ function PageCard({ page: p, onClips, onMeta, onChange }: { page: FbPage; onClip
         {p.until_at ? <span>Posts até {brDateTime(p.until_at).slice(0, 5)}</span> : <span>Sem posts na agenda</span>}
         {p.failed ? <span className="text-[#F0466B]">{p.failed} {p.failed === 1 ? "falhou" : "falharam"}</span> : null}
         {p.reading?.status === "encher" ? <span className="text-emerald-300">Formato para repetir</span> : null}
-        {p.ramp ? <span>Começando devagar</span> : null}
+        {p.ramp ? <span>{p.ramp === "rapida" ? "Subindo rápido" : "Subindo devagar"}</span> : null}
         {p.post_window === "noite" ? <span>Posts à noite</span> : null}
       </p>
 
@@ -131,12 +132,14 @@ function PageCard({ page: p, onClips, onMeta, onChange }: { page: FbPage; onClip
         {p.meta_connected ? <button type="button" className={secondary} onClick={onMeta}>Conectada à Meta</button> : null}
         <button type="button" className={secondary} aria-expanded={reading} onClick={() => setReading((x) => !x)}>{reading ? "Fechar a leitura" : "Ler a página"}</button>
         <button type="button" className={secondary} onClick={() => setEditing(true)}>Editar assunto</button>
+        {p.meta_connected ? <button type="button" className={secondary} onClick={() => setInbox(true)}>{p.inbox_on ? "Resposta automática ligada" : "Resposta automática"}</button> : null}
         {!p.meta_connected ? <button type="button" className={secondary} onClick={() => setRegister(true)}>Registrar posts feitos no Facebook</button> : null}
         <span className="text-xs text-white/50">{p.meta_error ? p.meta_error : p.meta_connected ? "Posta sozinho no horário" : "Sem conexão: abra a Agenda e use Postar à mão"}</span>
       </div>
       {reading ? <PageReading page={p} onConnect={onMeta} /> : null}
       {manual ? <ManualPostDialog page={p} post={manual} onClose={() => setManual(null)} onDone={async () => { await loadPosts(); await onChange(); }} /> : null}
       {editing ? <EditPageDialog page={p} onClose={() => setEditing(false)} onDone={onChange} /> : null}
+      {inbox ? <InboxDialog page={p} onClose={() => setInbox(false)} onDone={onChange} /> : null}
       {register ? <RegisterPostsDialog page={p} onClose={() => setRegister(false)} onDone={onChange} /> : null}
 
       {open.length ? (
@@ -292,12 +295,12 @@ function EditPageDialog({ page, onClose, onDone }: { page: FbPage; onClose: () =
   const [niche, setNiche] = useState(page.niche);
   const [language, setLanguage] = useState(["en", "es"].includes(page.language) ? page.language : "pt-BR");
   const [countries, setCountries] = useState(page.countries || "");
-  const [ramp, setRamp] = useState(Boolean(page.ramp));
+  const [ramp, setRamp] = useState<string>(page.ramp || "");
   const [postWindow, setPostWindow] = useState(page.post_window || "");
   const save = async () => {
     // a rampa só vai no pedido quando muda, para não recomeçar a contagem a cada salvar
     const body: Record<string, unknown> = { niche: niche.trim(), language, countries, post_window: postWindow };
-    if (ramp !== Boolean(page.ramp)) body.ramp = ramp;
+    if (ramp !== (page.ramp || "")) body.ramp = ramp || false;
     try { await fb.updatePage(page.id, body); toast.success("Assunto salvo"); onClose(); await onDone(); }
     catch (problem) { toast.error((problem as Error).message); }
   };
@@ -317,11 +320,39 @@ function EditPageDialog({ page, onClose, onDone }: { page: FbPage; onClose: () =
           <option value="noite">Concentrados à noite, bom para público dos Estados Unidos</option>
         </select>
         <span className="block text-xs text-white/50">Horário de Brasília. Vale para os próximos vídeos colocados na agenda.</span></label>
-      <label className="flex cursor-pointer items-start gap-2 text-sm text-white">
-        <input type="checkbox" className="mt-0.5 size-4 accent-violet-500" checked={ramp} onChange={(e) => setRamp(e.target.checked)} />
-        <span>Começar devagar<span className="block text-xs text-white/50">1 post por dia nos 2 primeiros dias, 2 até o 5º dia, depois o ritmo da página. Conta a partir de hoje.</span></span>
-      </label>
+      <label className="block space-y-1.5"><span className="text-xs font-medium text-white/80">Subida dos posts por dia</span>
+        <select className={field} value={ramp} onChange={(e) => setRamp(e.target.value)}>
+          <option value="">Ritmo fixo, sempre os posts por dia da página</option>
+          <option value="rapida">Subir rápido: 1 hoje, 2 amanhã, depois o ritmo da página</option>
+          <option value="gradual">Subir devagar: 1 por dia nos 2 primeiros dias, 2 até o 5º, depois o ritmo</option>
+        </select>
+        <span className="block text-xs text-white/50">Conta a partir do dia em que você liga. A agenda já sai com a subida pronta, sem ajuste diário.</span></label>
       <div className="flex justify-end"><button type="button" className={primary} onClick={() => void save()}>Salvar assunto</button></div>
+    </Modal>
+  );
+}
+
+/** Resposta automática para quem escreve direto na caixa de mensagens da página. */
+function InboxDialog({ page, onClose, onDone }: { page: FbPage; onClose: () => void; onDone: () => Promise<void> }) {
+  const [on, setOn] = useState(Boolean(page.inbox_on));
+  const [reply, setReply] = useState(page.inbox_reply || "");
+  const [busy, setBusy] = useState(false);
+  const save = async () => {
+    setBusy(true);
+    try { await fb.setInbox(page.id, { on, reply: reply.trim() }); toast.success(on ? "Resposta automática ligada" : "Resposta automática desligada"); onClose(); await onDone(); }
+    catch (problem) { toast.error((problem as Error).message); } finally { setBusy(false); }
+  };
+  return (
+    <Modal open onClose={onClose} title={`Resposta automática, ${page.name}`} description="Quem escreve para a página recebe a resposta na hora. Se a mensagem tiver a palavra-chave de uma oferta, vai a mensagem daquela oferta; senão, vai a resposta padrão abaixo.">
+      <label className="flex cursor-pointer items-center gap-2 text-sm text-white">
+        <input type="checkbox" className="size-4 accent-violet-500" checked={on} onChange={(e) => setOn(e.target.checked)} /> Responder sozinho na caixa de mensagens
+      </label>
+      <label className="block space-y-1.5"><span className="text-xs font-medium text-white/80">Resposta padrão da página</span>
+        <textarea className={field} rows={4} maxLength={1000} value={reply} onChange={(e) => setReply(e.target.value)} placeholder="Ex.: Oi! Aqui está o link que você pediu: https://..." />
+        <span className="block text-xs text-white/50">Em branco, só responde quando a mensagem tiver a palavra-chave de uma oferta. A mesma pessoa recebe a mesma resposta no máximo uma vez a cada 24 horas.</span></label>
+      {page.inbox_error ? <p className="text-xs text-amber-300">Última resposta da Meta: {page.inbox_error}</p> : null}
+      <p className="text-xs text-white/50">Enquanto a Meta não aprovar a permissão de mensagens do app, a resposta só chega para quem tem papel no app (você e testadores).</p>
+      <div className="flex justify-end"><button type="button" className={primary} disabled={busy} onClick={() => void save()}>{busy ? "Salvando…" : "Salvar"}</button></div>
     </Modal>
   );
 }

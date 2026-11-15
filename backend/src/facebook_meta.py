@@ -183,10 +183,35 @@ async def page_stats(page_id: str, token: str, client: httpx.AsyncClient) -> dic
             "category": str(info.get("category") or "")[:80], "language": guess_language(texts)}
 
 
+VIEW_METRICS = ("total_video_views", "blue_reels_play_count", "fb_reels_total_plays")
+INSIGHTS_PER_SYNC = 15  # vídeos mais recentes consultados no plano B, por página e por rodada
+
+
+async def video_views_from_insights(video_id: str, token: str, client: httpx.AsyncClient) -> int:
+    """Plano B das visualizações: as estatísticas do vídeo (vídeo comum e Reel têm métricas diferentes)."""
+    data = await _get(client, f"{video_id}/video_insights", {"metric": ",".join(VIEW_METRICS), "access_token": token})
+    best = 0
+    for item in data.get("data") or []:
+        for value in item.get("values") or []:
+            if isinstance(value.get("value"), (int, float)):
+                best = max(best, int(value["value"]))
+    return best
+
+
 async def page_videos(page_id: str, token: str, client: httpx.AsyncClient, limit: int = 50) -> list[dict[str, Any]]:
-    """Vídeos publicados na página com as visualizações de cada um, do mais novo para o mais antigo."""
-    data = await _get(client, f"{page_id}/videos", {"type": "uploaded", "fields": "id,title,description,created_time,permalink_url,views",
-                                                    "limit": str(max(1, min(limit, 100))), "access_token": token})
+    """Vídeos publicados na página com as visualizações de cada um, do mais novo para o mais antigo.
+
+    Primeiro pede o campo `views` na lista. Se o Facebook recusar o campo, ou vier tudo zerado,
+    consulta as estatísticas dos vídeos mais recentes. Se as duas formas falharem, levanta ValueError
+    com o motivo, que fica guardado na página."""
+    base = "id,title,description,created_time,permalink_url"
+    params = {"type": "uploaded", "limit": str(max(1, min(limit, 100))), "access_token": token}
+    problem = ""
+    try:
+        data = await _get(client, f"{page_id}/videos", {**params, "fields": f"{base},views"})
+    except ValueError as exc:
+        problem = str(exc)
+        data = await _get(client, f"{page_id}/videos", {**params, "fields": base})
     out: list[dict[str, Any]] = []
     for item in data.get("data") or []:
         if not item.get("id"):
@@ -195,6 +220,14 @@ async def page_videos(page_id: str, token: str, client: httpx.AsyncClient, limit
         out.append({"id": str(item["id"]), "title": str(item.get("title") or item.get("description") or "")[:300].strip(),
                     "link": (f"https://www.facebook.com{link}" if link.startswith("/") else link)[:400],
                     "published_at": _when(str(item.get("created_time") or "")), "views": int(item.get("views") or 0)})
+    if out and not any(v["views"] for v in out):
+        try:
+            for video in out[:INSIGHTS_PER_SYNC]:
+                video["views"] = await video_views_from_insights(video["id"], token, client)
+        except ValueError as exc:
+            problem = problem or str(exc)
+        if problem and not any(v["views"] for v in out):
+            raise ValueError(problem)
     return out
 
 

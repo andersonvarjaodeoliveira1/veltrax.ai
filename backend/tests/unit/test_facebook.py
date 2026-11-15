@@ -74,6 +74,17 @@ def test_ramp_starts_with_one_post_a_day_then_grows_to_the_page_rhythm():
     assert ramp_per_day(3, start, None) == 3
 
 
+def test_fast_ramp_goes_one_two_then_the_page_rhythm():
+    start = date(2026, 11, 16)
+    assert [ramp_per_day(3, start + timedelta(days=d), start, fast=True) for d in range(4)] == [1, 2, 3, 3]
+    now = datetime(2026, 11, 16, 6, 0, tzinfo=BR)
+    times = plan_times("p", 3, 9, [], now, ramp_start=start, ramp_fast=True)
+    per_day = {}
+    for t in times:
+        per_day[t.date()] = per_day.get(t.date(), 0) + 1
+    assert list(per_day.values()) == [1, 2, 3, 3]
+
+
 def test_plan_times_follows_the_ramp_day_by_day():
     now = datetime(2026, 11, 16, 6, 0, tzinfo=BR)
     times = plan_times("p", 3, 9, [], now, ramp_start=date(2026, 11, 16))

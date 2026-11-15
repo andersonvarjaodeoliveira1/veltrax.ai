@@ -1,7 +1,7 @@
 """Variações de cenas: mesmo texto, um eixo trocado por variação, roteiro sempre inteiro."""
 import pytest
 
-from src.ai import SceneVariant, SceneVariations, plan_variation_axes, vary_scenes
+from src.ai import SceneVariant, SceneVariations, _format_template_notes, plan_variation_axes, vary_scenes
 
 SCENES = [
     {"text": "Stop scrolling if your knees hurt.", "scene_prompt": "Woman in her 50s, blue scrubs, clinic, looks at camera"},
@@ -72,3 +72,11 @@ async def test_needs_scene_prompts_and_caps_the_count():
     out = await vary_scenes(SCENES, 99, ["roupa"], agent=agent)
 
     assert len(out.variants) == 10
+
+
+def test_reference_notes_become_direction_and_empty_notes_add_nothing():
+    text = _format_template_notes({"hook": "Manequim com a barriga aberta", "feeling": "Curiosidade", "cta": "", "outro": "x"})
+
+    assert "REFERENCE NOTES" in text and "Manequim com a barriga aberta" in text and "Curiosidade" in text
+    assert "Call to action" not in text and "outro" not in text
+    assert _format_template_notes({}) == "" and _format_template_notes(None) == ""

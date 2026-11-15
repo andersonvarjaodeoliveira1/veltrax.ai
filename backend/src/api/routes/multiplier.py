@@ -545,11 +545,12 @@ async def generate_scenes(request: Request, db: AsyncSession = Depends(get_db)):
     template_beats = template.get("beats") if isinstance(template, dict) else template
     if not isinstance(template_beats, list):
         template_beats = None
+    template_notes = template.get("notes") if isinstance(template, dict) and isinstance(template.get("notes"), dict) else None
 
     from ...ai import copy_to_blocks  # import tardio (dependências pesadas de IA)
 
     try:
-        script = await copy_to_blocks(copy, target, template_beats=template_beats)
+        script = await copy_to_blocks(copy, target, template_beats=template_beats, template_notes=template_notes)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001 — devolve erro legível à interface

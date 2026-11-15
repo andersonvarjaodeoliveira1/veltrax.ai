@@ -6,6 +6,7 @@ import { RecentActivity } from "@/components/admin/recent-activity";
 import { AccountDetails } from "@/components/admin/account-details";
 import { AdminUserToggle } from "@/components/admin/admin-user-toggle";
 import { MemberAccessPanel } from "@/components/admin/member-access";
+import { StatusBoard, type StatusBoardData } from "@/components/admin/status-board";
 import { AffiliateReviewActions } from "@/components/admin/affiliate-review-actions";
 import {
   RuntimeSettingsForm,
@@ -80,6 +81,16 @@ export default async function AdminPage({
   const { user: selectedUserId } = await searchParams;
   const adminUserId = session.user.id;
 
+  // Quadro de status: acesso à Ad Library, referências do ClipSpy, permissões do app na Meta e leitura das páginas.
+  async function loadStatusBoard(): Promise<StatusBoardData | null> {
+    try {
+      const response = await fetchBackend("/admin/status-board", { method: "GET", userId: adminUserId, cache: "no-store" });
+      return response.ok ? ((await response.json()) as StatusBoardData) : null;
+    } catch {
+      return null;
+    }
+  }
+
   async function loadRuntimeSettings(): Promise<{
     settings: RuntimeSetting[];
     error: string | null;
@@ -100,6 +111,8 @@ export default async function AdminPage({
     }
   }
 
+  // Em paralelo com o resto: a consulta à Meta fica em cache de 5 minutos no servidor.
+  const statusBoardPromise = loadStatusBoard();
   const [
     runtimeSettings,
     totalUsers,
@@ -249,6 +262,8 @@ export default async function AdminPage({
     { label: "Em processamento", value: activeTasks, live: activeTasks > 0 },
   ];
 
+  const statusBoard = await statusBoardPromise;
+
   return (
     <main className="mx-auto w-full max-w-7xl space-y-6 px-4 py-8 sm:px-8 md:py-10">
       <div>
@@ -258,6 +273,12 @@ export default async function AdminPage({
       </div>
 
       <MemberAccessPanel />
+
+      <div id="status" className="scroll-mt-6">
+        <Panel title="Status do sistema" description="Acesso à Ad Library, referências do ClipSpy, permissões do app na Meta e leitura das páginas.">
+          {statusBoard ? <StatusBoard data={statusBoard} /> : <p className="px-5 py-4 text-sm text-muted-foreground">Não consegui carregar o status agora. Recarregue a página.</p>}
+        </Panel>
+      </div>
 
       <section className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
         {stats.map((stat) => (
