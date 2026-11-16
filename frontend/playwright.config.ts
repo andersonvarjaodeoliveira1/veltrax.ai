@@ -22,6 +22,14 @@ export default defineConfig({
   globalSetup: "./e2e/global-setup.ts",
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL ?? frontendBaseUrl,
+    // Os testes foram escritos em inglês; o app abre em português por padrão.
+    storageState: {
+      cookies: [],
+      origins: [{
+        origin: process.env.PLAYWRIGHT_BASE_URL ?? frontendBaseUrl,
+        localStorage: [{ name: "clipgringa-lang", value: "en" }],
+      }],
+    },
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
