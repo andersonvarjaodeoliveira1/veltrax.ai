@@ -36,10 +36,28 @@ export function isHostileRequest(pathname: string, userAgent: string | null): bo
   return false;
 }
 
+const COMMON_BROWSER = /^Mozilla\/5\.0 \((?:Windows|Macintosh|X11|Linux|iPhone|iPad|Android)/;
+
+/** Quem lê o robots.txt e os textos legais sem ser um navegador comum (é assim que os verificadores da Meta chegam). */
+export function isLegalProbe(pathname: string, userAgent: string | null): boolean {
+  return LEGAL_PAGES.test(pathname) && !COMMON_BROWSER.test(userAgent ?? "");
+}
+
+// Rastro mínimo no log do site: só o caminho, o método e o agente. Nada de endereço, cookie ou conta.
+function note(kind: "recusado" | "legal", request: NextRequest) {
+  console.warn(JSON.stringify({
+    guard: kind, method: request.method, path: request.nextUrl.pathname.slice(0, 80),
+    ua: (request.headers.get("user-agent") ?? "").slice(0, 140),
+  }));
+}
+
 export function middleware(request: NextRequest) {
-  if (isHostileRequest(request.nextUrl.pathname, request.headers.get("user-agent"))) {
+  const userAgent = request.headers.get("user-agent");
+  if (isHostileRequest(request.nextUrl.pathname, userAgent)) {
+    note("recusado", request);
     return new NextResponse("Forbidden", { status: 403, headers: { "Cache-Control": "no-store" } });
   }
+  if (isLegalProbe(request.nextUrl.pathname, userAgent)) note("legal", request);
   const isLandingOnlyModeEnabled =
     process.env.NEXT_PUBLIC_LANDING_ONLY_MODE === "true";
 
