@@ -34,7 +34,12 @@ test("as páginas que a Meta pede estão abertas ao público", async ({ page }) 
   await expect(page.getByRole("heading", { name: "Exclusão de dados" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Data deletion" })).toBeVisible();
   await page.goto("/privacy");
+  await expect(page.getByRole("heading", { level: 1, name: "Política de Privacidade" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Páginas do Facebook e dados da Meta" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Facebook Pages and Meta Data" })).toBeVisible();
+  await page.goto("/terms");
+  await expect(page.getByRole("heading", { level: 1, name: "Termos de Serviço" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "Terms of Service" })).toBeVisible();
 });
 
 test("a tela de login abre em português sem ser refeita pelo React", async ({ page }) => {

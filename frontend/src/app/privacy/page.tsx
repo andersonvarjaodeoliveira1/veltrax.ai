@@ -4,6 +4,8 @@ import Link from "next/link";
 import { ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HOSTED_APP_URL, OPERATOR_NAME, getSiteUrl } from "@/lib/site";
+import { LEGAL_LAST_UPDATED_PT } from "@/components/legal/legal-section";
+import { PrivacyPortuguese } from "./portuguese";
 
 const LAST_UPDATED = "November 16, 2026";
 const CONTACT_EMAIL = "contato@gringatools.com";
@@ -65,13 +67,31 @@ export default function PrivacyPolicyPage() {
       </header>
 
       <article className="mx-auto max-w-3xl px-6 py-14 md:py-20">
+        {/* Português primeiro, para os membros; o texto em inglês (o mesmo conteúdo) vem logo abaixo. */}
+        <div data-no-translate lang="pt-BR">
+          <div className="space-y-3">
+            <h1
+              className="text-4xl font-extrabold tracking-tight sm:text-5xl"
+              style={{ fontFamily: "var(--font-syne), var(--font-geist-sans), system-ui" }}
+            >
+              Política de Privacidade
+            </h1>
+            <p className="text-sm text-muted-foreground">Última atualização: {LEGAL_LAST_UPDATED_PT}</p>
+            <p className="text-sm text-muted-foreground">
+              <a className="underline hover:text-foreground" href="#english">English version below.</a>
+            </p>
+          </div>
+          <PrivacyPortuguese contactEmail={CONTACT_EMAIL} />
+        </div>
+
+        <div id="english" data-no-translate lang="en" className="mt-16 scroll-mt-6 border-t pt-12">
         <div className="space-y-3">
-          <h1
+          <h2
             className="text-4xl font-extrabold tracking-tight sm:text-5xl"
             style={{ fontFamily: "var(--font-syne), var(--font-geist-sans), system-ui" }}
           >
             Privacy Policy
-          </h1>
+          </h2>
           <p className="text-sm text-muted-foreground">Last updated: {LAST_UPDATED}</p>
         </div>
 
@@ -288,6 +308,7 @@ export default function PrivacyPolicyPage() {
               <a className="text-foreground underline" href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
             </p>
           </Section>
+        </div>
         </div>
 
         <div className="mt-14 border-t pt-8 text-sm text-muted-foreground">
