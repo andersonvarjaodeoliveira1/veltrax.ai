@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isHostileRequest } from "../middleware";
+import { isHostileRequest, isLegalProbe } from "../middleware";
 
 describe("middleware · robôs e varreduras", () => {
   it("bloqueia scanners, copiadores e robôs de IA", () => {
@@ -36,5 +36,13 @@ describe("middleware · robôs e varreduras", () => {
     }
     expect(isHostileRequest("/privacy/extra", "curl/8.4.0")).toBe(true);
     expect(isHostileRequest("/clipspy", "meta-externalfetcher/1.1")).toBe(true);
+  });
+  it("anota quem lê o robots.txt e os textos legais sem ser navegador comum", () => {
+    const chrome = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130 Safari/537.36";
+    expect(isLegalProbe("/robots.txt", "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)")).toBe(true);
+    expect(isLegalProbe("/data-deletion", "Mozilla/5.0 (compatible; meta-externalagent/1.1)")).toBe(true);
+    expect(isLegalProbe("/privacy", null)).toBe(true);
+    expect(isLegalProbe("/privacy", chrome)).toBe(false);
+    expect(isLegalProbe("/clipspy", "facebookexternalhit/1.1")).toBe(false);
   });
 });
