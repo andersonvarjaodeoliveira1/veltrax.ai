@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { clipspy, type AdLibAccess, type Creative } from "@/lib/clipspy";
 import { saveRecipe } from "@/lib/winner-recipe";
 import { ReferenceForm } from "./clipspy-reference-form";
+import { PageAnalysisView } from "./clipspy-page-analysis";
 
 // A Ad Library devolve um registro por anúncio, e o mesmo criativo costuma rodar
 // em vários. Mostra um card por anunciante+texto (o primeiro, que roda há mais tempo).
@@ -27,7 +28,12 @@ function runLabel(c: Creative) {
   if (c.source === "manual") {
     // Referência manual: mostra os números que a pessoa anotou.
     const n = (v?: number) => (v ?? 0).toLocaleString("pt-BR");
-    const parts = [c.metrics?.views ? `${n(c.metrics.views)} visualizações` : "", c.metrics?.comments ? `${n(c.metrics.comments)} comentários` : ""].filter(Boolean);
+    const parts = [
+      c.metrics?.views ? `${n(c.metrics.views)} visualizações` : "",
+      c.metrics?.reactions ? `${n(c.metrics.reactions)} reações` : "",
+      c.metrics?.comments ? `${n(c.metrics.comments)} comentários` : "",
+      c.metrics?.shares ? `${n(c.metrics.shares)} compartilhamentos` : "",
+    ].filter(Boolean);
     return parts.length ? parts.join(", ") : "referência";
   }
   const d = c.metrics?.run_days ?? 0;
@@ -199,7 +205,7 @@ function ConfigScreen({ term, onRecheck, rechecking, access }: { term: string; o
 }
 
 export function ClipSpyPanel() {
-  const [view, setView] = useState<"buscar" | "biblioteca" | "referencia">("buscar");
+  const [view, setView] = useState<"buscar" | "biblioteca" | "referencia" | "pagina">("buscar");
   const [term, setTerm] = useState("");
   const [countries, setCountries] = useState("DE, FR, IT, ES, NL, PT");
   const [results, setResults] = useState<Creative[] | null>(null);
@@ -305,10 +311,11 @@ export function ClipSpyPanel() {
 
   return (
     <div className="space-y-4">
-      <div className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.03] p-1">
+      <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-[22px] border border-white/10 bg-white/[0.03] p-1">
         <button type="button" onClick={() => setView("buscar")} className={`rounded-full px-4 py-1.5 text-sm ${view === "buscar" ? "bg-white/10 text-white" : "text-white/60"}`}>Pesquisar</button>
         <button type="button" onClick={() => setView("biblioteca")} className={`rounded-full px-4 py-1.5 text-sm ${view === "biblioteca" ? "bg-white/10 text-white" : "text-white/60"}`}>Biblioteca</button>
         <button type="button" onClick={() => setView("referencia")} className={`rounded-full px-4 py-1.5 text-sm ${view === "referencia" ? "bg-white/10 text-white" : "text-white/60"}`}>Adicionar referência</button>
+        <button type="button" onClick={() => setView("pagina")} className={`rounded-full px-4 py-1.5 text-sm ${view === "pagina" ? "bg-white/10 text-white" : "text-white/60"}`}>Analisar página</button>
       </div>
 
       {view === "buscar" ? (
@@ -357,6 +364,8 @@ export function ClipSpyPanel() {
         )
       ) : view === "referencia" ? (
         <ReferenceForm onSaved={() => { setOnlyChampions(false); setView("biblioteca"); }} onModel={(c) => void model(c)} />
+      ) : view === "pagina" ? (
+        <PageAnalysisView onSaved={() => setOnlyChampions(false)} onOpenLibrary={() => { setOnlyChampions(false); setView("biblioteca"); }} />
       ) : (
         <div className="space-y-3">
           <label className="flex items-center gap-2 text-xs text-white/70">

@@ -8,7 +8,7 @@ export type Creative = {
   permalink: string;
   thumbnail: string;
   // hook, feeling e cta: anotações de quem assistiu a uma referência manual
-  metrics: { run_days?: number; views?: number; likes?: number; comments?: number; shares?: number; note?: string; hook?: string; feeling?: string; cta?: string };
+  metrics: { run_days?: number; views?: number; likes?: number; reactions?: number; comments?: number; shares?: number; note?: string; hook?: string; feeling?: string; cta?: string };
   score: number;
   is_champion: boolean;
   term: string;
@@ -42,8 +42,11 @@ export const clipspy = {
   // Para o administrador vem também a validade e se a renovação automática está ligada.
   status: () => call<ClipSpyStatus>("status"),
   // Arquivo de referências manual: guarda um vídeo achado navegando, com o que a pessoa anotou.
-  addReference: (body: { link: string; text: string; advertiser: string; views: string; comments: string; hook: string; feeling: string; cta: string; note: string; champion: boolean }) =>
+  addReference: (body: { link: string; text: string; advertiser: string; views?: string; comments?: string | number; reactions?: number; shares?: number; hook?: string; feeling?: string; cta?: string; note?: string; champion?: boolean }) =>
     call<Creative>("references", { method: "POST", body }),
+  // Analisar página: posts públicos de uma Página do Facebook com o engajamento público (Graph API oficial).
+  analyzePage: (page: string) => call<PageAnalysis>("page-analysis", { method: "POST", body: { page } }),
+  connectedPages: () => call<{ pages: { id: string; name: string }[] }>("page-analysis/pages"),
   // Confere agora a validade e renova se for hora (só administrador).
   checkAccess: () => call<ClipSpyStatus>("access/check", { method: "POST", body: {} }),
   search: (term: string, countries?: string[], limit?: number) =>
@@ -68,3 +71,31 @@ export type WinnerRecipe = {
   // o que a pessoa anotou do vencedor (hook, sentimento, CTA), usado como direção no Gerador de Cenas
   notes?: { hook?: string; feeling?: string; cta?: string };
 };
+
+export type PagePost = {
+  id: string; text: string; created_at: string; link: string; picture: string; kind: string;
+  reactions: number; comments: number; shares: number; engagement: number;
+};
+export type PageCandidate = { id: string; name: string; link: string; followers: number; verified: boolean; picture: string };
+// Uma das três respostas: a análise, uma lista de páginas para escolher, ou o aviso de que a Meta ainda não liberou.
+export type PageAnalysis = {
+  page?: { id: string; name: string; link: string; followers: number; category: string; picture: string };
+  posts?: PagePost[];
+  summary?: { posts: number; average: number; standouts: number };
+  via?: "conectada" | "publica";
+  candidates?: PageCandidate[];
+  query?: string;
+  blocked?: string;
+  connected?: string[];
+};
+
+export type PostOrder = "engajamento" | "recentes" | "comentarios" | "compartilhamentos";
+/** Ordena os posts da análise. Engajamento = reações + comentários + compartilhamentos. */
+export function sortPosts(posts: PagePost[], order: PostOrder): PagePost[] {
+  const key = ({ engajamento: "engagement", recentes: "created_at", comentarios: "comments", compartilhamentos: "shares" } as const)[order];
+  return [...posts].sort((a, b) => (a[key] < b[key] ? 1 : a[key] > b[key] ? -1 : a.created_at < b.created_at ? 1 : -1));
+}
+/** Post que passa de 3 vezes o engajamento típico da página: o formato para olhar primeiro. */
+export function isStandout(post: PagePost, average: number): boolean {
+  return post.engagement >= 30 && post.engagement >= 3 * Math.max(1, average);
+}
