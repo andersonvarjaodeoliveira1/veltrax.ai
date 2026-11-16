@@ -50,8 +50,13 @@ export default defineConfig({
       },
     },
     {
-      command: `pnpm exec next dev --hostname 127.0.0.1 --port ${frontendPort}`,
+      // No CI o site roda como em produção (build + start). O servidor de desenvolvimento compila cada tela na
+      // hora em que ela é aberta e, no executor do GitHub, travou duas vezes em 16/11 ao compilar /sign-in.
+      command: process.env.CI
+        ? `pnpm exec next build && pnpm exec next start --hostname 127.0.0.1 --port ${frontendPort}`
+        : `pnpm exec next dev --hostname 127.0.0.1 --port ${frontendPort}`,
       url: frontendBaseUrl,
+      timeout: process.env.CI ? 420_000 : 120_000,
       reuseExistingServer: !process.env.CI,
       env: {
         ...process.env,
