@@ -47,10 +47,18 @@ export function SetupTutorial({ enabled }: { enabled: boolean }) {
 
   useEffect(() => {
     if (!enabled) return;
-    if (!tutorialDone()) setOpen(true);
+    let alive = true;
+    if (!tutorialDone()) {
+      // A conta de demonstração do revisor da Meta não vê o tutorial: ele fala da extensão e do Flow,
+      // que não são o que a Meta avalia. Se a consulta falhar, o tutorial abre como sempre.
+      fetch("/api/clipspy/status", { cache: "no-store" })
+        .then((response) => (response.ok ? response.json() : {}))
+        .catch(() => ({}))
+        .then((status: { reviewer?: boolean }) => { if (alive && !status.reviewer) setOpen(true); });
+    }
     const on = () => { setIndex(0); setOpen(true); };
     window.addEventListener(OPEN_TUTORIAL_EVENT, on);
-    return () => window.removeEventListener(OPEN_TUTORIAL_EVENT, on);
+    return () => { alive = false; window.removeEventListener(OPEN_TUTORIAL_EVENT, on); };
   }, [enabled]);
 
   function finish(chooseAi = false) {
