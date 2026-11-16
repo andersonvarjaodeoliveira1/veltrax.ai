@@ -25,7 +25,9 @@ function isPagePath(pathname: string) {
 
 // Textos legais são para qualquer um ler, inclusive os verificadores da Meta (que conferem a política de privacidade
 // e a exclusão de dados do app): nenhum agente é recusado nessas três páginas.
-const LEGAL_PAGES = /^\/(?:privacy|terms|data-deletion)\/?$/;
+// O robots.txt entra junto: é o arquivo feito para os robôs lerem. Recusado, a Meta entende "tudo proibido"
+// e nem chega a pedir a página (foi o que travou o cadastro do endereço de exclusão de dados).
+const LEGAL_PAGES = /^\/(?:robots\.txt|(?:privacy|terms|data-deletion)\/?)$/;
 
 export function isHostileRequest(pathname: string, userAgent: string | null): boolean {
   if (LEGAL_PAGES.test(pathname)) return false;
