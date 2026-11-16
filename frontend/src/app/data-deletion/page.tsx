@@ -6,6 +6,9 @@ import { getSiteUrl } from "@/lib/site";
 const CONTACT_EMAIL = "contato@gringatools.com";
 
 export const metadata: Metadata = {
+  // Texto legal: pode ser lido e indexado (o resto do site pede para não indexar).
+  robots: { index: true, follow: true },
+  other: { robots: "index, follow" },
   title: "Exclusão de dados | ClipGringa",
   description: "Como apagar os seus dados do ClipGringa, incluindo os dados recebidos do Facebook. How to delete your ClipGringa data.",
   alternates: { canonical: `${getSiteUrl()}/data-deletion` },

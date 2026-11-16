@@ -9,6 +9,9 @@ const LAST_UPDATED = "July 2, 2026";
 const CONTACT_EMAIL = "contato@gringatools.com";
 
 export const metadata: Metadata = {
+  // Texto legal: pode ser lido e indexado (o resto do site pede para não indexar).
+  robots: { index: true, follow: true },
+  other: { robots: "index, follow" },
   title: "Terms of Service | ClipGringa",
   description:
     "The terms that govern your use of the ClipGringa apps and hosted video-clipping service, including subscriptions purchased on the web or through the App Store.",

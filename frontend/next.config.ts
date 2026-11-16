@@ -32,6 +32,12 @@ const nextConfig: NextConfig = {
           { key: "Cross-Origin-Resource-Policy", value: "same-site" },
         ],
       },
+      {
+        // Textos legais: sem a ordem de "não indexar", para os verificadores da Meta lerem.
+        // Vem depois da regra geral e vale no lugar dela.
+        source: "/:legal(privacy|terms|data-deletion)",
+        headers: [{ key: "X-Robots-Tag", value: "all" }],
+      },
     ];
   },
   typescript: {

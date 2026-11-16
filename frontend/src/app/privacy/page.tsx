@@ -9,6 +9,9 @@ const LAST_UPDATED = "November 16, 2026";
 const CONTACT_EMAIL = "contato@gringatools.com";
 
 export const metadata: Metadata = {
+  // Texto legal: pode ser lido e indexado (o resto do site pede para não indexar).
+  robots: { index: true, follow: true },
+  other: { robots: "index, follow" },
   title: "Privacy Policy | ClipGringa",
   description:
     "How ClipGringa collects, uses, shares, and protects your data when you use the ClipGringa video-clipping service.",
