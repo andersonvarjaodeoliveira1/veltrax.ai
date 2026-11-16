@@ -36,5 +36,5 @@ describe("Skills do Criar influencer", () => {
     }
     expect(screen.getAllByTestId("my-skill")).toHaveLength(35);
     expect(JSON.parse(window.localStorage.getItem("gv-influencer-myskills") ?? "[]")).toHaveLength(35);
-  });
+  }, 20_000); // 35 inclusões com a tela inteira renderizada: no CI passa dos 5 s padrão
 });

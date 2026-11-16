@@ -25,14 +25,19 @@ from .facebook import GRAPH, GRAPH_VERSION, _graph_error
 from .runtime_settings import _get_encryption_secret, decrypt_setting_value
 
 SCOPES = ("pages_show_list", "pages_read_engagement", "pages_manage_posts", "pages_manage_metadata", "pages_read_user_content", "business_management")
+VIEWS_DENIED = "O Facebook não liberou as visualizações dos vídeos desta página. Falta a permissão read_insights no login com o Facebook."
 DM_WINDOW_HOURS = 24  # só responde em privado comentário recente; comentário antigo nunca recebe mensagem
 DM_PER_RUN = 20
 
 
 def scopes() -> tuple[str, ...]:
-    """Permissões pedidas no login. A de mensagens só entra depois de ligada no Admin (o app da Meta precisa tê-la)."""
-    on = (Config._get_runtime_setting("META_MESSAGING") or "").strip().lower() in {"1", "sim", "true", "on"}
-    return (*SCOPES, "pages_messaging") if on else SCOPES
+    """Permissões pedidas no login. A de mensagens e a de estatísticas só entram depois de ligadas no Admin
+    (o app da Meta precisa tê-las, senão o login inteiro é recusado)."""
+    def on(key: str) -> bool:
+        return (Config._get_runtime_setting(key) or "").strip().lower() in {"1", "sim", "true", "on"}
+
+    extra = [name for key, name in (("META_INSIGHTS", "read_insights"), ("META_MESSAGING", "pages_messaging")) if on(key)]
+    return (*SCOPES, *extra)
 STATE_TTL = 15 * 60
 CALLBACK_PATH = "/facebook/meta"
 
@@ -187,6 +192,13 @@ VIEW_METRICS = ("total_video_views", "blue_reels_play_count", "fb_reels_total_pl
 INSIGHTS_PER_SYNC = 15  # vídeos mais recentes consultados no plano B, por página e por rodada
 
 
+def views_reason(message: str) -> str:
+    """O motivo da recusa nas palavras da leitura (o erro de permissão do Facebook vem escrito para postagem)."""
+    if "pages_manage_posts" in message or "permission" in message.lower():
+        return VIEWS_DENIED
+    return message
+
+
 async def video_views_from_insights(video_id: str, token: str, client: httpx.AsyncClient) -> int:
     """Plano B das visualizações: as estatísticas do vídeo (vídeo comum e Reel têm métricas diferentes)."""
     data = await _get(client, f"{video_id}/video_insights", {"metric": ",".join(VIEW_METRICS), "access_token": token})
@@ -206,11 +218,11 @@ async def page_videos(page_id: str, token: str, client: httpx.AsyncClient, limit
     com o motivo, que fica guardado na página."""
     base = "id,title,description,created_time,permalink_url"
     params = {"type": "uploaded", "limit": str(max(1, min(limit, 100))), "access_token": token}
-    problem = ""
+    refused = ""
     try:
         data = await _get(client, f"{page_id}/videos", {**params, "fields": f"{base},views"})
     except ValueError as exc:
-        problem = str(exc)
+        refused = str(exc)
         data = await _get(client, f"{page_id}/videos", {**params, "fields": base})
     out: list[dict[str, Any]] = []
     for item in data.get("data") or []:
@@ -224,10 +236,10 @@ async def page_videos(page_id: str, token: str, client: httpx.AsyncClient, limit
         try:
             for video in out[:INSIGHTS_PER_SYNC]:
                 video["views"] = await video_views_from_insights(video["id"], token, client)
-        except ValueError as exc:
-            problem = problem or str(exc)
-        if problem and not any(v["views"] for v in out):
-            raise ValueError(problem)
+        except ValueError:
+            # Sem a permissão de estatísticas: se a lista trouxe o campo, o zero dela vale; se nem o campo veio, não há número
+            if refused and not any(v["views"] for v in out):
+                raise ValueError(views_reason(refused)) from None
     return out
 
 

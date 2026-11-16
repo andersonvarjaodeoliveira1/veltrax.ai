@@ -78,8 +78,24 @@ async def test_denied_views_keep_the_reason():
         return httpx.Response(200, json={"data": [{"id": "1", "description": "a"}]})
 
     async with _client(handler) as client:
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError) as failure:
             await facebook_meta.page_videos("55", "tok", client)
+
+    assert "read_insights" in str(failure.value) and "postar" not in str(failure.value)
+
+
+@pytest.mark.asyncio
+async def test_zero_from_the_list_stands_when_statistics_are_denied():
+    """A lista trouxe o campo (zerado) e as estatísticas foram negadas: é zero, não é erro."""
+    def handler(request):
+        if "video_insights" in request.url.path:
+            return httpx.Response(400, json={"error": {"message": "(#200) Requires read_insights permission", "code": 200}})
+        return httpx.Response(200, json={"data": [{"id": "1", "description": "a", "views": 0}, {"id": "2", "description": "b", "views": 0}]})
+
+    async with _client(handler) as client:
+        out = await facebook_meta.page_videos("55", "tok", client)
+
+    assert [v["views"] for v in out] == [0, 0]
 
 
 @pytest.mark.asyncio

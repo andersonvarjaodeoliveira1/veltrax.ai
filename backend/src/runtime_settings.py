@@ -33,6 +33,7 @@ RUNTIME_SETTING_KEYS: tuple[str, ...] = (
     "META_APP_ID",
     "META_APP_SECRET",
     "META_MESSAGING",
+    "META_INSIGHTS",
     "META_ADLIB_TOKEN",
 )
 

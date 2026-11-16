@@ -160,6 +160,7 @@ class Config:
         self.meta_app_id = self._get_runtime_setting("META_APP_ID")
         self.meta_app_secret = self._get_runtime_setting("META_APP_SECRET")
         self.meta_messaging = self._get_runtime_setting("META_MESSAGING")
+        self.meta_insights = self._get_runtime_setting("META_INSIGHTS")
         self.smtp_from = self._get_optional_env("SMTP_FROM") or (f"ClipGringa <{self.smtp_user}>" if self.smtp_user else None)
         self.aws_region = self._get_optional_env("AWS_REGION")
         self.aws_access_key_id = self._get_optional_env("AWS_ACCESS_KEY_ID")
@@ -234,6 +235,7 @@ class Config:
             "META_APP_ID": self.meta_app_id,
             "META_APP_SECRET": self.meta_app_secret,
             "META_MESSAGING": self.meta_messaging,
+            "META_INSIGHTS": self.meta_insights,
         }
 
     @staticmethod

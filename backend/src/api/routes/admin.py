@@ -124,6 +124,11 @@ SETTING_METADATA = {
         "description": "Escreva 1 só depois de adicionar a permissão pages_messaging no app da Meta. O login passa a pedir essa permissão.",
         "input_type": "text",
     },
+    "META_INSIGHTS": {
+        "label": "Visualizações de Reels na leitura da página (opcional)",
+        "description": "Escreva 1 só depois de adicionar a permissão read_insights no app da Meta. O login passa a pedir essa permissão e a leitura da página passa a contar as reproduções dos Reels.",
+        "input_type": "text",
+    },
     "META_ADLIB_TOKEN": {
         "label": "Token da Ad Library (ClipSpy)",
         "description": "Cole o token gerado no Explorador da Graph API, no mesmo app da Meta acima. O servidor troca por um de 60 dias e renova sozinho antes de vencer. Fica criptografado e nunca volta para a tela.",
