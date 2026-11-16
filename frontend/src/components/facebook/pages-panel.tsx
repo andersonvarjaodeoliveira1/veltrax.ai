@@ -370,6 +370,12 @@ function MetaDialog({ page, onClose, onDone }: { page: FbPage; onClose: () => vo
   const disconnect = async () => {
     try { await fb.disconnectMeta(page.id); toast.success("Desconectada"); onClose(); await onDone(); } catch (problem) { toast.error((problem as Error).message); }
   };
+  const [removing, setRemoving] = useState(false);
+  const remove = async () => {
+    setBusy(true);
+    try { await fb.removePage(page.id); toast.success("Página e dados excluídos do ClipGringa"); onClose(); await onDone(); }
+    catch (problem) { toast.error((problem as Error).message); } finally { setBusy(false); }
+  };
   return (
     <Modal open onClose={onClose} title={`Meta, ${page.name}`} description="Conectada, o ClipGringa agenda os vídeos direto no Facebook, no horário da agenda.">
       {status?.configured ? (
@@ -386,6 +392,19 @@ function MetaDialog({ page, onClose, onDone }: { page: FbPage; onClose: () => vo
         </div>
       </details>
       {page.meta_connected ? <div className="flex justify-end"><button type="button" className={secondary} onClick={() => void disconnect()}>Desconectar</button></div> : null}
+      <div className="border-t border-white/10 pt-3">
+        {removing ? (
+          <div className="space-y-2">
+            <p className="text-xs text-white/70">Isso apaga do ClipGringa o acesso, os posts programados, os comentários, as mensagens e as estatísticas desta página. Nada é apagado no Facebook. Não dá para desfazer.</p>
+            <div className="flex justify-end gap-2">
+              <button type="button" className={secondary} disabled={busy} onClick={() => setRemoving(false)}>Manter a página</button>
+              <button type="button" className={cn(secondary, "border-[#E5484D]/60 text-[#ff8f92]")} disabled={busy} onClick={() => void remove()}>{busy ? "Excluindo…" : `Excluir ${page.name}`}</button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" className="text-xs text-white/50 underline-offset-2 hover:text-white hover:underline" onClick={() => setRemoving(true)}>Excluir a página e os dados dela</button>
+        )}
+      </div>
       {setup ? <MetaSetupDialog onClose={() => setSetup(false)} /> : null}
     </Modal>
   );

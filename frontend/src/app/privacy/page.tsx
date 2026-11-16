@@ -5,8 +5,8 @@ import { ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HOSTED_APP_URL, getSiteUrl } from "@/lib/site";
 
-const LAST_UPDATED = "October 22, 2026";
-const CONTACT_EMAIL = "privacy@clipgringa.gringatools.com";
+const LAST_UPDATED = "November 16, 2026";
+const CONTACT_EMAIL = "contato@gringatools.com";
 
 export const metadata: Metadata = {
   title: "Privacy Policy | ClipGringa",
@@ -190,6 +190,34 @@ export default function PrivacyPolicyPage() {
               Flow tab you are using (Flow ignores simulated clicks), and the &ldquo;downloads&rdquo;
               permission is used only to name the videos you download (for example
               Video01_Cena01.mp4). Neither is used to read other sites or tabs.
+            </p>
+          </Section>
+
+          <Section title="Facebook Pages and Meta Data">
+            <p>
+              If you choose to connect a Facebook Page, you sign in with Facebook and Meta shares
+              with us your Facebook user ID and name, the list of Pages you manage, and an access
+              token for each Page you select. We use them only to do what you ask inside
+              ClipGringa: publish and schedule your posts, read your own Pages&apos; posts, videos
+              and their view counts so you can see which format is working, read the comments on
+              your posts to send the link you configured to people who comment a keyword you chose,
+              and, if you turn it on, answer messages sent to your Page.
+            </p>
+            <p>
+              For those automatic replies we store the comment or message text, its ID, and the
+              ID and name Facebook gives your Page for the person who wrote it, so nobody is
+              answered twice. ClipSpy searches Meta&apos;s public Ad Library; it stores public ad
+              information (the advertiser Page, the ad text and dates) and no personal data about
+              the people who saw those ads.
+            </p>
+            <p>
+              Access tokens are stored encrypted on our server and are never shown again in the
+              app or sent to your browser. We do not sell data received from Meta, do not use it
+              for advertising, and do not share it with anyone other than the service providers
+              that host ClipGringa. You can remove a Facebook sign-in or a Page at any time in the
+              Facebook area of the app, which deletes its token, comments, messages and statistics
+              from our server. Step-by-step instructions are on the{" "}
+              <Link className="text-foreground underline" href="/data-deletion">data deletion page</Link>.
             </p>
           </Section>
 

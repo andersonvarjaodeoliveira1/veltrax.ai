@@ -29,6 +29,14 @@ test("a página inicial abre para quem não entrou", async ({ page }) => {
   await expect(page.getByRole("link", { name: "Entrar", exact: true })).toHaveAttribute("href", "/sign-in");
 });
 
+test("as páginas que a Meta pede estão abertas ao público", async ({ page }) => {
+  await page.goto("/data-deletion");
+  await expect(page.getByRole("heading", { name: "Exclusão de dados" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Data deletion" })).toBeVisible();
+  await page.goto("/privacy");
+  await expect(page.getByRole("heading", { name: "Facebook Pages and Meta Data" })).toBeVisible();
+});
+
 test("a tela de login abre em português sem ser refeita pelo React", async ({ page }) => {
   // O tradutor trocava o texto antes de o React assumir a página; o React refazia a tela e apagava o que já estava digitado.
   const errors: string[] = [];

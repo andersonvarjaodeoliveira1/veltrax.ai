@@ -18,6 +18,7 @@ export function SiteFooter() {
           <Link href="/status" className={linkClassName}>Status do serviço</Link>
           <Link href="/privacy" className={linkClassName}>Privacidade</Link>
           <Link href="/terms" className={linkClassName}>Termos</Link>
+          <Link href="/data-deletion" className={linkClassName}>Exclusão de dados</Link>
         </nav>
         <p className="text-xs text-muted-foreground">&copy; {new Date().getFullYear()} ClipGringa</p>
       </div>
