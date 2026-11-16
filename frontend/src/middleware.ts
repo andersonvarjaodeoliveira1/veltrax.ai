@@ -23,7 +23,12 @@ function isPagePath(pathname: string) {
   return !pathname.startsWith("/api") && !pathname.startsWith("/_next") && !pathname.startsWith("/extensao") && !pathname.startsWith("/.well-known") && !PUBLIC_FILE.test(pathname);
 }
 
+// Textos legais são para qualquer um ler, inclusive os verificadores da Meta (que conferem a política de privacidade
+// e a exclusão de dados do app): nenhum agente é recusado nessas três páginas.
+const LEGAL_PAGES = /^\/(?:privacy|terms|data-deletion)\/?$/;
+
 export function isHostileRequest(pathname: string, userAgent: string | null): boolean {
+  if (LEGAL_PAGES.test(pathname)) return false;
   if (PROBE_PATHS.test(pathname) || BLOCKED_AGENTS.test(userAgent ?? "")) return true;
   if (isPagePath(pathname) && (!userAgent || SCRIPT_AGENTS.test(userAgent))) return true;
   return false;
