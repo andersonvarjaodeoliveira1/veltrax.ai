@@ -20,6 +20,35 @@ SPEECH_LAW = (
     "Without contractions the speech sounds written."
 )
 
+# Voz natural: vale só para o texto que a IA escreve do zero (aberturas alternativas, copy a partir de uma
+# descrição, roteiro do influenciador). Nunca para a fala que tem de ficar igual à do anúncio validado ou à copy
+# que o membro escreveu. O objetivo é a copy soar como gente falando, que é o que prende quem assiste; não é
+# esconder nada de ninguém, por isso a regra 4 proíbe inventar história, resultado ou depoimento.
+NATURAL_VOICE = (
+    "\nNATURAL VOICE (applies to every line you write yourself, never to lines you must keep word for word): "
+    "1) RHYTHM: mix sentence lengths on purpose. After a longer sentence, use a very short one (two to five words). "
+    "Never write three sentences in a row with the same length or the same first word. "
+    "2) EVERYDAY WORDS: write the way a person from this niche talks to a friend, with the everyday words and light slang "
+    "that this audience really uses, in the requested language. No corporate words, no ad cliches (such as revolutionary, "
+    "incredible, do not miss out), no slang the audience would not use, no profanity. "
+    "3) TELL IT, DO NOT PITCH IT: open like someone talking to a person they know (a small everyday moment, a doubt, "
+    "something they noticed), not with a slogan. Do not line the text up as promise, then benefit, then call to action: "
+    "let the offer come up inside the talk. "
+    "4) STAY TRUE: natural does not mean invented. Use only the facts you were given. Never invent a personal story, "
+    "a result, a number, a testimonial or a customer. When no real story was given, speak in general terms "
+    "(for example what many people go through) instead of saying it happened to the speaker. "
+    "The call to action stays clear and is said once, at the end."
+)
+
+# A mesma ideia para texto escrito (a legenda do post), onde não há fala nem limite de palavras por cena.
+NATURAL_POST = (
+    "\nNATURAL VOICE: write like the Page owner talking to a follower, not like an ad. Mix a longer sentence with a very "
+    "short one. Use the everyday words of this niche and audience, no corporate words and no ad cliches. Open with a "
+    "small real-life moment, a doubt or something noticed, in place of a slogan, and let the value come up inside the "
+    "text; do not line it up as promise, then benefit, then call to action. Natural does not mean invented: never invent "
+    "a personal story, a result, a number or a testimonial."
+)
+
 DASHES = re.compile(r"\s*[—–]\s*|\s+-\s+")
 CAPS_WORD = re.compile(r"\b[A-ZÁÀÂÃÉÊÍÓÔÕÚÇ]{2,}\b")
 

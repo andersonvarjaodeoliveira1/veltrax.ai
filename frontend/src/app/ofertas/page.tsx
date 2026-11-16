@@ -3,9 +3,11 @@
 import { Tag, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "@/components/app/page-header";
-import { EMPTY_OFFER, listOffers, removeOffer, saveOffer, type Offer, type OfferDraft } from "@/lib/offers";
+import { EMPTY_OFFER, checkCoherence, coherenceNotice, listOffers, removeOffer, saveOffer, type CoherenceNotice, type Offer, type OfferDraft } from "@/lib/offers";
 
 const LANGUAGES: Array<[string, string]> = [["pt-BR", "Português"], ["en", "Inglês"], ["es", "Espanhol"], ["fr", "Francês"], ["de", "Alemão"], ["it", "Italiano"]];
+// Situação sempre com a palavra ao lado da cor.
+const TONE: Record<CoherenceNotice["tone"], string> = { good: "text-[#4CC38A]", warn: "text-[#F5B454]", bad: "text-[#E5484D]", neutral: "text-white/70" };
 const field = "block w-full rounded-[12px] border border-white/15 bg-black/30 px-3 py-2.5 text-sm text-white placeholder:text-white/40 focus:border-violet-400 focus:outline-none";
 
 export default function OffersPage() {
@@ -14,14 +16,29 @@ export default function OffersPage() {
   const [editing, setEditing] = useState<string | undefined>();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [notice, setNotice] = useState<CoherenceNotice | null>(null);
 
   const load = useCallback(async () => {
     try { setOffers(await listOffers()); setError(""); } catch (problem) { setError((problem as Error).message); setOffers([]); }
   }, []);
   useEffect(() => { void load(); }, [load]);
 
-  const set = (patch: Partial<OfferDraft>) => setDraft((current) => ({ ...current, ...patch }));
-  const reset = () => { setDraft(EMPTY_OFFER); setEditing(undefined); };
+  const set = (patch: Partial<OfferDraft>) => {
+    setDraft((current) => ({ ...current, ...patch }));
+    // O resultado vale para o texto conferido: mudou produto, copy ou mensagem, some.
+    if ("product" in patch || "approved_copy" in patch || "dm_message" in patch) setNotice(null);
+  };
+  const reset = () => { setDraft(EMPTY_OFFER); setEditing(undefined); setNotice(null); };
+
+  /** Abre o link da mensagem e compara o título da página com o produto e a copy. Só avisa; não impede de salvar. */
+  const check = async () => {
+    setChecking(true);
+    setNotice(null);
+    try { setNotice(coherenceNotice(await checkCoherence(draft))); }
+    catch (problem) { setNotice({ tone: "bad", label: "Não conferido", text: (problem as Error).message, details: [] }); }
+    finally { setChecking(false); }
+  };
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -32,6 +49,7 @@ export default function OffersPage() {
 
   const edit = (offer: Offer) => {
     setEditing(offer.id);
+    setNotice(null);
     setDraft({ name: offer.name, product: offer.product, keyword: offer.keyword, language: offer.language, approved_copy: offer.approved_copy, notes: offer.notes, reference_url: offer.reference_url, dm_message: offer.dm_message ?? "" });
     window.scrollTo?.({ top: 0, behavior: "smooth" });
   };
@@ -60,6 +78,18 @@ export default function OffersPage() {
         <label className="block space-y-1.5"><span className="text-xs font-medium text-white/80">Mensagem privada para quem comentar a palavra (opcional)</span>
           <textarea className={`${field} min-h-20`} value={draft.dm_message ?? ""} maxLength={900} onChange={(e) => set({ dm_message: e.target.value })} placeholder="Ex.: Oi! Aqui está o link que você pediu: https://…" />
           <span className="block text-xs text-white/50">A Página envia uma vez, só para comentário novo, nas páginas conectadas pelo Entrar com o Facebook. Deixe vazio para não enviar.</span></label>
+        <div className="space-y-2">
+          <button type="button" onClick={check} disabled={checking || !(draft.dm_message ?? "").trim() || !(draft.product.trim() || draft.approved_copy.trim())} className="min-h-10 rounded-[6px] border border-white/20 px-4 py-2 text-sm text-white disabled:opacity-50">
+            {checking ? "Conferindo…" : "Conferir a página do link"}
+          </button>
+          <p className="text-xs text-white/50">Abre o link da mensagem e compara o título da página com o produto e a copy. É só um aviso: não impede de salvar.</p>
+          {notice ? (
+            <div role="status" className="space-y-1 rounded-[12px] bg-white/5 p-3 text-sm">
+              <p className="text-white"><span className={`font-semibold ${TONE[notice.tone]}`}>{notice.label}.</span> {notice.text}</p>
+              {notice.details.map((line) => <p key={line} className="break-words text-xs text-white/60">{line}</p>)}
+            </div>
+          ) : null}
+        </div>
         <label className="block space-y-1.5"><span className="text-xs font-medium text-white/80">Copy aprovada (o que é dito no vídeo)</span>
           <textarea className={`${field} min-h-32`} value={draft.approved_copy} maxLength={6000} onChange={(e) => set({ approved_copy: e.target.value })} placeholder="Cole a copy que já funcionou. O assistente usa como base." /></label>
         <label className="block space-y-1.5"><span className="text-xs font-medium text-white/80">Link da referência (opcional)</span>

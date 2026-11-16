@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...config import get_config
-from ...speech_law import SPEECH_LAW, apply_speech_law, enforce_dialogue
+from ...speech_law import NATURAL_POST, NATURAL_VOICE, SPEECH_LAW, apply_speech_law, enforce_dialogue
 from ...database import get_db
 from .multiplier import _check_script_rate, _clip, _user_id
 
@@ -77,7 +77,7 @@ Keep the same offer, mechanism and promise; only change the way it is said. Writ
 Return:
 - hooks: N alternative openings (scene 1), each at most 18 words, each with a different angle (curiosity, problem, bold claim, question...).
 - bodies: N alternative middles (scene 2), each at most 18 words, same mechanism, different wording or example.
-- ctas: N alternative closings (scene 3), each at most 20 words, each asking to comment the keyword. Each CTA MUST contain the literal text {{KEYWORD}}, exactly once.
+- ctas: N alternative closings (scene 3), each at most 20 words, each asking to comment the keyword. Each CTA MUST contain the literal text {{KEYWORD}}, exactly once.{NATURAL_VOICE}
 {SAFETY}"""
 
 VARIATIONS_SYSTEM = f"""You plan N variations of the same video. The message and the spoken lines stay EXACTLY the same in all variations: only who presents it and how it is shown change.
@@ -438,7 +438,7 @@ def _changes_block(ctx: dict[str, Any]) -> str:
     if ctx.get("copy_brief"):
         own += ("COPY FROM A DESCRIPTION: the reference is NOT a script. It is the member's own description of what they sell and to whom. Capture the product, "
                 "the audience and the promise from it, then write original spoken copy yourself (hook, body and the final call to action) in the requested language, "
-                "split across the takes, about 20 words per take. Never mention that it came from a description.\n\n")
+                "split across the takes, about 20 words per take. Never mention that it came from a description." + NATURAL_VOICE + "\n\n")
     if not text:
         return own.rstrip()
     return own + ("CHANGES REQUESTED BY THE MEMBER (highest priority, apply them to everything you write: scene, person, setting, wording and prompts; "
@@ -1532,6 +1532,7 @@ INFLUENCER_BRIEF_SYSTEM = (
     "If the answers list is empty and the request is truly ambiguous about something that changes the video (what is sold, image or video, tone), "
     "ask at most 3 short questions, each with exactly 3 options; otherwise return no questions. If answers are given, never ask again: use them. "
     "Never invent prices, discounts, studies, medical or income claims."
+    + NATURAL_VOICE
 )
 
 
@@ -1989,8 +1990,8 @@ class _Caption(BaseModel):
 
 
 CAPTION_SYSTEM = f"""You are a direct-response copywriter writing the text of a Facebook Page video post.
-Write: a first line that stops the scroll (curiosity, problem or result), then 2 to 4 short lines that explain the value in simple words, then one clear call to action.
-Use at most 3 emojis, short paragraphs, no jargon. Use only facts that appear in the video text or title: never invent results, numbers, prices or guarantees.
+Write: a first line that makes the person stop and read, then 2 to 4 short lines in simple words, then one clear call to action as the last line.
+Use at most 3 emojis, short paragraphs, no jargon. Use only facts that appear in the video text or title: never invent results, numbers, prices or guarantees.{NATURAL_POST}
 {SAFETY}"""
 
 

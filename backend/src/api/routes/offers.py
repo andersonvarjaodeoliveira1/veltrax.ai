@@ -31,6 +31,22 @@ FIELDS = {
 COLUMNS = ", ".join(["id", *FIELDS, "created_at", "updated_at"])
 
 
+COHERENCE_CHECKS_PER_HOUR = 30
+_coherence_calls: dict[str, list[float]] = {}
+
+
+def _check_coherence_rate(user_id: str) -> None:
+    """Cada conferência abre uma página de fora: limite por conta, separado do limite da IA."""
+    import time
+
+    now = time.time()
+    recent = [stamp for stamp in _coherence_calls.get(user_id, []) if now - stamp < 3600]
+    if len(recent) >= COHERENCE_CHECKS_PER_HOUR:
+        raise HTTPException(status_code=429, detail="Muitas conferências seguidas. Tente de novo daqui a pouco.")
+    recent.append(now)
+    _coherence_calls[user_id] = recent
+
+
 def _clean(data: Any) -> dict[str, str]:
     if not isinstance(data, dict):
         raise HTTPException(status_code=400, detail="Corpo inválido")
@@ -76,6 +92,24 @@ async def create_offer(request: Request, db: AsyncSession = Depends(get_db)):
     )
     await db.commit()
     return {"id": offer_id}
+
+
+@router.post("/coherence")
+async def offer_coherence(request: Request, db: AsyncSession = Depends(get_db)):
+    """Confere se a página do link da mensagem fala do mesmo assunto do anúncio. Só avisa; não salva nem bloqueia."""
+    user_id = await _user_id(request, db)
+    data = await request.json()
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=400, detail="Corpo inválido")
+    product = str(data.get("product") or "").strip()[: FIELDS["product"]]
+    copy = str(data.get("approved_copy") or "").strip()[: FIELDS["approved_copy"]]
+    message = str(data.get("dm_message") or "").strip()[: FIELDS["dm_message"]]
+    if not (product or copy):
+        raise HTTPException(status_code=400, detail="Preencha o produto ou a copy para comparar com a página")
+    from ...landing_check import check
+
+    _check_coherence_rate(user_id)
+    return await check(product, copy, message)
 
 
 @router.put("/{offer_id}")

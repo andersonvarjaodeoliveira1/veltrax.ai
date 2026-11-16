@@ -51,3 +51,42 @@ def test_list_offers_awaits_the_user_and_scopes_the_query(monkeypatch):
     result = asyncio.run(offers.list_offers(object(), FakeDb()))
     assert result == {"offers": []}
     assert seen["u"] == "user-1"
+
+
+def test_coherence_route_is_registered_and_limited_per_account(monkeypatch):
+    paths = {(m, r.path) for r in offers.router.routes for m in r.methods}
+    assert ("POST", "/multiplier/offers/coherence") in paths
+    monkeypatch.setattr(offers, "_coherence_calls", {})
+    for _ in range(offers.COHERENCE_CHECKS_PER_HOUR):
+        offers._check_coherence_rate("user-1")
+    with pytest.raises(HTTPException) as err:
+        offers._check_coherence_rate("user-1")
+    assert err.value.status_code == 429
+    offers._check_coherence_rate("user-2")  # o limite é por conta
+
+
+def test_coherence_checks_the_link_of_the_message_without_saving(monkeypatch):
+    async def fake_user(request, db):
+        return "user-1"
+
+    async def fake_check(product, copy, message):
+        return {"level": "alinhado", "url": "https://loja.exemplo.com", "seen": [product, copy, message]}
+
+    class FakeRequest:
+        async def json(self):
+            return {"product": " Lençol ", "approved_copy": "Troquei o lençol.", "dm_message": "Aqui: https://loja.exemplo.com"}
+
+    class EmptyRequest:
+        async def json(self):
+            return {"dm_message": "https://loja.exemplo.com"}
+
+    import src.landing_check as landing_check
+
+    monkeypatch.setattr(offers, "_user_id", fake_user)
+    monkeypatch.setattr(offers, "_coherence_calls", {})
+    monkeypatch.setattr(landing_check, "check", fake_check)
+    out = asyncio.run(offers.offer_coherence(FakeRequest(), db=None))  # db=None: a rota não toca no banco
+    assert out["level"] == "alinhado" and out["seen"] == ["Lençol", "Troquei o lençol.", "Aqui: https://loja.exemplo.com"]
+    with pytest.raises(HTTPException) as err:
+        asyncio.run(offers.offer_coherence(EmptyRequest(), db=None))
+    assert err.value.status_code == 400
