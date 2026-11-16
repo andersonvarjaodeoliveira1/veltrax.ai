@@ -46,7 +46,7 @@ def parse_page_ref(value: Any) -> dict[str, str]:
         raise ValueError("Escreva o nome da página ou cole o endereço dela")
     if len(text) > 300:
         raise ValueError("Endereço longo demais. Cole só o endereço da página")
-    looks_like_link = "://" in text or re.match(r"^(www\.|m\.)?(facebook|fb)\.(com|me)/", text, re.I)
+    looks_like_link = "://" in text or re.match(r"^(www\.|m\.)?(facebook|fb)\.(com|me)/", text, re.IGNORECASE)
     if looks_like_link:
         parsed = urlparse(text if "://" in text else f"https://{text}")
         host = re.sub(r"^(www|m|web|mbasic|business)\.", "", parsed.netloc.lower())

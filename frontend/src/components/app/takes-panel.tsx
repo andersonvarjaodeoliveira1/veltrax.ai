@@ -4,8 +4,9 @@
 // une tudo num arquivo final e abre um popup para baixar agora ou depois.
 // Também deixa revisar/editar a headline de cada take e agendar na página escolhida.
 import { Download, Loader2, Scissors, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FacebookTarget } from "@/lib/facebook-target";
+import { readRecipe, type StoredRecipe } from "@/lib/winner-recipe";
 
 type Take = {
   id: string;
@@ -13,6 +14,8 @@ type Take = {
   hook_title: string | null;
   duration: number;
   score: number;
+  // só vem quando os takes foram escolhidos com a receita de um vencedor
+  in_recipe?: boolean;
 };
 
 type Phase = "idle" | "generating" | "merging";
@@ -26,6 +29,11 @@ export function TakesPanel({ finalId, target }: { finalId: string; target: Faceb
   const [scheduling, setScheduling] = useState(false);
   const [scheduled, setScheduled] = useState(false);
   const [error, setError] = useState("");
+  // Receita do vencedor modelado no ClipSpy (fica guardada por 24h): pesa na escolha dos takes.
+  const [recipe, setRecipe] = useState<StoredRecipe | null>(null);
+  const [followRecipe, setFollowRecipe] = useState(true);
+  useEffect(() => { setRecipe(readRecipe()); }, []);
+  const guided = !!recipe && followRecipe;
 
   const mergeFileUrl = `/api/multiplier/final/${finalId}/takes/merge/file?download=1`;
 
@@ -37,7 +45,9 @@ export function TakesPanel({ finalId, target }: { finalId: string; target: Faceb
     setScheduled(false);
     setMerged(false);
     try {
-      const res = await fetch(`/api/multiplier/final/${finalId}/takes`, { method: "POST" });
+      const res = await fetch(`/api/multiplier/final/${finalId}/takes`, guided
+        ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ recipe: { beats: recipe.recipe.beats } }) }
+        : { method: "POST" });
       const data = (await res.json().catch(() => ({}))) as { takes?: Take[]; detail?: string };
       if (!res.ok) throw new Error(data.detail || "Não consegui gerar os takes");
       const list = data.takes ?? [];
@@ -125,6 +135,12 @@ export function TakesPanel({ finalId, target }: { finalId: string; target: Faceb
           {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Scissors className="size-3.5" />}
           {busy ? busyLabel : "Gerar takes inteligentes"}
         </button>
+        {recipe ? (
+          <label className="flex items-start gap-2 text-xs text-white/70">
+            <input type="checkbox" className="mt-0.5" checked={followRecipe} disabled={busy} onChange={(e) => setFollowRecipe(e.target.checked)} />
+            <span>Seguir o formato do vencedor{recipe.advertiser ? ` (${recipe.advertiser})` : ""}: entre dois trechos parecidos, fica o que cai nas partes fortes dele.</span>
+          </label>
+        ) : null}
         {error && <p role="alert" className="text-xs text-[#F0466B]">{error}</p>}
       </div>
     );
@@ -149,6 +165,7 @@ export function TakesPanel({ finalId, target }: { finalId: string; target: Faceb
             aria-label={`Headline do take ${i + 1}`}
             className="min-w-0 flex-1 rounded-md bg-white/5 px-3 py-1.5 text-sm outline-none ring-1 ring-white/10"
           />
+          {take.in_recipe ? <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[11px] text-white/80">No formato do vencedor</span> : null}
           <span className="shrink-0 text-xs text-white/50">{Math.round(take.duration)}s</span>
         </div>
       ))}
