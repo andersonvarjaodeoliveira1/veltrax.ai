@@ -3,7 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { HOSTED_APP_URL, getSiteUrl } from "@/lib/site";
+import { HOSTED_APP_URL, OPERATOR_NAME, getSiteUrl } from "@/lib/site";
 
 const LAST_UPDATED = "November 16, 2026";
 const CONTACT_EMAIL = "contato@gringatools.com";
@@ -81,7 +81,7 @@ export default function PrivacyPolicyPage() {
               This Privacy Policy explains how ClipGringa (&ldquo;ClipGringa,&rdquo; &ldquo;we,&rdquo;
               &ldquo;us&rdquo;) collects, uses, shares, and protects information when you use the
               ClipGringa apps and hosted service (the &ldquo;Service&rdquo;), which turn long-form
-              videos into short, captioned clips.
+              videos into short, captioned clips. The Service is operated by {OPERATOR_NAME}.
             </p>
             <p>
               ClipGringa is also available as open-source software you can self-host. If you use a
