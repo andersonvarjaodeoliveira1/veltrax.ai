@@ -7,6 +7,9 @@ def test_voice_rules_say_what_matters():
         assert part in NATURAL_VOICE
     # Natural não é inventado: a regra proíbe história, resultado e depoimento que não foram dados.
     assert "Never invent a personal story, a result, a number, a testimonial or a customer" in NATURAL_VOICE
+    # Visto no primeiro teste no ar: a descrição dizia "algodão" e a copy saiu com "puro algodão".
+    assert "Never add a quality of the product that was not given" in NATURAL_VOICE
+    assert "never add a quality of the product that was not given" in NATURAL_POST
     assert "never to lines you must keep word for word" in NATURAL_VOICE
     assert "never invent" in NATURAL_POST
     # Os prompts usam f-string e replace("{LANG}"): o texto não pode ter chaves.
