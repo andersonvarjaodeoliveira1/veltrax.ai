@@ -2,7 +2,8 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TestBanner } from "./test-banner";
 
-afterEach(() => vi.unstubAllGlobals());
+// O aviso guarda a data na sessão: sem limpar, o teste seguinte nasce com o aviso do anterior.
+afterEach(() => { vi.unstubAllGlobals(); window.sessionStorage.clear(); });
 
 describe("TestBanner", () => {
   it("mostra a validade e o WhatsApp nas contas de teste", async () => {
@@ -17,6 +18,6 @@ describe("TestBanner", () => {
     vi.stubGlobal("fetch", f);
     const { container } = render(<TestBanner enabled />);
     await waitFor(() => expect(f).toHaveBeenCalled(), { timeout: 5000 });
-    expect(container).toBeEmptyDOMElement();
+    await waitFor(() => expect(container).toBeEmptyDOMElement(), { timeout: 5000 });
   });
 });
