@@ -122,6 +122,17 @@ class TaskService(ClipEditingMixin):
         return (now - updated_at).total_seconds()
 
     @staticmethod
+    def _remove_clip_files(clip_info: Optional[Dict[str, Any]]) -> None:
+        """Apaga do disco um corte renderizado que não chegou a ser publicado (o vídeo e o mapa de origem)."""
+        if not clip_info or not clip_info.get("path"):
+            return
+        try:
+            Path(clip_info["path"]).unlink(missing_ok=True)
+            Path(clip_info["path"]).with_suffix(".source_map.json").unlink(missing_ok=True)
+        except OSError:
+            logger.warning("Could not remove unfinished clip %s", clip_info["path"])
+
+    @staticmethod
     def _cleanup_source_video(
         video_path: Optional[Path], source_type: str, url: str
     ) -> None:
@@ -378,9 +389,15 @@ class TaskService(ClipEditingMixin):
                 render_concurrency = 2
             render_gate = asyncio.Semaphore(max(1, min(3, render_concurrency)))
 
+            def _discard_abandoned_render(render: "asyncio.Future[Any]") -> None:
+                """Apaga o corte de uma renderização que terminou depois de a tarefa ter sido encerrada."""
+                if render.cancelled() or render.exception() is not None:
+                    return
+                self._remove_clip_files(render.result())
+
             async def _render_clip(index: int, item: Dict[str, Any]):
                 async with render_gate:
-                    return await self.video_service.create_single_clip(
+                    render = asyncio.ensure_future(self.video_service.create_single_clip(
                         video_path,
                         item,
                         index,
@@ -392,7 +409,14 @@ class TaskService(ClipEditingMixin):
                         output_format,
                         add_subtitles,
                         normalized_cleanup_settings,
-                    )
+                    ))
+                    try:
+                        return await asyncio.shield(render)
+                    except asyncio.CancelledError:
+                        # O ffmpeg roda em outra thread e não para no meio. Se a tarefa foi cancelada ou falhou
+                        # com este corte em andamento, ele termina sozinho e o arquivo é apagado na hora.
+                        render.add_done_callback(_discard_abandoned_render)
+                        raise
 
             render_tasks = [
                 asyncio.create_task(_render_clip(idx, item))
@@ -519,13 +543,7 @@ class TaskService(ClipEditingMixin):
                 if not render_task.done():
                     render_task.cancel()
                 elif not render_task.cancelled() and render_task.exception() is None:
-                    unused = render_task.result()
-                    if unused and unused.get("path"):
-                        try:
-                            Path(unused["path"]).unlink(missing_ok=True)
-                            Path(unused["path"]).with_suffix(".source_map.json").unlink(missing_ok=True)
-                        except OSError:
-                            pass
+                    self._remove_clip_files(render_task.result())
             if pending_clip_path and pending_clip_path != video_path:
                 try:
                     if pending_clip_path.resolve().is_relative_to(clips_output_dir.resolve()):

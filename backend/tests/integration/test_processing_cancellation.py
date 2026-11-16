@@ -70,9 +70,69 @@ async def test_cancel_during_final_render_keeps_cancelled_and_removes_unpublishe
     assert current["status"] == "cancelled"
     assert list(current["generated_clips_ids"]) == []
     assert await ClipRepository.get_clips_by_task(db_session, task_id) == []
+    await wait_until_gone(clip_path)
     assert not clip_path.exists()
     assert not clip_path.with_suffix(".source_map.json").exists()
     assert original.exists()
+
+
+async def wait_until_gone(path, seconds=2.0):
+    """A renderização abandonada termina sozinha e o arquivo dela some logo depois: espera esse instante."""
+    for _ in range(int(seconds / 0.02)):
+        if not path.exists():
+            return
+        await asyncio.sleep(0.02)
+
+
+@pytest.mark.asyncio
+async def test_cancel_before_the_render_is_awaited_still_removes_its_clip(
+    db_session, initialized_database, tmp_path
+):
+    """O cancelamento chega enquanto o progresso do corte é gravado, com a renderização já rodando.
+
+    A renderização roda em outra thread e não para no meio: ela termina e deixa o arquivo.
+    Esse arquivo não pode ficar no disco.
+    """
+    task_id, _, original = await make_task(db_session, tmp_path, status="queued")
+    sessions = async_sessionmaker(initialized_database, expire_on_commit=False)
+    entered, release, progress_reached, progress_go = (asyncio.Event() for _ in range(4))
+
+    async with sessions() as worker, sessions() as api:
+        service, clip_path, clip_info = setup_worker(worker, tmp_path, original)
+
+        async def render(*_args):
+            entered.set()
+            await release.wait()
+            return clip_info
+
+        real_update = service.task_repo.update_task_status
+
+        async def held_update(db, tid, status, **kwargs):
+            if "Creating clip" in str(kwargs.get("progress_message") or ""):
+                progress_reached.set()
+                await progress_go.wait()
+            return await real_update(db, tid, status, **kwargs)
+
+        service.video_service.create_single_clip = render
+        service.task_repo.update_task_status = held_update
+        ready = AsyncMock()
+        job = asyncio.create_task(service.process_task(
+            task_id, "upload://input.mp4", "upload", clip_ready_callback=ready,
+        ))
+        await asyncio.wait_for(progress_reached.wait(), 3)
+        await asyncio.wait_for(entered.wait(), 3)
+        await TaskRepository.update_task_status(api, task_id, "cancelled")
+        progress_go.set()
+        with pytest.raises(Exception, match="Task cancelled"):
+            await asyncio.wait_for(job, 3)
+        release.set()  # a renderização termina depois de a tarefa já ter sido encerrada
+        await wait_until_gone(clip_path)
+        ready.assert_not_awaited()
+
+    assert not clip_path.exists()
+    assert not clip_path.with_suffix(".source_map.json").exists()
+    assert original.exists()
+    assert (await TaskRepository.get_task_by_id(db_session, task_id))["status"] == "cancelled"
 
 
 @pytest.mark.asyncio
