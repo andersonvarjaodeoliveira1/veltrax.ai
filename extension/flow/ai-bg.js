@@ -26,7 +26,7 @@ async function aiSendToTab(tabId, message) {
     if (resp) return resp;
     if (i === 6 && !injected) {
       injected = true;
-      try { await chrome.scripting.executeScript({ target: { tabId }, files: ["ai.js"] }); } catch (_e) { /* sem permissão para esta aba */ }
+      try { await chrome.scripting.executeScript({ target: { tabId }, files: ["ai-read.js", "ai.js"] }); } catch (_e) { /* sem permissão para esta aba */ }
     }
     await aiWait(500);
   }

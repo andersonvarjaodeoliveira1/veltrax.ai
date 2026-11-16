@@ -13,7 +13,7 @@
     gemini: {
       composer: ['rich-textarea .ql-editor', 'div.ql-editor[contenteditable="true"]', 'div[contenteditable="true"][role="textbox"]', 'textarea'],
       send: ['button.send-button', 'button[aria-label*="Enviar"]', 'button[aria-label*="Send message"]', 'button[aria-label*="Send"]'],
-      stop: ['button[aria-label*="Parar"]', 'button[aria-label*="Stop"]', 'button.send-button.stop', '.stop-icon'],
+      stop: ['button[aria-label*="Parar"]', 'button[aria-label*="Stop"]', 'button[aria-label*="Interromper"]', 'button.send-button.stop', '.stop-icon', 'mat-icon[fonticon="stop"]', 'mat-icon[data-mat-icon-name="stop"]'],
       reply: ['model-response message-content', 'message-content .markdown', '.model-response-text', 'model-response'],
       login: ['a[href*="accounts.google.com/ServiceLogin"]', 'a[href*="accounts.google.com/signin"]'],
     },
@@ -193,18 +193,22 @@
     let started = false;
     let lastText = "";
     let stableSince = 0;
+    let sawGenerating = false;
     while (Date.now() < deadline) {
       await sleep(700);
       if (challenge()) return { ok: false, error: "blocked" };
       const generating = !!first(SEL.stop);
+      if (generating) sawGenerating = true;
       if (generating || replyCount() > before || afterPrompt(prompt).length > 0) started = true;
       let text = lastReply();
       if (!text || replyCount() <= before) text = started ? afterPrompt(prompt) : "";
       if (!started) continue;
       if (text !== lastText) { lastText = text; stableSince = Date.now(); continue; }
-      if (!generating && text && Date.now() - stableSince > 2200) return { ok: true, text };
+      // Só entrega quando a resposta terminou de verdade: sem o rótulo do site no lugar da resposta e sem JSON pela metade.
+      const done = clipgringaReplyDone(prompt, text, Date.now() - stableSince, generating, sawGenerating);
+      if (done) return { ok: true, text: done };
     }
-    return { ok: false, error: lastText ? "timeout:resposta incompleta" : "timeout" };
+    return { ok: false, error: clipgringaCleanReply(lastText) ? "timeout:resposta incompleta" : "timeout" };
   }
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
