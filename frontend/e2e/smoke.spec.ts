@@ -1,27 +1,8 @@
-import fs from "fs";
-import path from "path";
+import { expect, test } from "@playwright/test";
 
-import { expect, test, type Page } from "@playwright/test";
+import { seed, signIn } from "./helpers";
 
 // Conferência rápida das telas de hoje, em português, com as contas criadas pelo global-setup.
-const seed = JSON.parse(fs.readFileSync(path.join(process.cwd(), "e2e", ".seed.json"), "utf8"));
-
-async function signIn(page: Page, email: string, password: string) {
-  await page.goto("/sign-in");
-  const emailBox = page.getByPlaceholder("E-mail");
-  const passwordBox = page.getByPlaceholder("Senha");
-  // A tela de login é remontada logo depois de abrir (o tradutor troca o texto antes de o React assumir a página)
-  // e apaga o que já foi digitado. Por isso confere os dois campos antes de enviar.
-  await expect(async () => {
-    await emailBox.fill(email);
-    await passwordBox.fill(password);
-    await page.waitForTimeout(1500);
-    await expect(emailBox).toHaveValue(email, { timeout: 500 });
-    await expect(passwordBox).toHaveValue(password, { timeout: 500 });
-  }).toPass({ timeout: 30_000 });
-  await page.getByRole("button", { name: "Entrar", exact: true }).click();
-  await page.waitForURL((url) => !url.pathname.startsWith("/sign-in"));
-}
 
 test("a página inicial abre para quem não entrou", async ({ page }) => {
   await page.goto("/");

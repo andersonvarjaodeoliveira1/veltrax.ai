@@ -15,12 +15,9 @@ const backendBaseUrl = `http://127.0.0.1:${backendPort}`;
 
 export default defineConfig({
   testDir: "./e2e",
-  // Só o smoke roda no CI. Os outros arquivos descrevem as telas antigas, em inglês (saudação, planos, avisos),
-  // e ficam parados até serem reescritos para as telas de hoje.
-  testIgnore: [
-    "polish.spec.ts", "editor-studio.spec.ts", "local-workflow.spec.ts",
-    "app.spec.ts", "announcements.spec.ts", "generation-status.spec.ts", "upgrade-prompts.spec.ts",
-  ],
+  // Rodam o smoke e as telas de hoje. Os arquivos abaixo descrevem telas antigas, em inglês (editor de cortes,
+  // convites de plano, processamento real com link do YouTube), e ficam parados até serem reescritos.
+  testIgnore: ["polish.spec.ts", "editor-studio.spec.ts", "local-workflow.spec.ts", "upgrade-prompts.spec.ts"],
   fullyParallel: false,
   retries: 0,
   reporter: [["list"], ["html", { open: "never" }]],
@@ -32,7 +29,13 @@ export default defineConfig({
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
-    launchOptions: { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH },
+    launchOptions: {
+      executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
+      // O site bloqueia a conta depois de dois avisos de "navegador automatizado" (proteção contra cópia), e é isso
+      // que um navegador de teste é. Aqui ele se apresenta como um Chrome comum, senão a conta de teste é bloqueada
+      // no meio da rodada. A proteção em si é conferida em security-watch.test.tsx.
+      args: ["--disable-blink-features=AutomationControlled"],
+    },
   },
   webServer: [
     {
