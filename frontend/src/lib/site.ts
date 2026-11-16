@@ -14,3 +14,6 @@ export function getSiteUrl() {
 
 /** Nome exibido no painel (instalação de conta única). */
 export const DISPLAY_NAME = "GRINGATOOLS";
+
+/** Razão social da empresa que opera o serviço hospedado (aparece nos textos legais e precisa bater com o cadastro na Meta). */
+export const OPERATOR_NAME = "VISION VITAS NEGOCIOS DIGITAIS LTDA";

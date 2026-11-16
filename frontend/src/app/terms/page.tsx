@@ -3,9 +3,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { HOSTED_APP_URL, getSiteUrl } from "@/lib/site";
+import { HOSTED_APP_URL, OPERATOR_NAME, getSiteUrl } from "@/lib/site";
 
-const LAST_UPDATED = "July 2, 2026";
+const LAST_UPDATED = "November 16, 2026";
 const CONTACT_EMAIL = "contato@gringatools.com";
 
 export const metadata: Metadata = {
@@ -81,7 +81,7 @@ export default function TermsOfServicePage() {
               These Terms of Service (&ldquo;Terms&rdquo;) govern your use of the ClipGringa apps and
               hosted service (the &ldquo;Service&rdquo;), which turn long-form videos into short,
               captioned clips. By creating an account or using the Service you agree to these Terms.
-              If you do not agree, do not use the Service.
+              If you do not agree, do not use the Service. The Service is operated by {OPERATOR_NAME}.
             </p>
             <p>
               ClipGringa is also available as open-source software you can self-host. These Terms

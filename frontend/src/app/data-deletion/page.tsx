@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { getSiteUrl } from "@/lib/site";
+import { OPERATOR_NAME, getSiteUrl } from "@/lib/site";
 
 const CONTACT_EMAIL = "contato@gringatools.com";
 
@@ -65,6 +65,7 @@ export default function DataDeletionPage() {
 
           <Block title="Pedir por e-mail">
             <p>Se você não consegue entrar, ou comentou ou escreveu para uma página que usa o ClipGringa e quer que o seu comentário ou mensagem seja apagado, escreva para {mail} dizendo qual é a conta ou a página. Apagamos em até 30 dias e avisamos quando terminar.</p>
+            <p>O ClipGringa é operado por {OPERATOR_NAME}.</p>
           </Block>
         </div>
 
@@ -91,6 +92,7 @@ export default function DataDeletionPage() {
 
           <Block title="Request by e-mail">
             <p>If you cannot sign in, or you commented on or messaged a Page that uses ClipGringa and want your comment or message deleted, write to {mail} and tell us which account or Page. We delete it within 30 days and confirm when it is done.</p>
+            <p>ClipGringa is operated by {OPERATOR_NAME}.</p>
           </Block>
         </div>
 
