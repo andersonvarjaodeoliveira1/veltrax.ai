@@ -3,13 +3,15 @@
 // ClipSpy — radar de criativos vencedores. Pesquisa anúncios ativos na Meta Ad Library
 // por termo (os que estão rodando há mais tempo = prováveis vencedores) e guarda os
 // escolhidos numa biblioteca interna para modelar depois na criação de vídeos.
-import { Archive, Bookmark, ExternalLink, KeyRound, Loader2, RefreshCw, Search, Star, Wand2 } from "lucide-react";
+import { Archive, Bookmark, Copy, Download, ExternalLink, KeyRound, Loader2, RefreshCw, Search, Star, Wand2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { clipspy, type AdLibAccess, type Creative } from "@/lib/clipspy";
 import { saveRecipe } from "@/lib/winner-recipe";
 import { ReferenceForm } from "./clipspy-reference-form";
 import { PageAnalysisView } from "./clipspy-page-analysis";
+import { ReviewerGuide } from "./clipspy-reviewer-guide";
+import { downloadCsv, exportFileName, referencesCsv, referencesSummary } from "@/lib/clipspy-export";
 
 // A Ad Library devolve um registro por anúncio, e o mesmo criativo costuma rodar
 // em vários. Mostra um card por anunciante+texto (o primeiro, que roda há mais tempo).
@@ -219,12 +221,15 @@ export function ClipSpyPanel() {
   // Validade do acesso; o servidor só manda para o administrador.
   const [access, setAccess] = useState<AdLibAccess | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
+  // Conta de demonstração do revisor da Meta: mostra o passo a passo em inglês.
+  const [reviewer, setReviewer] = useState(false);
 
   const checkStatus = useCallback(async (force = false) => {
     try {
       // force: o administrador pede a conferência na hora (troca e renova se for o caso).
       const first = await clipspy.status();
       const { configured, access } = force && first.access ? await clipspy.checkAccess() : first;
+      setReviewer(first.reviewer === true);
       // Token vencido conta como "não configurado": a busca falharia de qualquer jeito.
       const usable = configured && access?.status !== "expirado";
       setAccess(access);
@@ -309,8 +314,21 @@ export function ClipSpyPanel() {
     catch (e) { toast.error((e as Error).message); } finally { setBusyId(null); }
   }
 
+  // Exporta o que está na tela (com ou sem o filtro de campeões).
+  const exportCsv = () => {
+    if (!library?.length) return;
+    downloadCsv(referencesCsv(library), exportFileName());
+    toast.success(library.length === 1 ? "1 referência exportada" : `${library.length} referências exportadas`);
+  };
+  const copySummary = async () => {
+    if (!library?.length) return;
+    try { await navigator.clipboard.writeText(referencesSummary(library)); toast.success("Resumo copiado"); }
+    catch { toast.error("O navegador não deixou copiar. Use Exportar para CSV."); }
+  };
+
   return (
     <div className="space-y-4">
+      {reviewer ? <ReviewerGuide onStart={() => setView("pagina")} /> : null}
       <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-[22px] border border-white/10 bg-white/[0.03] p-1">
         <button type="button" onClick={() => setView("buscar")} className={`rounded-full px-4 py-1.5 text-sm ${view === "buscar" ? "bg-white/10 text-white" : "text-white/60"}`}>Pesquisar</button>
         <button type="button" onClick={() => setView("biblioteca")} className={`rounded-full px-4 py-1.5 text-sm ${view === "biblioteca" ? "bg-white/10 text-white" : "text-white/60"}`}>Biblioteca</button>
@@ -368,9 +386,21 @@ export function ClipSpyPanel() {
         <PageAnalysisView onSaved={() => setOnlyChampions(false)} onOpenLibrary={() => { setOnlyChampions(false); setView("biblioteca"); }} />
       ) : (
         <div className="space-y-3">
-          <label className="flex items-center gap-2 text-xs text-white/70">
-            <input type="checkbox" checked={onlyChampions} onChange={(e) => setOnlyChampions(e.target.checked)} /> Só os campeões
-          </label>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <label className="flex items-center gap-2 text-xs text-white/70">
+              <input type="checkbox" checked={onlyChampions} onChange={(e) => setOnlyChampions(e.target.checked)} /> Só os campeões
+            </label>
+            {library?.length ? (
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={() => void copySummary()} className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-white/15 px-3 text-xs text-white/85 hover:bg-white/5">
+                  <Copy className="size-3.5" /> Copiar resumo
+                </button>
+                <button type="button" onClick={exportCsv} className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-white/15 px-3 text-xs text-white/85 hover:bg-white/5">
+                  <Download className="size-3.5" /> Exportar para CSV
+                </button>
+              </div>
+            ) : null}
+          </div>
           {library === null ? <ResultsSkeleton /> :
             library.length === 0 ? <p className="text-sm text-white/60">Sua biblioteca está vazia. Pesquise um termo e salve os vencedores, ou adicione uma referência pelo link.</p> :
             <div className="grid gap-3 md:grid-cols-2">
