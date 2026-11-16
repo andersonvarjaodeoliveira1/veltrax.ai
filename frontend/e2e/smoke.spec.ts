@@ -7,10 +7,18 @@ import { expect, test, type Page } from "@playwright/test";
 const seed = JSON.parse(fs.readFileSync(path.join(process.cwd(), "e2e", ".seed.json"), "utf8"));
 
 async function signIn(page: Page, email: string, password: string) {
-  await page.goto("/sign-in");
-  // Os rótulos em português só aparecem depois que a tela termina de montar; digitar antes disso perde o que foi escrito.
-  await page.getByPlaceholder("E-mail").fill(email);
-  await page.getByPlaceholder("Senha").fill(password);
+  await page.goto("/sign-in", { waitUntil: "networkidle" });
+  const emailBox = page.getByPlaceholder("E-mail");
+  const passwordBox = page.getByPlaceholder("Senha");
+  // A tela de login é remontada logo depois de abrir (o tradutor troca o texto antes de o React assumir a página)
+  // e apaga o que já foi digitado. Por isso confere os dois campos antes de enviar.
+  await expect(async () => {
+    await emailBox.fill(email);
+    await passwordBox.fill(password);
+    await page.waitForTimeout(500);
+    await expect(emailBox).toHaveValue(email, { timeout: 500 });
+    await expect(passwordBox).toHaveValue(password, { timeout: 500 });
+  }).toPass({ timeout: 30_000 });
   await page.getByRole("button", { name: "Entrar", exact: true }).click();
   await page.waitForURL((url) => !url.pathname.startsWith("/sign-in"));
 }
