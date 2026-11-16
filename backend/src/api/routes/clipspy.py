@@ -154,6 +154,77 @@ async def add_reference(request: Request, db: AsyncSession = Depends(get_db)):
     return _row(row)
 
 
+async def _connected_pages(db: AsyncSession, user_id: str) -> list[dict[str, Any]]:
+    rows = (await db.execute(text(
+        "SELECT name, meta_page_id, meta_token_enc FROM fb_pages WHERE user_id = :u AND meta_token_enc IS NOT NULL AND meta_page_id IS NOT NULL ORDER BY name"
+    ), {"u": user_id})).mappings().all()
+    return [dict(r) for r in rows]
+
+
+@router.get("/page-analysis/pages")
+async def analysis_pages(request: Request, db: AsyncSession = Depends(get_db)):
+    """As páginas conectadas desta conta, para analisar com um clique (só os nomes)."""
+    user_id = await _user_id(request, db)
+    return {"pages": [{"id": r["meta_page_id"], "name": r["name"]} for r in await _connected_pages(db, user_id)]}
+
+
+@router.post("/page-analysis")
+async def analyze_page(request: Request, db: AsyncSession = Depends(get_db)):
+    """Analisar página: posts públicos de uma Página do Facebook com reações, comentários e compartilhamentos.
+
+    Página conectada usa o token dela. Página de terceiros usa o acesso do servidor e depende de a Meta
+    ter aprovado o Page Public Content Access; sem a aprovação a resposta vem com `blocked` explicando."""
+    user_id = await _user_id(request, db)
+    import httpx
+
+    from ...clipspy_pages import ORDERS, PageAccessError, find_pages, page_info, page_posts, parse_page_ref, rank, summary
+    from ...facebook_meta import same_name
+    from ...runtime_settings import decrypt_setting_value
+
+    body = await request.json()
+    try:
+        ref = parse_page_ref(body.get("page") if isinstance(body, dict) else "")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    order = body.get("order") if body.get("order") in ORDERS else "engajamento"
+    connected = await _connected_pages(db, user_id)
+    names = [r["name"] for r in connected]
+
+    def own_page(page_id: str = "", name: str = "") -> dict[str, Any] | None:
+        return next((r for r in connected if (page_id and r["meta_page_id"] == page_id) or (name and same_name(r["name"], name))), None)
+
+    own = own_page(ref["value"], "") if ref["kind"] == "id" else own_page("", ref["value"]) if ref["kind"] == "name" else None
+    server_token = adlib_token()
+    used_server = False
+    try:
+        async with httpx.AsyncClient(timeout=25) as client:
+            if own:
+                token, target = decrypt_setting_value(own["meta_token_enc"]), own["meta_page_id"]
+            else:
+                if not server_token:
+                    return {"blocked": "O acesso ao Facebook ainda não foi configurado no servidor. Por enquanto a análise funciona com as páginas conectadas em Facebook.", "connected": names}
+                used_server = True
+                if ref["kind"] == "name":
+                    return {"candidates": await find_pages(ref["value"], server_token, client), "query": ref["value"]}
+                token, target = server_token, ref["value"]
+            page = await page_info(target, token, client)
+            mine = None if own else own_page(page["id"], "")
+            if mine:  # o endereço era de uma página conectada: os posts vêm com o token dela
+                token, used_server, own = decrypt_setting_value(mine["meta_token_enc"]), False, mine
+            posts = rank(await page_posts(page["id"], token, client), order)
+    except PageAccessError as exc:
+        if exc.expired and used_server:
+            from ...adlib_auth import mark_stale
+
+            mark_stale()
+        if exc.needs_feature:
+            return {"blocked": str(exc), "connected": names}
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail="Não consegui falar com o Facebook agora. Tente de novo em instantes.") from exc
+    return {"page": page, "posts": posts, "summary": summary(posts), "via": "conectada" if own else "publica"}
+
+
 @router.get("/bank")
 async def bank(request: Request, champion: int = 0, source: str = "", db: AsyncSession = Depends(get_db)):
     """Lista a biblioteca de criativos salva (opcionalmente só os campeões)."""

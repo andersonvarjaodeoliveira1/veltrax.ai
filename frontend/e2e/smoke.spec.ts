@@ -29,6 +29,25 @@ test("a página inicial abre para quem não entrou", async ({ page }) => {
   await expect(page.getByRole("link", { name: "Entrar", exact: true })).toHaveAttribute("href", "/sign-in");
 });
 
+test("as páginas que a Meta pede estão abertas ao público", async ({ page }) => {
+  await page.goto("/data-deletion");
+  await expect(page.getByRole("heading", { name: "Exclusão de dados" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Data deletion" })).toBeVisible();
+  await page.goto("/privacy");
+  await expect(page.getByRole("heading", { name: "Facebook Pages and Meta Data" })).toBeVisible();
+});
+
+test("a tela de login abre em português sem ser refeita pelo React", async ({ page }) => {
+  // O tradutor trocava o texto antes de o React assumir a página; o React refazia a tela e apagava o que já estava digitado.
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto("/sign-in");
+  await expect(page.getByRole("heading", { name: "Bem-vindo de volta" })).toBeVisible();
+  await expect(page.getByPlaceholder("E-mail")).toBeVisible();
+  await page.waitForTimeout(1500);
+  expect(errors.filter((message) => message.includes("Hydration failed"))).toEqual([]);
+});
+
 test("o cadastro mostra a animação do vídeo virando cortes", async ({ page }) => {
   await page.goto("/sign-up");
   await expect(page.getByText("podcast-episode-42.mp4", { exact: false })).toBeAttached();

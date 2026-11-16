@@ -226,7 +226,13 @@ async def make_takes(job_id: str, request: Request, db: AsyncSession = Depends(g
     transcript = await run_in_thread(get_video_transcript, final_path)
     if not (transcript or "").strip():
         raise HTTPException(status_code=400, detail="Não encontrei fala no vídeo para escolher os takes")
-    takes = (await takes_from_bounds(transcript, bounds))[:MAX_TAKES]
+    # Receita de um vencedor do ClipSpy (opcional): na disputa entre trechos, pesa a favor dos beats fortes dele.
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    recipe = body.get("recipe") if isinstance(body, dict) else None
+    takes = (await takes_from_bounds(transcript, bounds, recipe=recipe))[:MAX_TAKES]
     if not takes:
         raise HTTPException(status_code=400, detail="A IA não achou trechos fortes o bastante para virar takes")
 
@@ -258,7 +264,8 @@ async def make_takes(job_id: str, request: Request, db: AsyncSession = Depends(g
             "s": start, "e": end, "sc": float(take.get("score") or 0.0), "br": beat_role})
         saved.append({"id": take_id, "idx": idx, "hook_title": take.get("hook_title"),
                       "start": start, "end": end, "duration": round(end - start, 1),
-                      "score": float(take.get("score") or 0.0), "beat_role": beat_role})
+                      "score": float(take.get("score") or 0.0), "beat_role": beat_role,
+                      **({"in_recipe": bool(take["in_recipe"])} if "in_recipe" in take else {})})
     await db.commit()
     if not saved:
         raise HTTPException(status_code=400, detail="Não consegui cortar nenhum take deste vídeo")

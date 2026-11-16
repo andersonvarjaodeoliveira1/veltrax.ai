@@ -20,6 +20,31 @@ from typing import Any
 
 DEFAULT_MIN_LEN = 8.0   # take curto demais não vira post
 DEFAULT_MAX_LEN = 90.0  # teto de um corte vertical
+RECIPE_BONUS = 0.10     # o máximo que a receita do vencedor soma à nota de um take (escala 0-1)
+BEATS = ("hook", "callout", "problema", "mecanismo", "vilao", "solucao", "cta")
+
+
+def recipe_weights(recipe: Any) -> dict[str, float]:
+    """Receita do vencedor ([{beat_role, weight}], ou {"beats": [...]}) vira {beat: peso de 0 a 1}.
+
+    O beat que ocupa mais tempo no vencedor fica com 1; os outros, na proporção dele. Beat
+    desconhecido ou sem peso fica de fora. Sem receita válida, devolve {} e nada muda na escolha."""
+    beats = recipe.get("beats") if isinstance(recipe, dict) else recipe
+    if not isinstance(beats, list):
+        return {}
+    weights: dict[str, float] = {}
+    for item in beats[:20]:
+        if not isinstance(item, dict):
+            continue
+        role = str(item.get("beat_role") or "").strip().lower()
+        try:
+            weight = float(item.get("weight") or 0.0)
+        except (TypeError, ValueError):
+            continue
+        if role in BEATS and weight > 0:
+            weights[role] = weights.get(role, 0.0) + weight
+    top = max(weights.values(), default=0.0)
+    return {role: round(weight / top, 3) for role, weight in weights.items()} if top > 0 else {}
 
 
 def parse_mmss(value: str | float) -> float:
@@ -122,8 +147,13 @@ def plan_takes(
     *,
     min_len: float = DEFAULT_MIN_LEN,
     max_len: float = DEFAULT_MAX_LEN,
+    recipe: Any = None,
 ) -> list[dict[str, Any]]:
     """Encaixa cada trecho da IA nas cenas e devolve os takes finais.
+
+    Com `recipe` (a receita de um vencedor do ClipSpy), na disputa entre dois trechos que se
+    sobrepõem ganha um empurrão o que cai num beat forte do vencedor. Cada take sai com
+    `in_recipe` dizendo se o beat dele está na receita.
 
     - A borda inicial desce até o começo da cena; a final sobe até o fim da cena, de modo que
       o take contém o trecho inteiro e corta só em fim de cena.
@@ -172,9 +202,11 @@ def plan_takes(
     # resolve sobreposições: por nota desc, aceita quem não encosta num já aceito.
     # Empate (ou quase) favorece quem abre num HOOK — bônus pequeno (0.05 numa
     # escala 0-1) para não sobrescrever um take claramente melhor.
+    weights = recipe_weights(recipe)
+
     def _rank(c: dict[str, Any]) -> tuple[float, float]:
         hook_bonus = 0.05 if c.get("beat_role") == "hook" else 0.0
-        return (-(c["score"] + hook_bonus), c["start"])
+        return (-(c["score"] + hook_bonus + RECIPE_BONUS * weights.get(c["beat_role"], 0.0)), c["start"])
 
     candidates.sort(key=_rank)
     accepted: list[dict[str, Any]] = []
@@ -182,6 +214,9 @@ def plan_takes(
         if all(cand["end"] <= acc["start"] + 1e-6 or cand["start"] >= acc["end"] - 1e-6 for acc in accepted):
             accepted.append(cand)
     accepted.sort(key=lambda c: c["start"])
+    if weights:
+        for take in accepted:
+            take["in_recipe"] = take["beat_role"] in weights
     return accepted
 
 
@@ -192,6 +227,7 @@ async def takes_from_bounds(
     min_len: float = DEFAULT_MIN_LEN,
     max_len: float = DEFAULT_MAX_LEN,
     analyze: Callable[[str], Awaitable[Any]] | None = None,
+    recipe: Any = None,
 ) -> list[dict[str, Any]]:
     """Gera os takes a partir de bordas de cena já prontas (as que o render guardou).
 
@@ -219,7 +255,7 @@ async def takes_from_bounds(
             "score": float(get("relevance_score", 0.0) or 0.0),
             "beat_role": get("beat_role", "none") or "none",
         })
-    return plan_takes(segments, bounds, min_len=min_len, max_len=max_len)
+    return plan_takes(segments, bounds, min_len=min_len, max_len=max_len, recipe=recipe)
 
 
 async def build_takes(

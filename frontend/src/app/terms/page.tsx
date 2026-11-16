@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { HOSTED_APP_URL, getSiteUrl } from "@/lib/site";
 
 const LAST_UPDATED = "July 2, 2026";
-const CONTACT_EMAIL = "support@clipgringa.gringatools.com";
+const CONTACT_EMAIL = "contato@gringatools.com";
 
 export const metadata: Metadata = {
   title: "Terms of Service | ClipGringa",

@@ -47,6 +47,27 @@ function readStoredLang(): Lang {
 
 const SKIP_TAGS = new Set(["SCRIPT", "STYLE", "TEXTAREA", "CODE", "PRE", "NOSCRIPT"]);
 
+/** Quanto tempo esperar o React assumir um nó antes de traduzir assim mesmo (conteúdo que não é do React). */
+export const HYDRATION_GRACE_MS = 5000;
+const HYDRATION_POLL_MS = 100;
+
+// O React marca cada nó que já assumiu com uma chave própria ("__reactFiber$..."). O sufixo é o mesmo na página toda.
+let reactKey: string | null = null;
+function ownedByReact(node: Node): boolean {
+  if (reactKey) return reactKey in node;
+  const found = Object.keys(node).find((k) => k.startsWith("__reactFiber$"));
+  if (found) reactKey = found;
+  return !!found;
+}
+
+/** O React já conferiu este texto contra o que veio do servidor? Trocar antes disso faz a tela inteira ser refeita. */
+export function textIsSettled(node: Text): boolean {
+  if (ownedByReact(node)) return true;
+  const parent = node.parentElement;
+  // Texto único de um elemento não tem marca própria: é conferido junto com o elemento.
+  return !!parent && parent.childNodes.length === 1 && ownedByReact(parent);
+}
+
 /** Tradutor do DOM: traduz textos e atributos exibidos, desfaz ao voltar para inglês e acompanha as atualizações do React. */
 function startDomTranslator(getLang: () => Lang) {
   const textState = new WeakMap<Text, { orig: string; shown: string }>();
@@ -54,9 +75,35 @@ function startDomTranslator(getLang: () => Lang) {
 
   const skip = (el: Element | null) => !!el?.closest("[data-no-translate], [contenteditable='true']") || (el ? SKIP_TAGS.has(el.tagName) : false);
 
+  // Nós que o React ainda não assumiu (página chegando do servidor): ficam na espera e são traduzidos logo depois.
+  const waiting = new Map<Node, number>();
+  let waitTimer: ReturnType<typeof setInterval> | null = null;
+  const released = new WeakSet<Node>(); // esperou o prazo e não é do React: daí em diante traduz direto
+  const holdBack = (node: Node, settled: boolean): boolean => {
+    if (settled || released.has(node)) { waiting.delete(node); return false; }
+    const since = waiting.get(node);
+    if (since === undefined) { waiting.set(node, Date.now()); startWaiting(); return true; }
+    if (Date.now() - since < HYDRATION_GRACE_MS) return true;
+    waiting.delete(node);
+    released.add(node);
+    return false;
+  };
+  const startWaiting = () => {
+    if (waitTimer) return;
+    waitTimer = setInterval(() => {
+      for (const node of [...waiting.keys()]) {
+        if (!node.isConnected) waiting.delete(node);
+        else if (node.nodeType === Node.TEXT_NODE) doText(node as Text);
+        else doAttrs(node as Element);
+      }
+      if (!waiting.size && waitTimer) { clearInterval(waitTimer); waitTimer = null; }
+    }, HYDRATION_POLL_MS);
+  };
+
   const doText = (node: Text) => {
     const parent = node.parentElement;
     if (!parent || skip(parent)) return;
+    if (holdBack(node, textIsSettled(node))) return;
     const lang = getLang();
     const cur = node.nodeValue ?? "";
     let rec = textState.get(node);
@@ -68,6 +115,8 @@ function startDomTranslator(getLang: () => Lang) {
 
   const doAttrs = (el: Element) => {
     if (skip(el)) return;
+    if (!ATTRS.some((a) => el.hasAttribute(a))) return;
+    if (holdBack(el, ownedByReact(el))) return;
     const lang = getLang();
     const store = attrState.get(el) ?? {};
     for (const a of ATTRS) {
@@ -123,7 +172,7 @@ function startDomTranslator(getLang: () => Lang) {
   observe();
   return {
     refresh: () => { observer.disconnect(); walk(document.body); observe(); },
-    stop: () => observer.disconnect(),
+    stop: () => { observer.disconnect(); if (waitTimer) clearInterval(waitTimer); waitTimer = null; waiting.clear(); },
   };
 }
 

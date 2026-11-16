@@ -56,7 +56,7 @@ def manual_reference(body: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("Cole o link completo do vídeo, começando com https://")
     text = " ".join(str(body.get("text") or "").split())[:2000]
     metrics: dict[str, Any] = {}
-    for key in ("views", "comments"):
+    for key in ("views", "comments", "reactions", "shares"):
         raw = body.get(key)
         count = parse_count(raw)
         if count is None and str(raw or "").strip():
@@ -76,7 +76,8 @@ def manual_reference(body: dict[str, Any]) -> dict[str, Any]:
         "title": text,
         "permalink": link,
         "metrics": metrics,
-        "score": float(metrics.get("views") or 0),
+        # sem visualizações (referência vinda da análise de página), vale o engajamento público
+        "score": float(metrics.get("views") or sum(int(metrics.get(k) or 0) for k in ("reactions", "comments", "shares"))),
         "is_champion": bool(body.get("champion")),
         "term": host[:80],
     }

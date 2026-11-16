@@ -130,3 +130,54 @@ async def test_build_takes_usa_ia_injetada():
     assert len(takes) == 1
     assert takes[0]["start"] == 0.0 and takes[0]["end"] == 20.0
     assert takes[0]["hook_title"] == "Magnética"
+
+
+# ---------- receita do vencedor ----------
+
+def test_recipe_weights_normaliza_pelo_beat_mais_longo():
+    from src.takes import recipe_weights
+
+    recipe = {"beats": [{"beat_role": "hook", "weight": 0.1}, {"beat_role": "Problema", "weight": 0.4}, {"beat_role": "cta", "weight": 0.2},
+                        {"beat_role": "inventado", "weight": 0.9}, {"beat_role": "none", "weight": 0.5}, {"beat_role": "vilao", "weight": "x"}, "lixo"]}
+    assert recipe_weights(recipe) == {"hook": 0.25, "problema": 1.0, "cta": 0.5}
+    assert recipe_weights(recipe["beats"]) == recipe_weights(recipe)
+    assert recipe_weights(None) == {} and recipe_weights({"beats": "nada"}) == {} and recipe_weights([{"beat_role": "hook", "weight": 0}]) == {}
+
+
+def test_plan_takes_com_receita_desempata_a_favor_do_beat_do_vencedor():
+    bounds = [0.0, 10.0, 20.0, 30.0]
+    # dois trechos na mesma cena, notas quase iguais: sem receita ganha a nota; com receita, o beat forte do vencedor
+    segments = [
+        {"start": 1, "end": 9, "hook_title": "Solução", "text": "a", "score": 0.80, "beat_role": "solucao"},
+        {"start": 2, "end": 8, "hook_title": "Problema", "text": "b", "score": 0.74, "beat_role": "problema"},
+        {"start": 21, "end": 29, "hook_title": "Outro", "text": "c", "score": 0.5, "beat_role": "none"},
+    ]
+    plain = plan_takes(segments, bounds)
+    assert [t["hook_title"] for t in plain] == ["Solução", "Outro"] and "in_recipe" not in plain[0]
+
+    recipe = [{"beat_role": "problema", "weight": 0.6}, {"beat_role": "cta", "weight": 0.2}]
+    guided = plan_takes(segments, bounds, recipe=recipe)
+    assert [t["hook_title"] for t in guided] == ["Problema", "Outro"]
+    assert [t["in_recipe"] for t in guided] == [True, False]
+
+
+def test_plan_takes_com_receita_nao_derruba_take_claramente_melhor():
+    bounds = [0.0, 10.0, 20.0]
+    segments = [
+        {"start": 1, "end": 9, "hook_title": "Forte", "text": "a", "score": 0.95, "beat_role": "solucao"},
+        {"start": 2, "end": 8, "hook_title": "Fraco", "text": "b", "score": 0.60, "beat_role": "problema"},
+    ]
+    guided = plan_takes(segments, bounds, recipe=[{"beat_role": "problema", "weight": 1}])
+    assert [t["hook_title"] for t in guided] == ["Forte"]
+
+
+@pytest.mark.asyncio
+async def test_takes_from_bounds_repassa_a_receita():
+    async def fake_analyze(_transcript):
+        return {"most_relevant_segments": [
+            {"start_time": "00:01", "end_time": "00:09", "text": "a", "relevance_score": 0.8, "hook_title": "A", "beat_role": "solucao"},
+            {"start_time": "00:02", "end_time": "00:08", "text": "b", "relevance_score": 0.75, "hook_title": "B", "beat_role": "cta"},
+        ]}
+
+    out = await takes_from_bounds("00:00 fala", [0.0, 10.0, 20.0], analyze=fake_analyze, recipe={"beats": [{"beat_role": "cta", "weight": 0.3}]})
+    assert [t["hook_title"] for t in out] == ["B"] and out[0]["in_recipe"] is True
