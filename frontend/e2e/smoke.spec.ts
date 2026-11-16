@@ -50,7 +50,8 @@ test("a tela de login abre em português sem ser refeita pelo React", async ({ p
   await expect(page.getByRole("heading", { name: "Bem-vindo de volta" })).toBeVisible();
   await expect(page.getByPlaceholder("E-mail")).toBeVisible();
   await page.waitForTimeout(1500);
-  expect(errors.filter((message) => message.includes("Hydration failed"))).toEqual([]);
+  // Em desenvolvimento o React diz "Hydration failed"; no site de produção o mesmo erro vem com número (418, 423, 425).
+  expect(errors.filter((message) => /Hydration failed|Minified React error #(418|423|425)/.test(message))).toEqual([]);
 });
 
 test("o cadastro mostra a animação do vídeo virando cortes", async ({ page }) => {
