@@ -124,6 +124,16 @@ SETTING_METADATA = {
         "description": "Escreva 1 só depois de adicionar a permissão pages_messaging no app da Meta. O login passa a pedir essa permissão.",
         "input_type": "text",
     },
+    "META_REVIEWER_EMAIL": {
+        "label": "Conta de teste do revisor da Meta (e-mail)",
+        "description": "O e-mail da conta que o revisor da Meta vai usar. Essa conta vê as páginas de exemplo em ClipSpy, Analisar página, e nasce com referências salvas. Crie a conta antes em Acesso de membro. Deixe vazio para desligar.",
+        "input_type": "text",
+    },
+    "META_REVIEWER_PAGES": {
+        "label": "Páginas de exemplo do revisor",
+        "description": "Nomes de até 5 páginas conectadas, separados por vírgula, como aparecem em Facebook, Páginas. Só essas aparecem para a conta do revisor.",
+        "input_type": "text",
+    },
     "META_INSIGHTS": {
         "label": "Visualizações de Reels na leitura da página (opcional)",
         "description": "Escreva 1 só depois de adicionar a permissão read_insights no app da Meta. O login passa a pedir essa permissão e a leitura da página passa a contar as reproduções dos Reels.",

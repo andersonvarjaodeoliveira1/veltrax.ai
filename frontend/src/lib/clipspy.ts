@@ -8,7 +8,8 @@ export type Creative = {
   permalink: string;
   thumbnail: string;
   // hook, feeling e cta: anotações de quem assistiu a uma referência manual
-  metrics: { run_days?: number; views?: number; likes?: number; reactions?: number; comments?: number; shares?: number; note?: string; hook?: string; feeling?: string; cta?: string };
+  // recipe: a estrutura de beats, guardada quando a pessoa clica em Modelar
+  metrics: { run_days?: number; views?: number; likes?: number; reactions?: number; comments?: number; shares?: number; note?: string; hook?: string; feeling?: string; cta?: string; recipe?: { beats: { beat_role: string; weight: number }[]; summary: string } };
   score: number;
   is_champion: boolean;
   term: string;
@@ -24,7 +25,8 @@ export type AdLibAccess = {
   // De onde veio o acesso em uso: "admin", "ambiente" ou "facebook: <perfil>".
   source?: string;
 };
-export type ClipSpyStatus = { configured: boolean; access?: AdLibAccess };
+// reviewer: esta é a conta de demonstração do revisor da Meta (a tela mostra o passo a passo em inglês).
+export type ClipSpyStatus = { configured: boolean; access?: AdLibAccess; reviewer?: boolean };
 
 async function call<T>(path: string, init?: { method?: string; body?: unknown }): Promise<T> {
   const res = await fetch(`/api/clipspy/${path}`, {

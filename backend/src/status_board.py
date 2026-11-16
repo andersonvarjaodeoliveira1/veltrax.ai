@@ -123,5 +123,7 @@ async def build(db: AsyncSession, *, graph: GraphCall | None = None, now: float 
     inbox = await inbox_status(db)
     # A frase de verificação e o endereço são o que se cola no painel da Meta (Webhooks, objeto Page).
     inbox.update(path=WEBHOOK_PATH, verify_token=verify_token())
+    from . import reviewer
+
     return {"adlib": adlib_auth.snapshot(now), "references": await references_status(db), "meta_app": meta,
-            "reading": await reading_status(db), "inbox": inbox, "generated_at": int(now)}
+            "reading": await reading_status(db), "inbox": inbox, "reviewer": await reviewer.status(db), "generated_at": int(now)}

@@ -6,6 +6,7 @@ e serve a biblioteca para a tela de criação modelar os vencedores.
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from typing import Any
 
@@ -17,6 +18,7 @@ from ...clipspy import adlib_token, search_ad_library
 from ...database import get_db
 from .multiplier import _user_id
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/clipspy", tags=["clipspy"])
 
 
@@ -29,6 +31,10 @@ async def status(request: Request, db: AsyncSession = Depends(get_db)):
     """
     user_id = await _user_id(request, db)  # exige sessão válida
     out: dict[str, Any] = {"configured": adlib_token() is not None}
+    from ...reviewer import is_reviewer
+
+    if await is_reviewer(db, user_id):
+        out["reviewer"] = True  # a tela mostra o passo a passo do revisor da Meta
     if await _is_admin(db, user_id):
         # Só o administrador vê a validade e a renovação (sem o valor do token).
         from ...adlib_auth import snapshot
@@ -134,22 +140,9 @@ async def add_reference(request: Request, db: AsyncSession = Depends(get_db)):
         ref = manual_reference(await request.json())
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    row = (await db.execute(text(
-        """
-        INSERT INTO creative_bank
-          (id, user_id, source, external_id, advertiser, title, permalink, thumbnail, metrics, score, is_champion, term, status)
-        VALUES
-          (:id, :u, :src, :ext, :adv, :title, :link, '', :metrics, :score, :champ, :term, 'salvo')
-        ON CONFLICT (user_id, source, external_id) DO UPDATE SET
-          advertiser = EXCLUDED.advertiser, title = EXCLUDED.title, permalink = EXCLUDED.permalink,
-          metrics = EXCLUDED.metrics, score = EXCLUDED.score, is_champion = EXCLUDED.is_champion, status = 'salvo'
-        RETURNING id, source, external_id, advertiser, title, permalink, thumbnail, metrics, score, is_champion, term, status
-        """
-    ), {
-        "id": str(uuid.uuid4()), "u": user_id, "src": ref["source"], "ext": ref["external_id"], "adv": ref["advertiser"],
-        "title": ref["title"], "link": ref["permalink"], "metrics": json.dumps(ref["metrics"]), "score": ref["score"],
-        "champ": ref["is_champion"], "term": ref["term"],
-    })).first()
+    from ...reviewer import INSERT_REFERENCE, reference_params
+
+    row = (await db.execute(text(INSERT_REFERENCE), reference_params(user_id, ref))).first()
     await db.commit()
     return _row(row)
 
@@ -158,7 +151,13 @@ async def _connected_pages(db: AsyncSession, user_id: str) -> list[dict[str, Any
     rows = (await db.execute(text(
         "SELECT name, meta_page_id, meta_token_enc FROM fb_pages WHERE user_id = :u AND meta_token_enc IS NOT NULL AND meta_page_id IS NOT NULL ORDER BY name"
     ), {"u": user_id})).mappings().all()
-    return [dict(r) for r in rows]
+    pages = [dict(r) for r in rows]
+    from ...reviewer import demo_pages, is_reviewer
+
+    if await is_reviewer(db, user_id):
+        mine = {p["meta_page_id"] for p in pages}
+        pages += [p for p in await demo_pages(db) if p["meta_page_id"] not in mine]
+    return pages
 
 
 @router.get("/page-analysis/pages")
@@ -229,6 +228,14 @@ async def analyze_page(request: Request, db: AsyncSession = Depends(get_db)):
 async def bank(request: Request, champion: int = 0, source: str = "", db: AsyncSession = Depends(get_db)):
     """Lista a biblioteca de criativos salva (opcionalmente só os campeões)."""
     user_id = await _user_id(request, db)
+    from ...reviewer import is_reviewer, seed_references
+
+    if await is_reviewer(db, user_id):
+        try:
+            await seed_references(db, user_id)
+        except Exception:  # a biblioteca abre mesmo que o exemplo não possa ser criado agora
+            logger.warning("conta do revisor: falha ao criar as referências de exemplo", exc_info=True)
+            await db.rollback()
     clauses = ["user_id = :u", "status <> 'arquivado'"]
     params: dict[str, Any] = {"u": user_id}
     if champion:
@@ -276,6 +283,11 @@ async def recipe(item_id: str, request: Request, db: AsyncSession = Depends(get_
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"Falha ao extrair a receita: {exc}") from exc
 
+    # Guarda a estrutura na referência: é o que a biblioteca exporta (CSV e resumo) sem pedir a IA de novo.
+    metrics["recipe"] = {"beats": beat_recipe.beats, "summary": beat_recipe.summary}
+    await db.execute(text("UPDATE creative_bank SET metrics = :m WHERE id = :id AND user_id = :u"),
+                     {"m": json.dumps(metrics), "id": item_id, "u": user_id})
+    await db.commit()
     return {
         "advertiser": row.advertiser or "",
         # notes: o que a pessoa anotou do vencedor (hook, sentimento, CTA); o Gerador de Cenas usa como direção.
