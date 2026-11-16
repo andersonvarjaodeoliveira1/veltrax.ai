@@ -28,4 +28,13 @@ describe("middleware · robôs e varreduras", () => {
     expect(isHostileRequest("/api/billing/revenuecat-webhook", null)).toBe(false);
     expect(isHostileRequest("/.well-known/apple-app-site-association", chrome)).toBe(false);
   });
+  it("deixa qualquer agente ler os textos legais, que a Meta confere no cadastro do app", () => {
+    for (const path of ["/privacy", "/terms", "/data-deletion", "/data-deletion/"]) {
+      for (const ua of ["meta-externalfetcher/1.1", "facebookexternalhit/1.1", "curl/8.4.0", null]) {
+        expect(isHostileRequest(path, ua)).toBe(false);
+      }
+    }
+    expect(isHostileRequest("/privacy/extra", "curl/8.4.0")).toBe(true);
+    expect(isHostileRequest("/clipspy", "meta-externalfetcher/1.1")).toBe(true);
+  });
 });
