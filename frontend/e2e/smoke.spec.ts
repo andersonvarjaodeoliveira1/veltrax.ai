@@ -8,9 +8,10 @@ const seed = JSON.parse(fs.readFileSync(path.join(process.cwd(), "e2e", ".seed.j
 
 async function signIn(page: Page, email: string, password: string) {
   await page.goto("/sign-in");
-  await page.locator('input[type="email"]').fill(email);
-  await page.locator('input[type="password"]').fill(password);
-  await page.locator('button[type="submit"]').click();
+  // Os rótulos em português só aparecem depois que a tela termina de montar; digitar antes disso perde o que foi escrito.
+  await page.getByPlaceholder("E-mail").fill(email);
+  await page.getByPlaceholder("Senha").fill(password);
+  await page.getByRole("button", { name: "Entrar", exact: true }).click();
   await page.waitForURL((url) => !url.pathname.startsWith("/sign-in"));
 }
 
@@ -31,6 +32,12 @@ test("membro entra, vê a biblioteca e não abre o Admin", async ({ page }) => {
   await signIn(page, seed.regular.email, seed.regular.password);
 
   await page.goto("/list");
+  // Conta nova abre com o tutorial de quatro passos por cima da tela.
+  const tutorial = page.getByRole("dialog", { name: /Antes de começar/ });
+  await expect(tutorial).toBeVisible({ timeout: 30_000 });
+  await tutorial.getByRole("button", { name: "Pular" }).click();
+  await expect(tutorial).toBeHidden();
+
   await expect(page.getByRole("heading", { name: "Biblioteca" })).toBeVisible();
   await expect(page.getByText(/2 gerações/)).toBeVisible();
 
