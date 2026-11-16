@@ -35,7 +35,9 @@ NATURAL_VOICE = (
     "something they noticed), not with a slogan. Do not line the text up as promise, then benefit, then call to action: "
     "let the offer come up inside the talk. "
     "4) STAY TRUE: natural does not mean invented. Use only the facts you were given. Never invent a personal story, "
-    "a result, a number, a testimonial or a customer. When no real story was given, speak in general terms "
+    "a result, a number, a testimonial or a customer. Never add a quality of the product that was not given "
+    "(material, purity, durability, origin, size, how long it lasts): if the description says cotton, do not write pure cotton. "
+    "When no real story was given, speak in general terms "
     "(for example what many people go through) instead of saying it happened to the speaker. "
     "The call to action stays clear and is said once, at the end."
 )
@@ -46,7 +48,8 @@ NATURAL_POST = (
     "short one. Use the everyday words of this niche and audience, no corporate words and no ad cliches. Open with a "
     "small real-life moment, a doubt or something noticed, in place of a slogan, and let the value come up inside the "
     "text; do not line it up as promise, then benefit, then call to action. Natural does not mean invented: never invent "
-    "a personal story, a result, a number or a testimonial."
+    "a personal story, a result, a number or a testimonial, and never add a quality of the product that was not given "
+    "(material, purity, durability, origin)."
 )
 
 DASHES = re.compile(r"\s*[—–]\s*|\s+-\s+")
