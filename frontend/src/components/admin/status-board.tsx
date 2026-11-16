@@ -47,6 +47,11 @@ const READING_TEXT = {
 export function StatusBoard({ data }: { data: StatusBoardData }) {
   const token = tokenLine(data.adlib);
   const [readingText, readingTone] = READING_TEXT[data.reading.verdict];
+  // Reels só entram na conta com a permissão de estatísticas: sem ela, o zero pode ser só o que a lista não conta.
+  const insights = data.meta_app.permissions.find((p) => p.name === "read_insights")?.granted === "sim";
+  const readingHint = !insights && (data.reading.verdict === "zerado" || data.reading.verdict === "negado")
+    ? "As reproduções de Reels pedem a permissão read_insights. Adicione no app da Meta, escreva 1 em Visualizações de Reels nas Configurações e entre com o Facebook de novo."
+    : "";
   const approved = data.meta_app.permissions.filter((p) => p.status === "aprovada").length;
   const pending = data.meta_app.permissions.filter((p) => p.status === "pendente").length;
   return (
@@ -71,6 +76,7 @@ export function StatusBoard({ data }: { data: StatusBoardData }) {
           <dt className="text-xs text-muted-foreground">Leitura das páginas</dt>
           <dd className={`mt-1 text-sm font-medium ${readingTone}`}>{readingText}</dd>
           <dd className="mt-1 text-xs text-muted-foreground">{data.reading.connected} páginas conectadas, {data.reading.videos} vídeos lidos, {data.reading.with_views} com visualizações</dd>
+          {readingHint ? <dd className="mt-1 text-xs text-muted-foreground">{readingHint}</dd> : null}
         </div>
       </dl>
 

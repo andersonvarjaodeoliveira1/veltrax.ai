@@ -263,3 +263,5 @@ def test_messaging_scope_only_when_enabled(monkeypatch):
     assert "pages_messaging" not in meta.scopes() and "pages_messaging" not in meta.login_url("1", "https://x.com/facebook/meta", "s")
     monkeypatch.setattr(Config, "_get_runtime_setting", staticmethod(lambda key: "1" if key == "META_MESSAGING" else ""))
     assert meta.scopes()[-1] == "pages_messaging" and "pages_messaging" in meta.login_url("1", "https://x.com/facebook/meta", "s")
+    monkeypatch.setattr(Config, "_get_runtime_setting", staticmethod(lambda key: "1" if key == "META_INSIGHTS" else ""))
+    assert meta.scopes()[-1] == "read_insights" and "pages_messaging" not in meta.scopes()

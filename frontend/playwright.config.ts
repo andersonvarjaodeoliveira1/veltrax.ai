@@ -22,6 +22,8 @@ export default defineConfig({
   globalSetup: "./e2e/global-setup.ts",
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL ?? frontendBaseUrl,
+    // O site recusa navegador sem cabeça (proteção contra cópia); os testes se apresentam como um Chrome comum.
+    userAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
     // Os testes foram escritos em inglês; o app abre em português por padrão.
     storageState: {
       cookies: [],
