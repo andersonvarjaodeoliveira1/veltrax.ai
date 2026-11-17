@@ -4,9 +4,10 @@ import { describe, expect, it } from "vitest";
 
 // As funções que a extensão usa para decidir se a resposta do chat de IA terminou (extension/flow/ai-read.js).
 const source = readFileSync(resolve(__dirname, "../../../extension/flow/ai-read.js"), "utf8");
-const { clean, wantsJson, jsonComplete, done, keepWaiting } = new Function(
-  `${source}; return { clean: clipgringaCleanReply, wantsJson: clipgringaWantsJson, jsonComplete: clipgringaJsonComplete, done: clipgringaReplyDone, keepWaiting: clipgringaKeepWaiting };`,
+const { clean, wantsJson, jsonComplete, done, keepWaiting, nodeText } = new Function(
+  `${source}; return { clean: clipgringaCleanReply, wantsJson: clipgringaWantsJson, jsonComplete: clipgringaJsonComplete, done: clipgringaReplyDone, keepWaiting: clipgringaKeepWaiting, nodeText: clipgringaNodeText };`,
 )() as {
+  nodeText: (el: Element | null) => string;
   keepWaiting: (now: number, deadline: number, hardDeadline: number, generating: boolean) => boolean;
   clean: (text: string) => string;
   wantsJson: (prompt: string) => boolean;
@@ -67,5 +68,49 @@ describe("leitura da resposta da IA da conta", () => {
     expect(keepWaiting(60_000, deadline, hardDeadline, true)).toBe(true);    // passou do prazo, mas o botão de parar está na tela
     expect(keepWaiting(60_000, deadline, hardDeadline, false)).toBe(false);  // passou do prazo e nada acontece: tenta numa conversa nova
     expect(keepWaiting(146_000, deadline, hardDeadline, true)).toBe(false);  // nem trabalhando passa do tempo total
+  });
+
+  it("com JSON fechado e parado há 4 s, entrega mesmo com o botão de parar na tela", () => {
+    expect(done(JSON_PROMPT, '{"items": [1, 2]}', 3000, true, true)).toBe("");
+    expect(done(JSON_PROMPT, '{"items": [1, 2]}', 4500, true, true)).toBe('{"items": [1, 2]}');
+    expect(done(JSON_PROMPT, '{"items": [1, ', 9000, true, true)).toBe("");       // pela metade nunca vale
+    expect(done(TEXT_PROMPT, "Beba água ao acordar.", 9000, true, true)).toBe(""); // texto livre espera o site parar
+  });
+
+  describe("texto da resposta com a aba escondida", () => {
+    // Em aba escondida o Gemini deixa o texto na página (textContent) e não o revela (innerText vazio).
+    const reply = (html: string, shown: string | undefined) => {
+      const el = document.createElement("message-content");
+      el.innerHTML = html;
+      Object.defineProperty(el, "innerText", { value: shown, configurable: true });
+      return el;
+    };
+
+    it("lê o JSON inteiro mesmo sem nada revelado", () => {
+      const el = reply('<pre><code>{\n"hooks": [\n"Seu tênis aguenta?"\n]\n}</code></pre>', "");
+      expect(nodeText(el)).toBe('{\n"hooks": [\n"Seu tênis aguenta?"\n]\n}');
+      expect(jsonComplete(nodeText(el))).toBe(true);
+    });
+
+    it("não cola um parágrafo no outro", () => {
+      const el = reply("<p>Beba água ao acordar.</p><p>Isso muda o seu dia.</p><ul><li><p>Um copo</p></li><li>Sem gelo</li></ul>", "");
+      expect(nodeText(el)).toBe("Beba água ao acordar.\nIsso muda o seu dia.\nUm copo\nSem gelo");
+    });
+
+    it("troca o texto pela metade (animação de revelar) pelo texto inteiro", () => {
+      const el = reply("<p>Beba água ao acordar.</p><p>Isso muda o seu dia.</p>", "Beba água");
+      expect(nodeText(el)).toBe("Beba água ao acordar.\nIsso muda o seu dia.");
+    });
+
+    it("com a aba à vista e tudo revelado, usa o texto como a pessoa vê", () => {
+      const el = reply("<p>Beba água ao acordar.</p><p>Isso muda o seu dia.</p>", "Beba água ao acordar.\n\nIsso muda o seu dia.");
+      expect(nodeText(el)).toBe("Beba água ao acordar.\n\nIsso muda o seu dia.");
+    });
+
+    it("resposta sem parágrafos e elemento vazio", () => {
+      expect(nodeText(reply("Sim, pode.", undefined))).toBe("Sim, pode.");
+      expect(nodeText(reply("", ""))).toBe("");
+      expect(nodeText(null)).toBe("");
+    });
   });
 });
