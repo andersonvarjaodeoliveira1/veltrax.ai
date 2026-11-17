@@ -105,7 +105,8 @@
   }
 
   const replyCount = () => all(SEL.reply).length;
-  const lastReply = () => { const els = all(SEL.reply); return els.length ? (els[els.length - 1].innerText || "").trim() : ""; };
+  // clipgringaNodeText lê o que está na página, não só o que já foi "revelado": em aba escondida o texto visível fica vazio.
+  const lastReply = () => { const els = all(SEL.reply); return els.length ? clipgringaNodeText(els[els.length - 1]) : ""; };
 
   /** Plano B: texto da página depois do pedido que acabamos de enviar. */
   function afterPrompt(prompt) {

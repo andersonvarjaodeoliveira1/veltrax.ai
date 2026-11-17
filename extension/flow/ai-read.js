@@ -55,14 +55,39 @@ function clipgringaJsonComplete(text) {
  * Devolve o texto limpo quando terminou, ou "" para continuar esperando.
  */
 function clipgringaReplyDone(prompt, rawText, quietMs, generating, sawGenerating) {
-  if (generating) return "";
   const text = clipgringaCleanReply(rawText);
   if (!text) return "";
   if (clipgringaWantsJson(prompt)) {
     // Com JSON pedido, só vale um JSON fechado. Texto solto ou JSON pela metade continua esperando.
-    return clipgringaJsonComplete(text) && quietMs > 1200 ? text : "";
+    // JSON fechado e parado há 4 s vale mesmo com o botão de parar na tela: com a aba escondida o Gemini
+    // deixou o botão por 49 s depois de a resposta inteira já estar na página.
+    if (!clipgringaJsonComplete(text)) return "";
+    return quietMs > (generating ? 4000 : 1200) ? text : "";
   }
+  if (generating) return "";
   return quietMs > (sawGenerating ? 2200 : 6000) ? text : "";
+}
+
+const CLIPGRINGA_BLOCKS = "p, li, pre, h1, h2, h3, h4, h5, h6, blockquote, td, th";
+
+/**
+ * Texto de uma resposta do chat, mesmo com a aba escondida.
+ * O Gemini põe a resposta inteira na página em 2 a 3 segundos, mas "revela" o texto com uma animação que não anda
+ * em aba escondida. A extensão abre a aba em segundo plano, então o texto visível (innerText) ficava vazio por mais
+ * de um minuto (medido em 16/11/2026: 150 caracteres na página aos 2 s, zero visíveis até a aba aparecer, aos 84 s).
+ * Aqui vale o texto que está na página; o visível só é usado quando já está completo, porque traz as quebras de linha.
+ */
+function clipgringaNodeText(el) {
+  if (!el) return "";
+  const squeeze = (value) => String(value || "").replace(/\s+/g, "");
+  const shown = String(el.innerText || "").trim();
+  const full = String(el.textContent || "").trim();
+  if (!full) return shown;
+  if (shown && squeeze(shown).length >= squeeze(full).length * 0.95) return shown;
+  // Monta o texto pelos blocos (parágrafos, itens, código), para não colar um parágrafo no outro.
+  const blocks = Array.from(el.querySelectorAll(CLIPGRINGA_BLOCKS)).filter((block) => !block.querySelector(CLIPGRINGA_BLOCKS));
+  const joined = blocks.map((block) => String(block.textContent || "").trim()).filter(Boolean).join("\n");
+  return squeeze(joined).length >= squeeze(full).length * 0.95 ? joined : full;
 }
 
 /**
