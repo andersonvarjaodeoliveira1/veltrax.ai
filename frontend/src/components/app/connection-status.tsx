@@ -72,7 +72,7 @@ export function ConnectionStatus() {
   const headline = worst === "ok" ? "Tudo conectado" : worst === "bad" ? "Falta conectar" : worst === "warn" ? "Precisa de atenção" : "Verificando…";
 
   return (
-    <div data-testid="connection-status" className="fixed bottom-20 right-3 z-40 flex flex-col items-end md:bottom-4 md:right-4">
+    <div data-testid="connection-status" className="fixed bottom-[calc(8rem+env(safe-area-inset-bottom))] right-3 z-40 flex flex-col items-end md:bottom-[4.75rem] md:right-4">
       {open && (
         <div role="dialog" aria-label="Conexões do ClipGringa" className="mb-2 w-[min(92vw,22rem)] space-y-2 rounded-[18px] border border-border bg-card p-3 text-sm shadow-xl">
           <div className="flex items-center justify-between">

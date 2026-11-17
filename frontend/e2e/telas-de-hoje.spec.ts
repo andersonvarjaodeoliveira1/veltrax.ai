@@ -99,3 +99,46 @@ test("membro confere a página do link, salva a oferta e apaga", async ({ page }
   await page.getByRole("button", { name: `Apagar ${name}` }).click();
   await expect(page.getByText(name)).toHaveCount(0);
 });
+
+for (const tela of [{ nome: "celular", width: 390, height: 844 }, { nome: "computador", width: 1440, height: 900 }]) {
+  test(`no ${tela.nome} os botões flutuantes não cobrem o menu nem uns aos outros`, async ({ page }) => {
+    await skipTutorial(page);
+    await page.setViewportSize({ width: tela.width, height: tela.height });
+    await signIn(page, seed.regular.email, seed.regular.password);
+    await page.goto("/ofertas");
+    const pieces = {
+      // No celular o menu fica embaixo; no computador, na lateral.
+      ...(tela.nome === "celular" ? { menu: page.getByRole("navigation", { name: /Mobile navigation|Navegação/ }) } : {}),
+      relatar: page.getByRole("button", { name: "Relatar erro ou sugestão" }),
+      duvida: page.getByRole("button", { name: "Tirar uma dúvida com o assistente" }),
+      suporte: page.getByRole("button", { name: "Suporte" }),
+      conexoes: page.getByRole("button", { name: /^Conexões: / }),
+    };
+    const boxes: Record<string, { x: number; y: number; width: number; height: number }> = {};
+    for (const [name, locator] of Object.entries(pieces)) {
+      await expect(locator, name).toBeVisible();
+      boxes[name] = (await locator.boundingBox())!;
+    }
+    const names = Object.keys(boxes);
+    for (let i = 0; i < names.length; i += 1) {
+      for (let j = i + 1; j < names.length; j += 1) {
+        const a = boxes[names[i]];
+        const b = boxes[names[j]];
+        const overlap = a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+        expect(overlap, `${names[i]} em cima de ${names[j]}`).toBe(false);
+      }
+    }
+    if (process.env.CAPTURAS) await page.screenshot({ path: `${process.env.CAPTURAS}/flutuantes-${tela.nome}.png` });
+  });
+}
+
+test("no celular o texto de Minhas APIs não fica espremido ao lado do botão", async ({ page }) => {
+  await skipTutorial(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await signIn(page, seed.regular.email, seed.regular.password);
+  await page.goto("/minhas-apis");
+  const text = page.getByTestId("ai-source-card").locator("span.min-w-0");
+  await expect(text).toBeVisible();
+  expect((await text.boundingBox())!.width).toBeGreaterThan(200);
+  if (process.env.CAPTURAS) await page.screenshot({ path: `${process.env.CAPTURAS}/minhas-apis-celular.png` });
+});

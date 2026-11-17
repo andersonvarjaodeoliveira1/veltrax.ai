@@ -12,7 +12,8 @@ const GREETING = "Oi! Eu ajudo a usar o ClipGringa: conectar o Flow, criar o ava
 export function HelpBubbles({ email = "" }: { email?: string }) {
   const [open, setOpen] = useState<"" | "ask" | "report">("");
   return (
-    <div className="pointer-events-none fixed bottom-4 right-4 z-[60] flex flex-col items-end gap-3" data-no-translate>
+    // No celular os balões ficam acima do menu de baixo (4rem), que antes eles cobriam.
+    <div data-help-bubbles className="pointer-events-none fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] right-3 z-[60] flex flex-col items-end gap-3 md:bottom-4 md:right-4" data-no-translate>
       {open === "ask" && <AskPanel onClose={() => setOpen("")} />}
       {open === "report" && <ReportPanel email={email} onClose={() => setOpen("")} />}
       <div className="pointer-events-auto flex gap-2">

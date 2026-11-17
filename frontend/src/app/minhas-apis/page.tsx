@@ -54,7 +54,7 @@ function AiSourceCard({ items }: { items: Integration[] | null }) {
   return (
     <section data-testid="ai-source-card" className="flex flex-wrap items-center gap-3 rounded-[18px] border border-border bg-card p-4 text-sm">
       <span className={`size-2.5 rounded-full ${apis.length || ready ? "bg-[#5BD69A]" : "bg-muted-foreground"}`} />
-      <span className="min-w-0 flex-1">
+      <span className="min-w-0 flex-[1_1_16rem]">
         <b>Como a IA gera os seus textos agora:</b> {headline}
         <span className="block text-xs text-muted-foreground">{detail} A ordem é: sua chave de API, depois a sua conta, depois os créditos do plano. A cada geração eu aviso por onde saiu.</span>
       </span>
@@ -129,7 +129,7 @@ export default function MyApisPage() {
       {done && (
         <div role="status" data-testid="key-connected" className="flex flex-wrap items-center gap-3 rounded-[18px] border border-[#5BD69A]/40 bg-[#5BD69A]/10 p-4 text-sm">
           <span className="grid size-8 shrink-0 place-items-center rounded-full bg-[#5BD69A]/20 text-[#5BD69A]"><Check className="size-4" /></span>
-          <span className="min-w-0 flex-1"><b>Chave conectada com sucesso.</b> Você já pode usar o ClipGringa: tudo o que você gerar agora usa a sua chave, sem gastar tokens.</span>
+          <span className="min-w-0 flex-[1_1_16rem]"><b>Chave conectada com sucesso.</b> Você já pode usar o ClipGringa: tudo o que você gerar agora usa a sua chave, sem gastar tokens.</span>
           <Link href="/" className="rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#7B3FE4] px-4 py-2 text-xs font-medium text-white">Começar a criar</Link>
         </div>
       )}
@@ -138,7 +138,7 @@ export default function MyApisPage() {
 
       <section data-testid="flow-account-card" className="flex flex-wrap items-center gap-3 rounded-[18px] border border-border bg-card p-4 text-sm">
         <span className={`size-2.5 rounded-full ${flowState === "connected" ? "bg-[#5BD69A]" : "bg-muted-foreground"}`} />
-        <span className="min-w-0 flex-1">
+        <span className="min-w-0 flex-[1_1_16rem]">
           <b>Conta do Flow:</b> {flowState === "connected" ? `conectada${flowAccount.plan ? ` · plano ${flowAccount.plan}` : ""}` : flowState === "logged-out" ? "Flow aberto, mas sem login" : flowState === "no-extension" ? "extensão não encontrada" : "verificando…"}
           <span className="block text-xs text-muted-foreground">A conta do Flow conecta pela extensão, não por chave. Veja o passo a passo em Conectar ao Flow.</span>
         </span>
