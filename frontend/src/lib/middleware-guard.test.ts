@@ -21,6 +21,16 @@ describe("middleware · robôs e varreduras", () => {
     expect(isHostileRequest("/api/health", null)).toBe(false);
     expect(isHostileRequest("/extensao/clipgringa-flow.zip", "curl/8.5.0")).toBe(false);
   });
+  it("recusa quem pesca arquivos-fonte do aplicativo", () => {
+    for (const path of ["/_next/static/chunks/main.js.map", "/src/middleware.ts", "/components/app/app-shell.tsx", "/app.js.bak", "/server.ts", "/node_modules/next/package.json"]) {
+      expect(isHostileRequest(path, "Mozilla/5.0 (Windows NT 10.0) Chrome/130")).toBe(true);
+    }
+    // os arquivos que o site serve de verdade continuam passando
+    const chrome = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130";
+    for (const path of ["/_next/static/chunks/main-abc.js", "/_next/static/css/app.css", "/extensao/clipgringa-flow.zip", "/extensao/version.json", "/fontes/Inter.woff2", "/icone.png", "/site.webmanifest"]) {
+      expect(isHostileRequest(path, chrome)).toBe(false);
+    }
+  });
   it("deixa passar navegadores, Stripe e o aplicativo", () => {
     const chrome = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130 Safari/537.36";
     expect(isHostileRequest("/automacao", chrome)).toBe(false);

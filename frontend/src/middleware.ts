@@ -19,6 +19,9 @@ const PROBE_PATHS = /^\/(?:\.env|\.git|\.svn|\.hg|\.aws|\.ssh|\.ds_store|wp-admi
 // Scripts e navegadores sem cabeça que baixam as páginas para copiar: só valem para as páginas do site (não para /api, arquivos ou webhooks).
 const SCRIPT_AGENTS = /^(?:curl|wget|python-requests|python-urllib|python-httpx|aiohttp|httpx|go-http-client|node-fetch|undici|axios|okhttp|java\/|libcurl|php|ruby|guzzle|postmanruntime|insomnia)|headlesschrome|phantomjs|puppeteer|playwright|selenium|webdriver/i;
 
+// Fisgas de código-fonte: o site nunca serve .map, .ts/.tsx, backups ou a pasta src. Quem pede isso está atrás do código.
+const SOURCE_PROBE = /\.(?:map|ts|tsx|jsx|mts|cts|scss|sass|less|bak|old|orig|swp|git)$|^\/(?:src|node_modules|\.next\/cache)\//i;
+
 function isPagePath(pathname: string) {
   return !pathname.startsWith("/api") && !pathname.startsWith("/_next") && !pathname.startsWith("/extensao") && !pathname.startsWith("/.well-known") && !PUBLIC_FILE.test(pathname);
 }
@@ -31,7 +34,7 @@ const LEGAL_PAGES = /^\/(?:robots\.txt|(?:privacy|terms|data-deletion)\/?)$/;
 
 export function isHostileRequest(pathname: string, userAgent: string | null): boolean {
   if (LEGAL_PAGES.test(pathname)) return false;
-  if (PROBE_PATHS.test(pathname) || BLOCKED_AGENTS.test(userAgent ?? "")) return true;
+  if (PROBE_PATHS.test(pathname) || SOURCE_PROBE.test(pathname) || BLOCKED_AGENTS.test(userAgent ?? "")) return true;
   if (isPagePath(pathname) && (!userAgent || SCRIPT_AGENTS.test(userAgent))) return true;
   return false;
 }
