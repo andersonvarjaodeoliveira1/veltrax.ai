@@ -150,11 +150,20 @@ function VerifyDialog({ account, onClose, onSaved }: { account: FbAccount; onClo
   const [provider, setProvider] = useState(account.provider);
   const [proxy, setProxy] = useState(account.proxy);
   const own = !account.external_id;
+  const [problem, setProblem] = useState("");
+  const [removing, setRemoving] = useState(false);
   const save = async () => {
+    const issue = createdProblem(created) || (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) ? "Confira o e-mail da conta: falta o @ ou o final (ex.: nome@gmail.com)." : "");
+    setProblem(issue);
+    if (issue) return;
     try {
       await fb.updateAccount(account.id, { status, status_reason: reason, account_created_on: created, email, ...(own ? { provider, proxy: provider === "manual" ? "" : proxy } : {}) });
-      toast.success("Verificação salva"); onClose(); await onSaved();
+      toast.success("Situação anotada"); onClose(); await onSaved();
     } catch (problem) { toast.error((problem as Error).message); }
+  };
+  const remove = async () => {
+    try { await fb.removeAccount(account.id); toast.success("Perfil apagado"); onClose(); await onSaved(); }
+    catch (problem) { toast.error((problem as Error).message); }
   };
   return (
     <Modal open onClose={onClose} title={account.name} description="Anote como a conta está. Conta fora de Ativa segura os posts das páginas dela.">
@@ -169,9 +178,9 @@ function VerifyDialog({ account, onClose, onSaved }: { account: FbAccount; onClo
         <input className={field} value={reason} maxLength={300} onChange={(e) => setReason(e.target.value)} placeholder="Ex.: Facebook pediu confirmação por SMS" /></label> : null}
       <div className="grid gap-2 sm:grid-cols-2">
         <label className="block space-y-1.5"><span className="text-xs font-medium text-white/80">Conta criada em</span>
-          <input className={field} value={created} maxLength={10} onChange={(e) => setCreated(e.target.value)} placeholder="dd/mm/aaaa" /></label>
+          <input className={field} value={created} maxLength={10} inputMode="numeric" onChange={(e) => setCreated(formatBrDate(e.target.value))} placeholder="dd/mm/aaaa" /></label>
         <label className="block space-y-1.5"><span className="text-xs font-medium text-white/80">E-mail da conta</span>
-          <input className={field} value={email} maxLength={200} onChange={(e) => setEmail(e.target.value)} /></label>
+          <input className={field} type="email" value={email} maxLength={200} onChange={(e) => setEmail(e.target.value)} /></label>
       </div>
       {own ? (
         <div className="grid gap-2 sm:grid-cols-2">
@@ -186,9 +195,36 @@ function VerifyDialog({ account, onClose, onSaved }: { account: FbAccount; onClo
           {account.events.map((e) => <li key={e.id} className="text-xs text-white/60">{brDateTime(e.created_at)}, {e.text}, {ACTOR[e.actor]}</li>)}
         </ul>
       ) : null}
-      <div className="flex justify-end"><button type="button" className={primary} onClick={() => void save()}>Salvar</button></div>
+      {problem ? <p role="alert" className="text-sm text-[#F5B454]">{problem}</p> : null}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {removing ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-white/70">Apagar este perfil da lista? As páginas dele continuam.{account.status !== "ativa" ? " Os posts delas voltam a sair." : ""}</span>
+            <button type="button" className={secondary} onClick={() => void remove()}>Sim, apagar</button>
+            <button type="button" className={secondary} onClick={() => setRemoving(false)}>Cancelar</button>
+          </div>
+        ) : <button type="button" className="text-xs text-white/60 underline underline-offset-2 hover:text-white" onClick={() => setRemoving(true)}>Apagar perfil</button>}
+        <button type="button" className={primary} onClick={() => void save()}>Salvar</button>
+      </div>
     </Modal>
   );
+}
+
+/** Põe as barras enquanto a pessoa digita: 10052024 vira 10/05/2024. */
+export function formatBrDate(raw: string): string {
+  const digits = raw.replace(/\D/g, "").slice(0, 8);
+  return [digits.slice(0, 2), digits.slice(2, 4), digits.slice(4, 8)].filter(Boolean).join("/");
+}
+
+/** Vazio quando a data serve (ou está em branco); senão, o que corrigir. */
+export function createdProblem(value: string, today: Date = new Date()): string {
+  const text = value.trim();
+  if (!text) return "";
+  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(text);
+  const date = match ? new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1])) : null;
+  if (!match || !date || date.getDate() !== Number(match[1]) || date.getMonth() !== Number(match[2]) - 1) return "Confira a data de criação: use dia, mês e ano, como 10/05/2024.";
+  if (date.getTime() > today.getTime()) return "A data de criação não pode ser no futuro.";
+  return "";
 }
 
 function ProviderSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
