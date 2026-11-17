@@ -21,11 +21,70 @@ async def _clip(db, tmp_path, user_id="user-1"):
     await db.commit()
 
 
+def _headers_for(user_id: str) -> dict[str, str]:
+    """Os mesmos cabeçalhos assinados do fixture auth_headers, para outro usuário."""
+    import hashlib
+    import hmac
+    import time
+
+    timestamp = str(int(time.time()))
+    signature = hmac.new(b"test-backend-auth-secret", f"{user_id}:{timestamp}".encode(), hashlib.sha256).hexdigest()
+    return {"x-clipgringa-user-id": user_id, "x-clipgringa-ts": timestamp, "x-clipgringa-signature": signature}
+
+
 @pytest.mark.asyncio
-async def test_only_admins_reach_the_module(client, db_session, auth_headers):
+async def test_members_reach_the_module_but_not_the_browser_profile_mirror(client, db_session, auth_headers):
     assert (await client.get("/facebook/overview")).status_code == 401
     await create_user(db_session, user_id="user-1", is_admin=False)
-    assert (await client.get("/facebook/overview", headers=auth_headers)).status_code == 403
+    overview = await client.get("/facebook/overview", headers=auth_headers)
+    assert overview.status_code == 200
+    assert overview.json() == {"accounts": [], "pages": [], "advanced": False}
+    # o espelho de perfis do navegador de gestão continua só para administrador
+    sync = await client.post("/facebook/accounts/sync", headers=auth_headers, json={"provider": "dolphin", "profiles": [{"external_id": "1", "name": "X"}]})
+    assert sync.status_code == 403
+    assert (await client.get("/facebook/overview", headers=auth_headers)).json()["accounts"] == []
+
+
+@pytest.mark.asyncio
+async def test_member_profiles_are_manual_only_without_browser_or_proxy(client, db_session, auth_headers):
+    await create_user(db_session, user_id="user-1", is_admin=False)
+    created = await client.post("/facebook/accounts", headers=auth_headers, json={"name": "Meu perfil", "provider": "adspower", "proxy": "us:9000"})
+    assert created.status_code == 200
+    account_id = created.json()["id"]
+    row = (await db_session.execute(text("SELECT provider, proxy FROM fb_accounts WHERE id = :i"), {"i": account_id})).one()
+    assert (row.provider, row.proxy) == ("manual", "")
+    # trocar navegador ou proxy é ignorado; a ficha de situação funciona
+    patched = await client.patch(f"/facebook/accounts/{account_id}", headers=auth_headers,
+                                 json={"provider": "dicloak", "proxy": "1.2.3.4:1", "status": "restricao", "status_reason": "Pediu documento", "email": "a@b.co"})
+    assert patched.status_code == 200
+    row = (await db_session.execute(text("SELECT provider, proxy, status, email FROM fb_accounts WHERE id = :i"), {"i": account_id})).one()
+    assert (row.provider, row.proxy, row.status, row.email) == ("manual", "", "restricao", "a@b.co")
+    account = (await client.get("/facebook/overview", headers=auth_headers)).json()["accounts"][0]
+    assert account["status"] == "restricao" and account["proxy"] == ""
+
+
+@pytest.mark.asyncio
+async def test_one_member_never_sees_or_changes_another_members_data(client, db_session, auth_headers):
+    await create_user(db_session, user_id="user-1", is_admin=False)
+    await create_user(db_session, user_id="user-2", email="other@example.com", is_admin=False)
+    other = _headers_for("user-2")
+    mine = (await client.post("/facebook/accounts", headers=auth_headers, json={"name": "Perfil do um"})).json()["id"]
+    my_page = (await client.post("/facebook/pages", headers=auth_headers, json={"name": "Página do um", "account_id": mine})).json()["id"]
+
+    theirs = (await client.get("/facebook/overview", headers=other)).json()
+    assert theirs["accounts"] == [] and theirs["pages"] == []
+    assert (await client.patch(f"/facebook/accounts/{mine}", headers=other, json={"status": "bloqueada"})).status_code == 404
+    assert (await client.delete(f"/facebook/accounts/{mine}", headers=other)).status_code == 404
+    assert (await client.patch(f"/facebook/pages/{my_page}", headers=other, json={"name": "Tomada"})).status_code == 404
+    assert (await client.delete(f"/facebook/pages/{my_page}", headers=other)).status_code == 404
+    assert (await client.get(f"/facebook/pages/{my_page}/posts", headers=other)).status_code == 404
+    # e não consegue ligar uma página própria ao perfil do outro
+    crossed = await client.post("/facebook/pages", headers=other, json={"name": "Página do dois", "account_id": mine})
+    assert crossed.status_code in (400, 404)
+
+    still = (await client.get("/facebook/overview", headers=auth_headers)).json()
+    assert [a["name"] for a in still["accounts"]] == ["Perfil do um"] and still["accounts"][0]["status"] == "ativa"
+    assert [p["name"] for p in still["pages"]] == ["Página do um"]
 
 
 @pytest.mark.asyncio
@@ -56,7 +115,7 @@ async def test_full_flow_accounts_pages_clips_publish(client, db_session, auth_h
     import time as _t
     ts = str(int(_t.time()))
     other.update({"x-clipgringa-user-id": "user-2", "x-clipgringa-ts": ts, "x-clipgringa-signature": hmac.new(b"test-backend-auth-secret", f"user-2:{ts}".encode(), hashlib.sha256).hexdigest()})
-    assert (await client.get("/facebook/overview", headers=other)).json() == {"accounts": [], "pages": []}
+    assert (await client.get("/facebook/overview", headers=other)).json() == {"accounts": [], "pages": [], "advanced": True}
     assert (await client.post(f"/facebook/pages/{page['id']}/clips", headers=other, json={"clip_ids": ["clip-fb"]})).status_code == 404
 
     # conectar à Meta (token conferido) e publicar
