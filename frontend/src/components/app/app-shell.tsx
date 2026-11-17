@@ -134,7 +134,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
 
-        <div className="scrollbar-none min-h-0 w-full flex-1 overflow-y-auto">
+        <div className="scrollbar-thin min-h-0 w-full flex-1 overflow-y-auto">
         <nav aria-label="Main navigation" className="flex w-full flex-col gap-0.5">
           {items.map((item, index) => {
             const active = item.match(pathname);

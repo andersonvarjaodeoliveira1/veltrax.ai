@@ -204,6 +204,11 @@
 
 .scrollbar-none { scrollbar-width: none; }
 .scrollbar-none::-webkit-scrollbar { display: none; }
+/* Barra fina e discreta: mostra que a lista continua (menu lateral em telas baixas). */
+.scrollbar-thin { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.18) transparent; }
+.scrollbar-thin::-webkit-scrollbar { width: 6px; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.18); border-radius: 3px; }
+.scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
 
 /* Polimento geral: seleção, foco, botões clicáveis e seções expansíveis (details) mais claras */
 ::selection { background: rgba(123, 63, 228, 0.45); color: #fff; }
