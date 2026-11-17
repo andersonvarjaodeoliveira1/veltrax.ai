@@ -4,9 +4,10 @@ import { describe, expect, it } from "vitest";
 
 // As funções que a extensão usa para decidir se a resposta do chat de IA terminou (extension/flow/ai-read.js).
 const source = readFileSync(resolve(__dirname, "../../../extension/flow/ai-read.js"), "utf8");
-const { clean, wantsJson, jsonComplete, done } = new Function(
-  `${source}; return { clean: clipgringaCleanReply, wantsJson: clipgringaWantsJson, jsonComplete: clipgringaJsonComplete, done: clipgringaReplyDone };`,
+const { clean, wantsJson, jsonComplete, done, keepWaiting } = new Function(
+  `${source}; return { clean: clipgringaCleanReply, wantsJson: clipgringaWantsJson, jsonComplete: clipgringaJsonComplete, done: clipgringaReplyDone, keepWaiting: clipgringaKeepWaiting };`,
 )() as {
+  keepWaiting: (now: number, deadline: number, hardDeadline: number, generating: boolean) => boolean;
   clean: (text: string) => string;
   wantsJson: (prompt: string) => boolean;
   jsonComplete: (text: string) => boolean;
@@ -57,5 +58,14 @@ describe("leitura da resposta da IA da conta", () => {
     expect(done(TEXT_PROMPT, reply, 3000, false, false)).toBe("");     // nunca viu o botão: pode ser o modelo pensando
     expect(done(TEXT_PROMPT, reply, 6500, false, false)).toBe(reply);
     expect(done(TEXT_PROMPT, "O Gemini disse Pro O Gemini é uma IA e pode cometer erros.", 20000, false, false)).toBe("");
+  });
+
+  it("não desiste enquanto o site ainda está trabalhando (o Gemini levou 44 s pensando num pedido mínimo)", () => {
+    const deadline = 55_000;      // primeira tentativa
+    const hardDeadline = 146_000; // tempo total do pedido
+    expect(keepWaiting(10_000, deadline, hardDeadline, false)).toBe(true);   // dentro do prazo normal
+    expect(keepWaiting(60_000, deadline, hardDeadline, true)).toBe(true);    // passou do prazo, mas o botão de parar está na tela
+    expect(keepWaiting(60_000, deadline, hardDeadline, false)).toBe(false);  // passou do prazo e nada acontece: tenta numa conversa nova
+    expect(keepWaiting(146_000, deadline, hardDeadline, true)).toBe(false);  // nem trabalhando passa do tempo total
   });
 });

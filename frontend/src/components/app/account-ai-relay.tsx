@@ -101,7 +101,8 @@ export function AccountAiRelay() {
             job = ((await response.json()) as { job: { id: string; prompt: string; images?: { mime: string; data: string }[] } | null }).job;
           } catch { await sleep(5_000); continue; }
           if (!job) continue;
-          const result = await askAccount(site, job.prompt, 100_000, job.images ?? []);
+          // 150 s: o Gemini pode "pensar" quase um minuto antes de escrever. O servidor espera um pouco mais que isso.
+          const result = await askAccount(site, job.prompt, 150_000, job.images ?? []);
           try {
             await fetch("/api/multiplier/ai-relay/result", {
               method: "POST", headers: JSON_HEADERS,

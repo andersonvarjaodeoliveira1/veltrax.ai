@@ -191,3 +191,22 @@ def test_set_ai_why_is_recorded_in_the_path_holder():
     holder = ai_relay.start_path_tracking()
     ai_relay.set_ai_why("login")
     assert holder["why"] == "login"
+
+
+def test_server_waits_longer_than_the_page_gives_the_extension():
+    """A página dá 150 s à extensão (190 s com imagens). Se o servidor desistir antes, a resposta chega tarde e é jogada fora."""
+    assert ai_relay.ASK_TIMEOUT > 150
+    assert ai_relay.ASK_TIMEOUT_IMAGES > 190
+    # O site espera o servidor por até 300 s: uma geração inteira pela conta tem de caber nisso.
+    assert ai_relay.ASK_TIMEOUT_IMAGES < ai_relay.RELAY_RUN_TIMEOUT < 300
+
+
+def test_multiplier_waits_for_the_account_ai_as_long_as_the_relay_allows():
+    from types import SimpleNamespace
+
+    from src.api.routes import multiplier
+
+    assert multiplier._ai_wait(SimpleNamespace(is_account_relay=True)) == ai_relay.RELAY_RUN_TIMEOUT
+    assert multiplier._ai_wait(SimpleNamespace(is_account_relay=False)) == 90.0
+    assert multiplier._ai_wait(None) == 90.0
+

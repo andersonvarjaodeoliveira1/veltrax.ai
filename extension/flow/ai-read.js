@@ -64,3 +64,14 @@ function clipgringaReplyDone(prompt, rawText, quietMs, generating, sawGenerating
   }
   return quietMs > (sawGenerating ? 2200 : 6000) ? text : "";
 }
+
+/**
+ * Continua esperando a resposta?
+ * Até o prazo normal, sempre. Depois dele, só enquanto o site ainda está trabalhando (botão de parar na tela) e
+ * sem passar do prazo máximo. Medido em 16/11/2026: o Gemini ficou 44 s "pensando" num pedido mínimo antes de
+ * escrever a primeira letra; desistir aos 55 s e recomeçar do zero jogava fora uma resposta que estava a caminho.
+ */
+function clipgringaKeepWaiting(now, deadline, hardDeadline, generating) {
+  return now < deadline || (generating && now < hardDeadline);
+}
+

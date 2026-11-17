@@ -26,9 +26,11 @@ logger = logging.getLogger(__name__)
 SITES = ("gemini", "chatgpt", "claude")
 SITE_LABEL = {"gemini": "Gemini", "chatgpt": "ChatGPT", "claude": "Claude"}
 READY_TTL = 45.0       # segundos sem sinal da página até considerar a conta desligada
-ASK_TIMEOUT = 110.0    # tempo máximo de espera por uma resposta
-ASK_TIMEOUT_IMAGES = 150.0  # com imagens a conta da pessoa leva mais (a extensão anexa as fotos antes de enviar)
-RELAY_RUN_TIMEOUT = 220.0   # limite de uma geração inteira pela conta (o agente pode pedir de novo se o JSON vier torto)
+# A página dá 150 s para a extensão (190 s com imagens); o servidor espera um pouco mais que isso, para a resposta
+# não chegar depois de ele ter desistido (aconteceu em 16/11/2026: resposta aos 106 s, espera de 90 s).
+ASK_TIMEOUT = 165.0    # tempo máximo de espera por uma resposta
+ASK_TIMEOUT_IMAGES = 205.0  # com imagens a conta da pessoa leva mais (a extensão anexa as fotos antes de enviar)
+RELAY_RUN_TIMEOUT = 280.0   # limite de uma geração inteira pela conta (abaixo dos 300 s que o site espera do servidor)
 API_RUN_TIMEOUT = 120.0
 
 

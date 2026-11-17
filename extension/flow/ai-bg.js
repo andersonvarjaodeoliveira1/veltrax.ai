@@ -64,7 +64,9 @@ async function aiAsk(site, prompt, timeoutMs, images) {
   if (!AI_URLS[site]) return { ok: false, error: "failed:site desconhecido" };
   const keep = setInterval(() => chrome.runtime.getPlatformInfo(() => void chrome.runtime.lastError), 20000);
   try {
-    // Duas tentativas: se a primeira estourar o tempo, abre uma conversa nova e tenta de novo com o tempo que sobrou.
+    // Duas tentativas: se a primeira estourar o tempo sem o site estar trabalhando, abre uma conversa nova e tenta de
+    // novo com o tempo que sobrou. Se o site ainda está escrevendo ou "pensando", a primeira continua até o fim do
+    // tempo total (hardMs): recomeçar jogaria fora a resposta que já vinha.
     const started = Date.now();
     let resp = null;
     for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -72,7 +74,8 @@ async function aiAsk(site, prompt, timeoutMs, images) {
       if (attempt === 1 && left < 25000) break;
       const budget = attempt === 0 ? Math.max(45000, Math.floor(timeoutMs * 0.55)) : left;
       const tabId = await aiOwnedTab(site);
-      resp = await aiSendToTab(tabId, { type: "clipgringa-ai-run", site, prompt, timeoutMs: budget, images: images || [] });
+      const hardMs = Math.max(budget, timeoutMs - (Date.now() - started) - 4000);
+      resp = await aiSendToTab(tabId, { type: "clipgringa-ai-run", site, prompt, timeoutMs: budget, hardMs, images: images || [] });
       if (resp && resp.ok) break;
       const retryable = !resp || /^(timeout|nopage|failed)/.test(String(resp.error || ""));
       if (!retryable) break;
