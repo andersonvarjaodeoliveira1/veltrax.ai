@@ -19,7 +19,8 @@ export function FeedbackButton() {
         <Button
           size="icon"
           aria-label="Suporte"
-          className="fixed bottom-5 right-5 z-50 h-11 w-11 rounded-full shadow-lg max-md:[body:has([data-app-shell])_&]:bottom-[calc(5rem+env(safe-area-inset-bottom))]"
+          // Com os balões de ajuda na tela (dois botões de 44 px no mesmo canto), o suporte fica à esquerda deles, na mesma linha.
+          className="fixed bottom-5 right-5 z-50 h-11 w-11 rounded-full shadow-lg max-md:[body:has([data-app-shell])_&]:bottom-[calc(4.5rem+env(safe-area-inset-bottom))] [body:has([data-help-bubbles])_&]:bottom-4 [body:has([data-help-bubbles])_&]:right-[7.5rem] max-md:[body:has([data-help-bubbles])_&]:bottom-[calc(4.5rem+env(safe-area-inset-bottom))] max-md:[body:has([data-help-bubbles])_&]:right-[7.25rem]"
         >
           <MessageSquare className="h-5 w-5" />
         </Button>
