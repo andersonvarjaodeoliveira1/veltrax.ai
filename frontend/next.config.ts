@@ -43,6 +43,11 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: false,
   },
+  // Proteção do código: em produção, tira os console.log do pacote do navegador (menos pistas internas na tela).
+  // warn e error ficam: o registro de segurança do middleware usa console.warn.
+  compiler: {
+    removeConsole: process.env.NODE_ENV === "production" ? { exclude: ["error", "warn"] } : false,
+  },
   async rewrites() {
     return [
       {
