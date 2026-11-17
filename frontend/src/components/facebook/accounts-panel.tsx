@@ -122,7 +122,7 @@ export function AccountsPanel({ accounts, onChange }: { accounts: FbAccount[]; o
               </div>
               <Pill tone={SHIELD_TONE[a.protection]}>{PROTECTION_TEXT[a.protection]}</Pill>
               <Pill tone={TONE[a.status]}>{STATUS_TEXT[a.status]}</Pill>
-              <button type="button" className={secondary} onClick={() => setVerify(a)}>Verificar</button>
+              <button type="button" className={secondary} onClick={() => setVerify(a)}>Anotar situação</button>
               <button type="button" className={secondary} disabled={!local?.ok} onClick={() => void open(a)}>Abrir</button>
             </li>
           ))}
@@ -164,6 +164,7 @@ function VerifyDialog({ account, onClose, onSaved }: { account: FbAccount; onClo
             className={cn("rounded-[12px] border px-3 py-2.5 text-left text-sm", status === s ? "border-violet-400 bg-violet-500/15 text-white" : "border-white/10 text-white/70")}>{STATUS_TEXT[s]}</button>
         ))}
       </div>
+      {status !== "ativa" ? <p role="alert" className="rounded-[12px] border border-amber-400/40 bg-amber-400/10 px-3 py-2.5 text-sm font-medium text-amber-200">Enquanto estiver assim, os posts das páginas deste perfil ficam parados.</p> : null}
       {status !== "ativa" ? <label className="block space-y-1.5"><span className="text-xs font-medium text-white/80">Motivo</span>
         <input className={field} value={reason} maxLength={300} onChange={(e) => setReason(e.target.value)} placeholder="Ex.: Facebook pediu confirmação por SMS" /></label> : null}
       <div className="grid gap-2 sm:grid-cols-2">
