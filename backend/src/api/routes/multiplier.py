@@ -1163,7 +1163,7 @@ async def _generate_copy(product: str, tone: str, model: Any = None) -> dict[str
     agent = Agent(model, output_type=_AdCopy, system_prompt=SCRIPT_SYSTEM_PROMPT, output_retries=2)
     prompt = f"Product description:\n{product}\n\nTone: {tone or 'direct and friendly'}"
     try:
-        result = await asyncio.wait_for(agent.run(prompt), timeout=90)
+        result = await asyncio.wait_for(agent.run(prompt), timeout=_ai_wait(model))
     except asyncio.TimeoutError:
         raise HTTPException(status_code=504, detail="AI took too long. Try again.")
     except HTTPException:
@@ -1184,6 +1184,13 @@ async def _generate_copy(product: str, tone: str, model: Any = None) -> dict[str
     if not hooks or not bodies or not ctas:
         raise HTTPException(status_code=502, detail="Could not generate the texts. Try again.")
     return {"hooks": hooks, "bodies": bodies, "ctas": ctas}
+
+
+def _ai_wait(model: Any) -> float:
+    """Quanto esperar por uma geração: 90 s para uma API; pela conta da pessoa (extensão), o limite próprio dela."""
+    from ...ai_relay import RELAY_RUN_TIMEOUT
+
+    return RELAY_RUN_TIMEOUT if getattr(model, "is_account_relay", False) else 90.0
 
 
 async def _with_own_ai(db: AsyncSession, user_id: str, run: Any) -> Any:
@@ -1266,7 +1273,7 @@ async def _generate_video_prompts(items: list[dict[str, str]], model: Any = None
         for number, item in enumerate(items, start=1)
     ]
     try:
-        result = await asyncio.wait_for(agent.run("\n\n".join(lines)), timeout=90)
+        result = await asyncio.wait_for(agent.run("\n\n".join(lines)), timeout=_ai_wait(model))
     except asyncio.TimeoutError:
         raise HTTPException(status_code=504, detail="AI took too long. Try again.")
     except HTTPException:

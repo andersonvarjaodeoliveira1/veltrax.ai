@@ -158,7 +158,7 @@
     return attached() ? files.length : 0;
   }
 
-  async function run(prompt, timeoutMs, images) {
+  async function run(prompt, timeoutMs, images, hardMs) {
     const s = await waitState(25000);
     if (s === "blocked") return { ok: false, error: "blocked" };
     if (s === "login") return { ok: false, error: "login" };
@@ -190,14 +190,17 @@
     }
 
     const deadline = Date.now() + timeoutMs;
+    // Prazo máximo: enquanto o site ainda trabalha neste pedido, esperar vale mais que recomeçar numa conversa nova.
+    const hardDeadline = Date.now() + Math.max(timeoutMs, Number(hardMs) || 0);
     let started = false;
     let lastText = "";
     let stableSince = 0;
     let sawGenerating = false;
-    while (Date.now() < deadline) {
+    let generating = false;
+    while (clipgringaKeepWaiting(Date.now(), deadline, hardDeadline, generating)) {
       await sleep(700);
       if (challenge()) return { ok: false, error: "blocked" };
-      const generating = !!first(SEL.stop);
+      generating = !!first(SEL.stop);
       if (generating) sawGenerating = true;
       if (generating || replyCount() > before || afterPrompt(prompt).length > 0) started = true;
       let text = lastReply();
@@ -218,7 +221,7 @@
       return true;
     }
     if (message.type === "clipgringa-ai-run" && message.site === SITE) {
-      run(String(message.prompt || ""), Number(message.timeoutMs) || 100000, message.images)
+      run(String(message.prompt || ""), Number(message.timeoutMs) || 100000, message.images, Number(message.hardMs) || 0)
         .then(sendResponse)
         .catch((e) => sendResponse({ ok: false, error: "failed:" + String((e && e.message) || e).slice(0, 120) }));
       return true;
