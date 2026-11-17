@@ -11,6 +11,9 @@ describe("translate", () => {
     expect(translate("Texto qualquer", "pt")).toBe("Texto qualquer");
   });
   it("traduz frases com números", () => {
+    expect(translate("What's new, 1 unread announcement", "pt")).toBe("Novidades, 1 aviso não lido");
+    expect(translate("What's new, 3 unread announcements", "pt")).toBe("Novidades, 3 avisos não lidos");
+    expect(translate("What's new, 3 unread announcements", "es")).toBe("Novedades, 3 avisos sin leer");
     expect(translate("Creating clip 2/10...", "pt")).toBe("Criando corte 2 de 10…");
     expect(translate("2 clips ready below — more on the way.", "pt")).toBe("2 cortes prontos abaixo — mais a caminho.");
     expect(translate("5 clips · 3:28 total", "es")).toBe("5 cortes · 3:28 en total");
