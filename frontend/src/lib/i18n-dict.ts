@@ -61,6 +61,7 @@ const E: Record<string, Entry> = {
   "What's new": { pt: "Novidades", es: "Novedades" },
   "What's new in ClipGringa": { pt: "Novidades no ClipGringa", es: "Novedades en ClipGringa" },
   "Close announcements": { pt: "Fechar avisos", es: "Cerrar avisos" },
+  "Announcements": { pt: "Avisos", es: "Avisos" },
   "Creator": { pt: "Criador", es: "Creador" },
 
   // Entrar
@@ -309,6 +310,7 @@ export const PATTERNS: Array<{ re: RegExp; pt: (m: RegExpMatchArray) => string; 
   { re: /^(\d+) clips? ready below — more on the way\.$/, pt: (m) => `${m[1]} ${m[1] === "1" ? "corte pronto" : "cortes prontos"} abaixo — mais a caminho.`, es: (m) => `${m[1]} ${m[1] === "1" ? "corte listo" : "cortes listos"} abajo — más en camino.` },
   { re: /^(\d+) clips? · (.+) total$/, pt: (m) => `${m[1]} ${m[1] === "1" ? "corte" : "cortes"} · ${m[2]} no total`, es: (m) => `${m[1]} ${m[1] === "1" ? "corte" : "cortes"} · ${m[2]} en total` },
   { re: /^(\d+) generations?(.*)$/, pt: (m) => `${m[1]} ${m[1] === "1" ? "corte" : "cortes"}${m[2].replace("· hover to preview, select to batch-manage", "· passe o mouse para ver, selecione para gerenciar em lote")}`, es: (m) => `${m[1]} ${m[1] === "1" ? "corte" : "cortes"}${m[2].replace("· hover to preview, select to batch-manage", "· pasa el ratón para ver, selecciona para gestionar en lote")}` },
+  { re: /^What's new, (\d+) unread announcements?$/, pt: (m) => `Novidades, ${m[1]} ${m[1] === "1" ? "aviso não lido" : "avisos não lidos"}`, es: (m) => `Novedades, ${m[1]} ${m[1] === "1" ? "aviso sin leer" : "avisos sin leer"}` },
   { re: /^(\d+)% complete$/, pt: (m) => `${m[1]}% concluído`, es: (m) => `${m[1]}% completado` },
   { re: /^(\d+)% relevance$/, pt: (m) => `${m[1]}% de relevância`, es: (m) => `${m[1]}% de relevancia` },
   { re: /^Virality score (\d+) out of 100$/, pt: (m) => `Nota de viralização ${m[1]} de 100`, es: (m) => `Puntuación de viralidad ${m[1]} de 100` },

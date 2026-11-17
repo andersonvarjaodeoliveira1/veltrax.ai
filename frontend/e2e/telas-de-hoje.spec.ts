@@ -23,8 +23,8 @@ test("administrador publica um aviso e o membro lê em Novidades", async ({ page
     await context.clearCookies();
     await signIn(page, seed.regular.email, seed.regular.password);
     await page.goto("/");
-    // O nome lido pelo leitor de tela ainda sai em inglês quando há aviso não lido ("What's new, 1 unread announcement").
-    await page.getByRole("button", { name: /Novidades|What's new/ }).filter({ visible: true }).first().click();
+    // Com aviso não lido, o leitor de tela diz "Novidades, 1 aviso não lido".
+    await page.getByRole("button", { name: /^Novidades, \d+ avisos? não lidos?$/ }).filter({ visible: true }).first().click();
     const item = page.getByRole("dialog").filter({ hasText: title });
     await expect(item).toContainText(description);
     await expect(item.getByRole("link", { name: action })).toHaveAttribute("href", "/conectar-flow");
