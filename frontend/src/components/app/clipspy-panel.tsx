@@ -206,6 +206,58 @@ function ConfigScreen({ term, onRecheck, rechecking, access }: { term: string; o
   );
 }
 
+const plural = (n: number, one: string, many: string) => `${n === 1 ? one : many}`;
+
+/** Os números do que já está guardado. Cada um leva ao detalhe. */
+function StoredSummary({ items, pages, onAll, onChampions, onPages }: { items: Creative[]; pages: number | null; onAll: () => void; onChampions: () => void; onPages: () => void }) {
+  const champions = items.filter((c) => c.is_champion).length;
+  const advertisers = new Set(items.map((c) => c.advertiser).filter(Boolean)).size;
+  const tile = "min-w-0 flex-1 basis-36 rounded-[14px] border border-white/10 bg-[#1a191d] px-4 py-3 text-left";
+  const number = "block text-2xl font-medium tabular-nums text-white";
+  const label = "block text-xs text-white/60";
+  return (
+    <section aria-label="O que você já tem no ClipSpy" className="flex flex-wrap gap-3" data-testid="clipspy-summary">
+      <button type="button" onClick={onAll} className={`${tile} hover:border-white/25`}><span className={number}>{items.length}</span><span className={label}>{plural(items.length, "criativo guardado", "criativos guardados")}</span></button>
+      <button type="button" onClick={onChampions} className={`${tile} hover:border-white/25`}><span className={number}>{champions}</span><span className={label}>{plural(champions, "campeão", "campeões")}</span></button>
+      <div className={tile}><span className={number}>{advertisers}</span><span className={label}>{plural(advertisers, "anunciante", "anunciantes")}</span></div>
+      {pages !== null ? <button type="button" onClick={onPages} className={`${tile} hover:border-white/25`}><span className={number}>{pages}</span><span className={label}>{plural(pages, "página conectada", "páginas conectadas")}</span></button> : null}
+    </section>
+  );
+}
+
+/** Ao entrar, antes de qualquer busca: os criativos guardados, do que está há mais tempo no ar para o mais novo. */
+function StoredList({ items, term, onTerm, onSave, onModel, onAll, busyId }: { items: Creative[]; term: string; onTerm: (term: string) => void; onSave: (c: Creative) => void; onModel: (c: Creative) => void; onAll: () => void; busyId: string | null }) {
+  const terms = new Map<string, number>();
+  for (const c of items) if (c.term) terms.set(c.term, (terms.get(c.term) ?? 0) + 1);
+  const shown = items
+    .filter((c) => !term || c.term === term)
+    .sort((a, b) => (b.metrics?.run_days ?? 0) - (a.metrics?.run_days ?? 0) || b.score - a.score);
+  const chip = (active: boolean) => `rounded-full border px-3 py-1.5 text-xs ${active ? "border-white/30 bg-white/10 text-white" : "border-white/10 text-white/60 hover:text-white"}`;
+  const LIMIT = 6;
+  return (
+    <section aria-label="Criativos guardados" className="space-y-3" data-testid="clipspy-stored">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-sm font-semibold text-white">O que você já tem guardado</h2>
+        <p className="text-xs text-white/50">Há mais tempo no ar primeiro</p>
+      </div>
+      {terms.size > 0 ? (
+        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filtrar por busca feita">
+          <button type="button" aria-pressed={!term} onClick={() => onTerm("")} className={chip(!term)}>Todas as buscas</button>
+          {[...terms.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([name, count]) => (
+            <button key={name} type="button" aria-pressed={term === name} onClick={() => onTerm(term === name ? "" : name)} className={chip(term === name)}>{name} <span className="text-white/50">{count}</span></button>
+          ))}
+        </div>
+      ) : null}
+      <div className="grid gap-3 md:grid-cols-2">
+        {shown.slice(0, LIMIT).map((c) => <Card key={c.id} c={c} onSave={() => onSave(c)} onModel={() => onModel(c)} busy={busyId === c.id} />)}
+      </div>
+      {shown.length > LIMIT ? (
+        <button type="button" onClick={onAll} className="inline-flex min-h-9 items-center rounded-full border border-white/15 px-4 text-sm text-white/85 hover:bg-white/5">Ver os {items.length} na Biblioteca</button>
+      ) : null}
+    </section>
+  );
+}
+
 export function ClipSpyPanel() {
   const [view, setView] = useState<"buscar" | "biblioteca" | "referencia" | "pagina">("buscar");
   const [term, setTerm] = useState("");
@@ -223,6 +275,18 @@ export function ClipSpyPanel() {
   const [error, setError] = useState<string | null>(null);
   // Conta de demonstração do revisor da Meta: mostra o passo a passo em inglês.
   const [reviewer, setReviewer] = useState(false);
+  // O que a pessoa já tem guardado: aparece ao entrar, antes de qualquer busca.
+  const [stored, setStored] = useState<Creative[] | null>(null);
+  const [pageCount, setPageCount] = useState<number | null>(null);
+  const [storedTerm, setStoredTerm] = useState("");
+
+  const loadStored = useCallback(async () => {
+    try { setStored(dedupe((await clipspy.bank()).items)); } catch { setStored((current) => current ?? []); }
+  }, []);
+  useEffect(() => {
+    void loadStored();
+    clipspy.connectedPages().then((r) => setPageCount(r.pages.length)).catch(() => setPageCount(null));
+  }, [loadStored]);
 
   const checkStatus = useCallback(async (force = false) => {
     try {
@@ -268,6 +332,7 @@ export function ClipSpyPanel() {
       const cs = countries.split(",").map((s) => s.trim()).filter(Boolean);
       const { results } = await clipspy.search(term.trim(), cs, 30);
       setResults(dedupe(results));
+      void loadStored();
       if (!results.length) toast("Nada ativo encontrado para esse termo nesses países.");
     } catch (e) {
       const msg = (e as Error).message;
@@ -294,7 +359,12 @@ export function ClipSpyPanel() {
 
   async function save(c: Creative) {
     setBusyId(c.id);
-    try { await clipspy.setStatus(c.id, "salvo"); setResults((r) => (r ?? []).map((x) => x.id === c.id ? { ...x, status: "salvo" } : x)); toast.success("Salvo na biblioteca"); }
+    try {
+      await clipspy.setStatus(c.id, "salvo");
+      setResults((r) => (r ? r.map((x) => x.id === c.id ? { ...x, status: "salvo" } : x) : r));
+      setStored((r) => (r ? r.map((x) => x.id === c.id ? { ...x, status: "salvo" } : x) : r));
+      toast.success("Salvo na biblioteca");
+    }
     catch (e) { toast.error((e as Error).message); } finally { setBusyId(null); }
   }
   // Extrai a receita de beats do texto do vencedor e leva para o Gerador de Cenas.
@@ -310,7 +380,7 @@ export function ClipSpyPanel() {
   }
   async function archive(c: Creative) {
     setBusyId(c.id);
-    try { await clipspy.setStatus(c.id, "arquivado"); setLibrary((l) => (l ?? []).filter((x) => x.id !== c.id)); }
+    try { await clipspy.setStatus(c.id, "arquivado"); setLibrary((l) => (l ?? []).filter((x) => x.id !== c.id)); setStored((l) => (l ? l.filter((x) => x.id !== c.id) : l)); }
     catch (e) { toast.error((e as Error).message); } finally { setBusyId(null); }
   }
 
@@ -329,15 +399,22 @@ export function ClipSpyPanel() {
   return (
     <div className="space-y-4">
       {reviewer ? <ReviewerGuide onStart={() => setView("pagina")} /> : null}
+      {stored && (stored.length > 0 || (pageCount ?? 0) > 0) ? (
+        <StoredSummary items={stored} pages={pageCount}
+          onAll={() => { setOnlyChampions(false); setView("biblioteca"); }}
+          onChampions={() => { setOnlyChampions(true); setView("biblioteca"); }}
+          onPages={() => setView("pagina")} />
+      ) : null}
       <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-[22px] border border-white/10 bg-white/[0.03] p-1">
         <button type="button" onClick={() => setView("buscar")} className={`rounded-full px-4 py-1.5 text-sm ${view === "buscar" ? "bg-white/10 text-white" : "text-white/60"}`}>Pesquisar</button>
-        <button type="button" onClick={() => setView("biblioteca")} className={`rounded-full px-4 py-1.5 text-sm ${view === "biblioteca" ? "bg-white/10 text-white" : "text-white/60"}`}>Biblioteca</button>
+        <button type="button" onClick={() => setView("biblioteca")} className={`rounded-full px-4 py-1.5 text-sm ${view === "biblioteca" ? "bg-white/10 text-white" : "text-white/60"}`}>Biblioteca{stored?.length ? <span aria-hidden className="ml-1.5 text-white/50">{stored.length}</span> : null}</button>
         <button type="button" onClick={() => setView("referencia")} className={`rounded-full px-4 py-1.5 text-sm ${view === "referencia" ? "bg-white/10 text-white" : "text-white/60"}`}>Adicionar referência</button>
-        <button type="button" onClick={() => setView("pagina")} className={`rounded-full px-4 py-1.5 text-sm ${view === "pagina" ? "bg-white/10 text-white" : "text-white/60"}`}>Analisar página</button>
+        <button type="button" onClick={() => setView("pagina")} className={`rounded-full px-4 py-1.5 text-sm ${view === "pagina" ? "bg-white/10 text-white" : "text-white/60"}`}>Analisar página{pageCount ? <span aria-hidden className="ml-1.5 text-white/50">{pageCount}</span> : null}</button>
       </div>
 
       {view === "buscar" ? (
-        configured === false ? (
+        <>
+        {configured === false ? (
           <ConfigScreen term={term} onRecheck={recheck} rechecking={rechecking} access={access} />
         ) : (
         <div className="space-y-3">
@@ -379,7 +456,13 @@ export function ClipSpyPanel() {
             )
           }
         </div>
-        )
+        )}
+        {results === null && !loading && !error && stored?.length ? (
+          <StoredList items={stored} term={storedTerm} onTerm={setStoredTerm} busyId={busyId}
+            onSave={(c) => void save(c)} onModel={(c) => void model(c)}
+            onAll={() => { setOnlyChampions(false); setView("biblioteca"); }} />
+        ) : null}
+        </>
       ) : view === "referencia" ? (
         <ReferenceForm onSaved={() => { setOnlyChampions(false); setView("biblioteca"); }} onModel={(c) => void model(c)} />
       ) : view === "pagina" ? (
