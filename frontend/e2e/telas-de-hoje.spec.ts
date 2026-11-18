@@ -142,37 +142,3 @@ test("no celular o texto de Minhas APIs não fica espremido ao lado do botão", 
   expect((await text.boundingBox())!.width).toBeGreaterThan(200);
   if (process.env.CAPTURAS) await page.screenshot({ path: `${process.env.CAPTURAS}/minhas-apis-celular.png` });
 });
-
-test("membro abre a área Facebook, sem as funções de navegador de perfis", async ({ page }) => {
-  await skipTutorial(page);
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await signIn(page, seed.regular.email, seed.regular.password);
-  await page.goto("/facebook");
-  await expect(page.getByRole("heading", { name: "Facebook" })).toBeVisible();
-  await expect(page.getByText("Esta área está sendo construída")).toHaveCount(0);
-  await expect(page.getByRole("navigation", { name: /Main navigation|Navegação principal/ }).getByRole("link", { name: /Facebook/ })).toBeVisible();
-
-  await page.getByRole("tab", { name: /Perfis/ }).click();
-  await expect(page.getByRole("button", { name: "Adicionar conta à mão" })).toBeVisible();
-  for (const text of [/Conector/, /Dolphin/, /Proteção das contas/, /proxy/i]) await expect(page.getByText(text)).toHaveCount(0);
-
-  // cadastra um perfil à mão e anota a situação: o aviso dos posts parados aparece
-  const name = `Perfil e2e ${Date.now()}`;
-  await page.getByRole("button", { name: "Adicionar conta à mão" }).click();
-  await expect(page.getByLabel("Onde abre")).toHaveCount(0);
-  await page.getByLabel("Nome do perfil").fill(name);
-  await page.getByRole("button", { name: "Adicionar", exact: true }).click();
-  const row = page.getByRole("listitem").filter({ hasText: name });
-  await expect(row).toBeVisible();
-  await row.getByRole("button", { name: "Anotar situação" }).click();
-  const dialog = page.getByRole("dialog");
-  await dialog.getByRole("button", { name: "Com restrição" }).click();
-  await expect(dialog.getByText("Enquanto estiver assim, os posts das páginas deste perfil ficam parados.")).toBeVisible();
-  await dialog.getByRole("button", { name: "Salvar" }).click();
-  await expect(row.getByText("Com restrição")).toBeVisible();
-  // limpa: apaga o perfil criado
-  await row.getByRole("button", { name: "Anotar situação" }).click();
-  await dialog.getByRole("button", { name: "Apagar perfil" }).click();
-  await dialog.getByRole("button", { name: "Sim, apagar" }).click();
-  await expect(page.getByRole("listitem").filter({ hasText: name })).toHaveCount(0);
-});

@@ -59,9 +59,6 @@ const NAV: NavItem[] = [
   { href: PLAN_WHATSAPP_URL, label: "Assinar um plano", icon: MessageCircle, match: () => false, external: true },
 ];
 
-// Para o membro, Facebook fica logo depois de Minhas APIs, antes do grupo Comprar.
-const FACEBOOK_AT = NAV.findIndex((item) => item.group === "Comprar");
-
 function initials(name?: string | null, email?: string | null) {
   const source = name?.trim() || email || "?";
   return source.split(/[\s@.]+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("");
@@ -114,12 +111,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // loaded — otherwise the page remounts and re-runs its initial fetches.
   const user = session?.user;
   const admin = Boolean((user as { is_admin?: boolean } | undefined)?.is_admin);
-  const facebook: NavItem = { href: "/facebook", label: "Facebook", icon: Megaphone, badge: "EM CONSTRUÇÃO", match: (p: string) => p.startsWith("/facebook") };
   const items = admin ? [
     ...NAV,
-    { ...facebook, group: "Administração" },
+    { href: "/facebook", label: "Facebook", group: "Administração", icon: Megaphone, badge: "EM CONSTRUÇÃO", match: (p: string) => p.startsWith("/facebook") },
     { href: "/admin", label: "Admin", group: "Administração", icon: Shield, match: (p: string) => p.startsWith("/admin") },
-  ] : [...NAV.slice(0, FACEBOOK_AT), facebook, ...NAV.slice(FACEBOOK_AT)];
+  ] : NAV;
 
   return (
     <div data-app-shell={user ? "" : undefined} className={cn(user && "flex min-h-dvh bg-canvas")}>

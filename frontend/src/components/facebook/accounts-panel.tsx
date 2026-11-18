@@ -15,11 +15,7 @@ const SHIELD_HINT: Record<Protection, string> = {
 };
 const FILTERS: Array<["todas" | AccountStatus, string]> = [["todas", "Todas"], ["ativa", "Ativas"], ["confirmacao", "Pedindo confirmação"], ["restricao", "Com restrição"], ["bloqueada", "Bloqueadas"]];
 
-/**
- * `advanced` (só administrador, decidido pelo backend) liga o conector, o navegador de cada perfil, o proxy e o
- * mapa de proteção. Para o membro fica a lista de perfis, a ficha de situação e o cadastro à mão.
- */
-export function AccountsPanel({ accounts, onChange, advanced = false }: { accounts: FbAccount[]; onChange: () => Promise<void>; advanced?: boolean }) {
+export function AccountsPanel({ accounts, onChange }: { accounts: FbAccount[]; onChange: () => Promise<void> }) {
   const [local, setLocal] = useState<{ ok: boolean; name: string } | null>(null);
   const [filter, setFilter] = useState<(typeof FILTERS)[number][0]>("todas");
   const [shield, setShield] = useState<Protection | null>(null);
@@ -35,11 +31,10 @@ export function AccountsPanel({ accounts, onChange, advanced = false }: { accoun
     catch { setLocal({ ok: false, name: "" }); setQueue(null); }
   }, []);
   useEffect(() => {
-    if (!advanced) return;
     void refreshLocal();
     const timer = window.setInterval(() => void refreshLocal(), 15000);
     return () => window.clearInterval(timer);
-  }, [refreshLocal, advanced]);
+  }, [refreshLocal]);
 
   const pull = async () => {
     setBusy(true);
@@ -72,15 +67,15 @@ export function AccountsPanel({ accounts, onChange, advanced = false }: { accoun
 
   return (
     <div className="space-y-4">
-      {advanced ? <div className={cn(card, "flex flex-wrap items-center justify-between gap-3")}>
+      <div className={cn(card, "flex flex-wrap items-center justify-between gap-3")}>
         <div className="min-w-0">
           <p className="text-sm font-medium text-white">{local === null ? "Procurando o conector…" : local.ok ? `Conector ligado, ${local.name}` : "Conector desligado"}</p>
           <p className="text-xs text-white/60">{local?.ok ? "Ele abre as contas no navegador deste computador." : "Abra o iniciar-conector.bat neste computador para puxar e abrir as contas."}</p>
         </div>
         <button type="button" className={secondary} disabled={!local?.ok || busy} onClick={() => void pull()}>{busy ? "Puxando…" : "Puxar contas do Dolphin"}</button>
-      </div> : null}
+      </div>
 
-      {advanced && current && queue ? (
+      {current && queue ? (
         <div className={cn(card, "space-y-3")}>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm text-white"><span className="text-white/60">Agora</span> {current.nome}</p>
@@ -96,12 +91,12 @@ export function AccountsPanel({ accounts, onChange, advanced = false }: { accoun
         </div>
       ) : null}
 
-      {advanced ? <ProtectionMap accounts={accounts} active={shield} onPick={(p) => setShield((cur) => (cur === p ? null : p))} /> : null}
+      <ProtectionMap accounts={accounts} active={shield} onPick={(p) => setShield((cur) => (cur === p ? null : p))} />
 
       <div className="flex flex-wrap gap-2">
         <button type="button" className={secondary} onClick={() => setAdding((v) => !v)}>{adding ? "Fechar" : "Adicionar conta à mão"}</button>
       </div>
-      {adding ? <NewAccount advanced={advanced} onDone={async () => { setAdding(false); await onChange(); }} /> : null}
+      {adding ? <NewAccount onDone={async () => { setAdding(false); await onChange(); }} /> : null}
 
       <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filtrar por situação">
         {FILTERS.map(([key, label]) => (
@@ -113,28 +108,28 @@ export function AccountsPanel({ accounts, onChange, advanced = false }: { accoun
       </div>
 
       {shown.length === 0 ? (
-        <p className="rounded-[16px] border border-dashed border-white/15 p-4 text-sm text-white/70">{accounts.length ? "Nenhuma conta nesse filtro." : advanced ? "Nenhuma conta ainda. Puxe do Dolphin pelo conector ou adicione à mão a conta que você usa no navegador." : "Nenhuma conta ainda. Adicione à mão a conta que você usa no navegador."}</p>
+        <p className="rounded-[16px] border border-dashed border-white/15 p-4 text-sm text-white/70">{accounts.length ? "Nenhuma conta nesse filtro." : "Nenhuma conta ainda. Puxe do Dolphin pelo conector ou adicione à mão a conta que você usa no navegador."}</p>
       ) : (
         <ul className="divide-y divide-white/10 rounded-[18px] border border-white/10 bg-[#1a191d]">
           {shown.map((a) => (
             <li key={a.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
-              {advanced ? <input type="checkbox" aria-label={`Escolher ${a.name}`} className="size-4 accent-violet-500" checked={picked.includes(a.id)}
-                onChange={(e) => setPicked((p) => (e.target.checked ? [...p, a.id] : p.filter((x) => x !== a.id)))} /> : null}
+              <input type="checkbox" aria-label={`Escolher ${a.name}`} className="size-4 accent-violet-500" checked={picked.includes(a.id)}
+                onChange={(e) => setPicked((p) => (e.target.checked ? [...p, a.id] : p.filter((x) => x !== a.id)))} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-white">{a.name}</p>
-                <p className="truncate text-xs text-white/60">{[advanced ? PROVIDER_TEXT[a.provider] ?? a.provider : "", !advanced || a.provider === "manual" ? "" : a.proxy ? `proxy ${a.proxy}` : "sem proxy", a.age && `conta com ${a.age}`, a.pages ? `${a.pages} ${a.pages === 1 ? "página" : "páginas"}` : ""].filter(Boolean).join(", ")}</p>
+                <p className="truncate text-xs text-white/60">{[PROVIDER_TEXT[a.provider] ?? a.provider, a.provider === "manual" ? "" : a.proxy ? `proxy ${a.proxy}` : "sem proxy", a.age && `conta com ${a.age}`, a.pages ? `${a.pages} ${a.pages === 1 ? "página" : "páginas"}` : ""].filter(Boolean).join(", ")}</p>
                 {a.status !== "ativa" && a.status_reason ? <p className="text-xs text-white/50">{a.status_reason}</p> : null}
               </div>
-              {advanced ? <Pill tone={SHIELD_TONE[a.protection]}>{PROTECTION_TEXT[a.protection]}</Pill> : null}
+              <Pill tone={SHIELD_TONE[a.protection]}>{PROTECTION_TEXT[a.protection]}</Pill>
               <Pill tone={TONE[a.status]}>{STATUS_TEXT[a.status]}</Pill>
               <button type="button" className={secondary} onClick={() => setVerify(a)}>Anotar situação</button>
-              {advanced ? <button type="button" className={secondary} disabled={!local?.ok} onClick={() => void open(a)}>Abrir</button> : null}
+              <button type="button" className={secondary} disabled={!local?.ok} onClick={() => void open(a)}>Abrir</button>
             </li>
           ))}
         </ul>
       )}
 
-      {advanced && picked.length && !current ? (
+      {picked.length && !current ? (
         <div className={cn(card, "flex flex-wrap items-end gap-2")}>
           <label className="min-w-0 flex-1 space-y-1.5"><span className="text-xs font-medium text-white/80">O que fazer em cada conta</span>
             <input className={field} value={task} maxLength={300} onChange={(e) => setTask(e.target.value)} placeholder="Ex.: conferir a página e responder as mensagens" /></label>
@@ -142,19 +137,19 @@ export function AccountsPanel({ accounts, onChange, advanced = false }: { accoun
         </div>
       ) : null}
 
-      {verify ? <VerifyDialog account={verify} advanced={advanced} onClose={() => setVerify(null)} onSaved={onChange} /> : null}
+      {verify ? <VerifyDialog account={verify} onClose={() => setVerify(null)} onSaved={onChange} /> : null}
     </div>
   );
 }
 
-function VerifyDialog({ account, onClose, onSaved, advanced }: { account: FbAccount; onClose: () => void; onSaved: () => Promise<void>; advanced: boolean }) {
+function VerifyDialog({ account, onClose, onSaved }: { account: FbAccount; onClose: () => void; onSaved: () => Promise<void> }) {
   const [status, setStatus] = useState<AccountStatus>(account.status);
   const [reason, setReason] = useState(account.status_reason);
   const [created, setCreated] = useState(account.account_created_on ? account.account_created_on.split("-").reverse().join("/") : "");
   const [email, setEmail] = useState(account.email);
   const [provider, setProvider] = useState(account.provider);
   const [proxy, setProxy] = useState(account.proxy);
-  const own = advanced && !account.external_id;
+  const own = !account.external_id;
   const [problem, setProblem] = useState("");
   const [removing, setRemoving] = useState(false);
   const save = async () => {
@@ -267,7 +262,7 @@ function ProtectionMap({ accounts, active, onPick }: { accounts: FbAccount[]; ac
   );
 }
 
-function NewAccount({ onDone, advanced }: { onDone: () => Promise<void>; advanced: boolean }) {
+function NewAccount({ onDone }: { onDone: () => Promise<void> }) {
   const [name, setName] = useState("");
   const [provider, setProvider] = useState("manual");
   const [proxy, setProxy] = useState("");
@@ -278,12 +273,12 @@ function NewAccount({ onDone, advanced }: { onDone: () => Promise<void>; advance
     catch (problem) { toast.error((problem as Error).message); } finally { setBusy(false); }
   };
   return (
-    <form className={cn(card, "grid gap-2 sm:items-end", advanced ? "sm:grid-cols-[1fr_180px_1fr_auto]" : "sm:grid-cols-[1fr_auto]")} onSubmit={(e) => { e.preventDefault(); if (name.trim()) void save(); }}>
+    <form className={cn(card, "grid gap-2 sm:grid-cols-[1fr_180px_1fr_auto] sm:items-end")} onSubmit={(e) => { e.preventDefault(); if (name.trim()) void save(); }}>
       <label className="block space-y-1.5"><span className="text-xs font-medium text-white/80">Nome do perfil</span>
         <input className={field} value={name} maxLength={160} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Jaah Alves" /></label>
-      {advanced ? <label className="block space-y-1.5"><span className="text-xs font-medium text-white/80">Onde abre</span>
-        <ProviderSelect value={provider} onChange={setProvider} /></label> : null}
-      {!advanced ? null : provider !== "manual" ? (
+      <label className="block space-y-1.5"><span className="text-xs font-medium text-white/80">Onde abre</span>
+        <ProviderSelect value={provider} onChange={setProvider} /></label>
+      {provider !== "manual" ? (
         <label className="block space-y-1.5"><span className="text-xs font-medium text-white/80">Proxy</span>
           <input className={field} value={proxy} maxLength={200} onChange={(e) => setProxy(e.target.value)} placeholder="Vazio se não usa proxy" /></label>
       ) : <span className="hidden sm:block" />}

@@ -28,7 +28,6 @@ const TELAS: Array<[string, string, RegExp]> = [
   ["Juntar vídeos", "/juntar-videos", /Juntar|cena/i],
   ["ClipSpy", "/clipspy", /ClipSpy|anúncio/i],
   ["Minhas APIs", "/minhas-apis", /API|chave|IA/i],
-  ["Facebook", "/facebook", /Facebook/i],
   ["Configurações", "/settings", /./],
 ];
 
@@ -46,10 +45,14 @@ test("membro percorre todas as telas sem erro", async ({ page }) => {
     if (!marca.test(corpo)) problemas.push(`${nome}: não achei a marca ${marca}`);
     if (erros.length > antes) problemas.push(`${nome}: ${erros.slice(antes).join(" | ")}`);
   }
-  // o membro não entra no Admin
-  await page.goto("/admin", { waitUntil: "domcontentloaded" });
-  await page.waitForTimeout(1500);
-  if (!/senha|desbloquear|administrador|entrar/i.test(await page.locator("body").innerText())) problemas.push("Admin: membro não foi barrado");
+  // o membro não entra no Admin nem na área Facebook (só administrador)
+  for (const [nome, rota] of [["Admin", "/admin"], ["Facebook", "/facebook"]] as const) {
+    await page.goto(rota, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(1500);
+    const corpo = await page.locator("body").innerText();
+    const barrado = /senha|desbloquear|administrador|entrar|sendo construída/i.test(corpo);
+    if (!barrado) problemas.push(`${nome}: membro não foi barrado`);
+  }
   expect(problemas, problemas.join("\n")).toEqual([]);
 });
 

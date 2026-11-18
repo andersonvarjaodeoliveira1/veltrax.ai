@@ -98,7 +98,7 @@ export const fb = {
   manualPosts: (pageId: string, kind: "texto" | "imagem" | "video", count: number) => call<{ registrados: number }>(`pages/${pageId}/posts/manual`, { method: "POST", body: { kind, count } }),
   postDone: (postId: string) => call(`posts/${postId}/done`, { method: "POST", body: {} }),
   postFileUrl: (postId: string) => `/api/facebook/posts/${postId}/file`,
-  overview: () => call<{ accounts: FbAccount[]; pages: FbPage[]; advanced?: boolean }>("overview"),
+  overview: () => call<{ accounts: FbAccount[]; pages: FbPage[] }>("overview"),
   syncAccounts: (provider: string, profiles: Array<{ external_id: string; name: string; proxy?: string; notes?: string }>) =>
     call<{ novas: number; atualizadas: number }>("accounts/sync", { method: "POST", body: { provider, profiles } }),
   addAccount: (body: { name: string; provider?: string; proxy?: string; email?: string; account_created_on?: string }) => call<{ id: string }>("accounts", { method: "POST", body }),

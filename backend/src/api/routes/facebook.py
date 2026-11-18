@@ -23,7 +23,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import facebook_meta as meta
 from ...admin_auth import require_admin_user
-from ...auth_headers import resolve_authenticated_user_id
 from ...config import get_config
 from ...database import get_db
 from ...facebook import (
@@ -64,15 +63,6 @@ MAX_PAGES = 300
 
 async def _admin(request: Request, db: AsyncSession) -> str:
     return await require_admin_user(request, db, get_config())
-
-
-async def _member(request: Request, db: AsyncSession) -> str:
-    """Qualquer membro com sessão válida. Toda consulta deste módulo filtra por user_id (ou passa por _own)."""
-    return await resolve_authenticated_user_id(request, db, get_config())
-
-
-async def _is_admin(db: AsyncSession, user_id: str) -> bool:
-    return bool((await db.execute(text("SELECT is_admin FROM users WHERE id = :u"), {"u": user_id})).scalar())
 
 
 def _s(value: Any, limit: int) -> str:
@@ -125,7 +115,7 @@ async def _own(db: AsyncSession, table: str, item_id: str, user_id: str) -> dict
 # ---------- visão geral ----------
 @router.get("/overview")
 async def overview(request: Request, db: AsyncSession = Depends(get_db)):
-    user_id = await _member(request, db)
+    user_id = await _admin(request, db)
     now = datetime.now(UTC)
     accounts = (await db.execute(text("""
         SELECT a.*, (SELECT COUNT(*) FROM fb_pages p WHERE p.account_id = a.id) AS pages
@@ -163,23 +153,20 @@ async def overview(request: Request, db: AsyncSession = Depends(get_db)):
         item["todos"] = [_row(t) for t in todos if t["page_id"] == p["id"]]
         item["events"] = [_row(e) for e in events if e["page_id"] == p["id"]][:15]
         out_pages.append(item)
-    advanced = await _is_admin(db, user_id)
     out_accounts = []
     for a in accounts:
         item = _row(a)
         item["age"] = account_age(a["account_created_on"])
         item["protection"] = protection_of(a["provider"], a["proxy"])
-        if not advanced:
-            item["proxy"] = ""
         item["events"] = [_row(e) for e in events if e["account_id"] == a["id"]][:8]
         out_accounts.append(item)
-    return {"accounts": out_accounts, "pages": out_pages, "advanced": advanced}
+    return {"accounts": out_accounts, "pages": out_pages}
 
 
 # ---------- contas ----------
 @router.post("/accounts")
 async def create_account(request: Request, db: AsyncSession = Depends(get_db)):
-    user_id = await _member(request, db)
+    user_id = await _admin(request, db)
     body = await request.json()
     name = _s(body.get("name"), 160)
     if not name:
@@ -187,14 +174,13 @@ async def create_account(request: Request, db: AsyncSession = Depends(get_db)):
     total = (await db.execute(text("SELECT COUNT(*) FROM fb_accounts WHERE user_id = :u"), {"u": user_id})).scalar() or 0
     if total >= MAX_ACCOUNTS:
         raise HTTPException(status_code=409, detail=f"Limite de {MAX_ACCOUNTS} contas")
-    advanced = await _is_admin(db, user_id)
-    provider = (_s(body.get("provider"), 20) or "manual") if advanced else "manual"
+    provider = _s(body.get("provider"), 20) or "manual"
     if provider not in PROVIDERS:
         raise HTTPException(status_code=400, detail="Navegador inválido")
     account_id = str(uuid.uuid4())
     await db.execute(text("""INSERT INTO fb_accounts (id, user_id, provider, name, proxy, email, account_created_on, notes)
         VALUES (:id, :u, :provider, :name, :proxy, :email, :created, :notes)"""),
-        {"id": account_id, "u": user_id, "provider": provider, "name": name, "proxy": _s(body.get("proxy"), 200) if advanced else "", "email": _s(body.get("email"), 200),
+        {"id": account_id, "u": user_id, "provider": provider, "name": name, "proxy": _s(body.get("proxy"), 200), "email": _s(body.get("email"), 200),
          "created": _date(body.get("account_created_on")), "notes": _s(body.get("notes"), 1000)})
     await add_event(db, user_id, f"Conta {name} adicionada", account_id=account_id, actor="voce")
     await db.commit()
@@ -203,7 +189,7 @@ async def create_account(request: Request, db: AsyncSession = Depends(get_db)):
 
 @router.post("/accounts/sync")
 async def sync_accounts(request: Request, db: AsyncSession = Depends(get_db)):
-    """Recebe a lista de perfis do navegador antidetect (lida pelo conector local) e espelha aqui. Só administrador."""
+    """Recebe a lista de perfis do navegador antidetect (lida pelo conector local) e espelha aqui."""
     user_id = await _admin(request, db)
     body = await request.json()
     provider = _s(body.get("provider"), 20)
@@ -234,16 +220,15 @@ async def sync_accounts(request: Request, db: AsyncSession = Depends(get_db)):
 
 @router.patch("/accounts/{account_id}")
 async def update_account(account_id: str, request: Request, db: AsyncSession = Depends(get_db)):
-    user_id = await _member(request, db)
+    user_id = await _admin(request, db)
     current = await _own(db, "fb_accounts", account_id, user_id)
     body = await request.json()
-    advanced = await _is_admin(db, user_id)
     sets, params = [], {"id": account_id}
     for key, limit in (("name", 160), ("proxy", 200), ("email", 200), ("notes", 1000)):
-        if key in body and (advanced or key != "proxy"):
+        if key in body:
             sets.append(f"{key} = :{key}")
             params[key] = _s(body[key], limit)
-    if advanced and "provider" in body and not current["external_id"]:
+    if "provider" in body and not current["external_id"]:
         # só contas cadastradas à mão trocam de navegador; as espelhadas seguem o perfil de origem
         provider = _s(body["provider"], 20)
         if provider not in PROVIDERS:
@@ -271,7 +256,7 @@ async def update_account(account_id: str, request: Request, db: AsyncSession = D
 
 @router.delete("/accounts/{account_id}")
 async def delete_account(account_id: str, request: Request, db: AsyncSession = Depends(get_db)):
-    user_id = await _member(request, db)
+    user_id = await _admin(request, db)
     await _own(db, "fb_accounts", account_id, user_id)
     await db.execute(text("DELETE FROM fb_accounts WHERE id = :id"), {"id": account_id})
     await db.commit()
@@ -327,7 +312,7 @@ async def _check_account(db: AsyncSession, user_id: str, account_id: Any) -> str
 
 @router.post("/pages")
 async def create_page(request: Request, db: AsyncSession = Depends(get_db)):
-    user_id = await _member(request, db)
+    user_id = await _admin(request, db)
     body = await request.json()
     values = _page_values(body)
     if not values.get("name"):
@@ -347,7 +332,7 @@ async def create_page(request: Request, db: AsyncSession = Depends(get_db)):
 
 @router.patch("/pages/{page_id}")
 async def update_page(page_id: str, request: Request, db: AsyncSession = Depends(get_db)):
-    user_id = await _member(request, db)
+    user_id = await _admin(request, db)
     current = await _own(db, "fb_pages", page_id, user_id)
     body = await request.json()
     values = _page_values(body)
@@ -367,7 +352,7 @@ async def update_page(page_id: str, request: Request, db: AsyncSession = Depends
 
 @router.delete("/pages/{page_id}")
 async def delete_page(page_id: str, request: Request, db: AsyncSession = Depends(get_db)):
-    user_id = await _member(request, db)
+    user_id = await _admin(request, db)
     await _own(db, "fb_pages", page_id, user_id)
     await db.execute(text("DELETE FROM fb_pages WHERE id = :id"), {"id": page_id})
     await db.commit()
@@ -376,7 +361,7 @@ async def delete_page(page_id: str, request: Request, db: AsyncSession = Depends
 
 @router.post("/pages/{page_id}/meta")
 async def connect_meta(page_id: str, request: Request, db: AsyncSession = Depends(get_db)):
-    user_id = await _member(request, db)
+    user_id = await _admin(request, db)
     await _own(db, "fb_pages", page_id, user_id)
     token = _s((await request.json()).get("token"), 1000)
     if len(token) < 20:
@@ -395,7 +380,7 @@ async def connect_meta(page_id: str, request: Request, db: AsyncSession = Depend
 
 @router.delete("/pages/{page_id}/meta")
 async def disconnect_meta(page_id: str, request: Request, db: AsyncSession = Depends(get_db)):
-    user_id = await _member(request, db)
+    user_id = await _admin(request, db)
     await _own(db, "fb_pages", page_id, user_id)
     await db.execute(text("UPDATE fb_pages SET meta_token_enc = NULL, meta_connected_at = NULL, updated_at = NOW() WHERE id = :id"), {"id": page_id})
     await add_event(db, user_id, "Desconectada da Meta", page_id=page_id, actor="voce")
@@ -416,7 +401,7 @@ async def apply_page_photos(
     db: AsyncSession = Depends(get_db),
 ):
     """Troca a foto de perfil e/ou a capa de UMA página, com arquivos enviados do computador."""
-    user_id = await _member(request, db)
+    user_id = await _admin(request, db)
     page = await _own(db, "fb_pages", page_id, user_id)
     if not page.get("meta_token_enc") or not page.get("meta_page_id"):
         raise HTTPException(status_code=400, detail="Página não conectada à Meta")
@@ -458,7 +443,7 @@ MAX_DESCRIPTION = 5000
 @router.get("/pages/{page_id}/profile")
 async def read_page_profile(page_id: str, request: Request, db: AsyncSession = Depends(get_db)):
     """Lê a bio curta, a descrição e a categoria atuais de UMA página na Meta."""
-    user_id = await _member(request, db)
+    user_id = await _admin(request, db)
     page = await _own(db, "fb_pages", page_id, user_id)
     if not page.get("meta_token_enc") or not page.get("meta_page_id"):
         raise HTTPException(status_code=400, detail="Página não conectada à Meta")
@@ -473,7 +458,7 @@ async def read_page_profile(page_id: str, request: Request, db: AsyncSession = D
 @router.post("/pages/{page_id}/profile")
 async def apply_page_profile(page_id: str, request: Request, db: AsyncSession = Depends(get_db)):
     """Atualiza a bio curta (about) e/ou a descrição de UMA página. Padroniza a marca."""
-    user_id = await _member(request, db)
+    user_id = await _admin(request, db)
     page = await _own(db, "fb_pages", page_id, user_id)
     if not page.get("meta_token_enc") or not page.get("meta_page_id"):
         raise HTTPException(status_code=400, detail="Página não conectada à Meta")
@@ -562,7 +547,7 @@ async def _map_profile(db: AsyncSession, user_id: str, who: str, account_id: str
 
 @router.get("/meta/status")
 async def meta_status(request: Request, db: AsyncSession = Depends(get_db)):
-    user_id = await _member(request, db)
+    user_id = await _admin(request, db)
     rows = (await db.execute(text("""SELECT m.id, m.fb_user_name, m.connected_at, (SELECT COUNT(*) FROM fb_pages p WHERE p.account_id = m.account_id) AS pages
         FROM fb_meta_auth m WHERE m.user_id = :u ORDER BY m.connected_at"""), {"u": user_id})).mappings().all()
     return {"configured": meta.meta_app() is not None,
@@ -572,7 +557,7 @@ async def meta_status(request: Request, db: AsyncSession = Depends(get_db)):
 @router.post("/meta/start")
 async def meta_start(request: Request, db: AsyncSession = Depends(get_db)):
     """Devolve o endereço do login do Facebook. A pessoa autoriza e volta para /facebook/meta."""
-    user_id = await _member(request, db)
+    user_id = await _admin(request, db)
     app = meta.meta_app()
     if not app:
         raise HTTPException(status_code=409, detail="O login com o Facebook ainda não está ativo")
@@ -585,7 +570,7 @@ async def meta_start(request: Request, db: AsyncSession = Depends(get_db)):
 @router.post("/meta/finish")
 async def meta_finish(request: Request, db: AsyncSession = Depends(get_db)):
     """Recebe o código do login, guarda o acesso do perfil e mapeia o perfil e as páginas dele."""
-    user_id = await _member(request, db)
+    user_id = await _admin(request, db)
     body = await request.json()
     code, state, redirect_uri = _s(body.get("code"), 1000), _s(body.get("state"), 200), _s(body.get("redirect_uri"), 300)
     if not code or not meta.check_state(state, user_id):
@@ -610,7 +595,7 @@ async def meta_finish(request: Request, db: AsyncSession = Depends(get_db)):
 @router.post("/meta/sync")
 async def meta_sync(request: Request, db: AsyncSession = Depends(get_db)):
     """Atualiza tudo: páginas novas de cada perfil conectado e os números de cada página."""
-    user_id = await _member(request, db)
+    user_id = await _admin(request, db)
     auths = (await db.execute(text("SELECT * FROM fb_meta_auth WHERE user_id = :u"), {"u": user_id})).mappings().all()
     if not auths:
         raise HTTPException(status_code=409, detail="Entre com o Facebook primeiro")
@@ -633,7 +618,7 @@ async def meta_sync(request: Request, db: AsyncSession = Depends(get_db)):
 @router.delete("/meta/{auth_id}")
 async def meta_forget(auth_id: str, request: Request, db: AsyncSession = Depends(get_db)):
     """Esquece o login de um perfil. As páginas já conectadas continuam com o próprio token."""
-    user_id = await _member(request, db)
+    user_id = await _admin(request, db)
     await db.execute(text("DELETE FROM fb_meta_auth WHERE id = :id AND user_id = :u"), {"id": auth_id, "u": user_id})
     await db.commit()
     return {"ok": True}
@@ -641,7 +626,7 @@ async def meta_forget(auth_id: str, request: Request, db: AsyncSession = Depends
 
 @router.post("/pages/{page_id}/events")
 async def note_event(page_id: str, request: Request, db: AsyncSession = Depends(get_db)):
-    user_id = await _member(request, db)
+    user_id = await _admin(request, db)
     await _own(db, "fb_pages", page_id, user_id)
     value = _s((await request.json()).get("text"), 400)
     if not value:
@@ -653,7 +638,7 @@ async def note_event(page_id: str, request: Request, db: AsyncSession = Depends(
 
 @router.post("/pages/{page_id}/todos")
 async def add_todo(page_id: str, request: Request, db: AsyncSession = Depends(get_db)):
-    user_id = await _member(request, db)
+    user_id = await _admin(request, db)
     await _own(db, "fb_pages", page_id, user_id)
     value = _s((await request.json()).get("text"), 400)
     if not value:
@@ -665,7 +650,7 @@ async def add_todo(page_id: str, request: Request, db: AsyncSession = Depends(ge
 
 @router.patch("/todos/{todo_id}")
 async def toggle_todo(todo_id: str, request: Request, db: AsyncSession = Depends(get_db)):
-    user_id = await _member(request, db)
+    user_id = await _admin(request, db)
     todo = await _own(db, "fb_todos", todo_id, user_id)
     done = bool((await request.json()).get("done", True))
     await db.execute(text("UPDATE fb_todos SET done_at = CASE WHEN :d THEN NOW() ELSE NULL END WHERE id = :id"), {"d": done, "id": todo_id})
@@ -722,7 +707,7 @@ def ideas_prompt(page: dict[str, Any], count: int) -> tuple[str, str]:
 
 @router.post("/pages/{page_id}/ideas")
 async def generate_ideas(page_id: str, request: Request, db: AsyncSession = Depends(get_db)):
-    user_id = await _member(request, db)
+    user_id = await _admin(request, db)
     page = await _own(db, "fb_pages", page_id, user_id)
     from ...integrations import load_user_keys
     from ...usage import get_balance, set_server_blocked, set_usage_user
@@ -744,7 +729,7 @@ async def generate_ideas(page_id: str, request: Request, db: AsyncSession = Depe
 
 @router.patch("/pages/{page_id}/ideas/{idea_id}")
 async def mark_idea(page_id: str, idea_id: str, request: Request, db: AsyncSession = Depends(get_db)):
-    user_id = await _member(request, db)
+    user_id = await _admin(request, db)
     page = await _own(db, "fb_pages", page_id, user_id)
     body = await request.json()
     ideas = _ideas_of(page)
@@ -764,7 +749,7 @@ async def mark_idea(page_id: str, idea_id: str, request: Request, db: AsyncSessi
 @router.get("/clips")
 async def recent_clips(request: Request, db: AsyncSession = Depends(get_db)):
     """Cortes prontos da pessoa, os mais novos primeiro, marcando os que já foram para alguma página."""
-    user_id = await _member(request, db)
+    user_id = await _admin(request, db)
     rows = (await db.execute(text("""
         SELECT c.id, c.task_id, c.hook_title, c.duration, c.virality_score, c.created_at, s.title AS source_title,
                (SELECT string_agg(DISTINCT g.name, ', ') FROM fb_posts x JOIN fb_pages g ON g.id = x.page_id WHERE x.clip_id = c.id AND x.user_id = :u) AS used_in
@@ -787,7 +772,7 @@ async def recent_clips(request: Request, db: AsyncSession = Depends(get_db)):
 
 @router.post("/pages/{page_id}/clips")
 async def add_clips(page_id: str, request: Request, db: AsyncSession = Depends(get_db)):
-    user_id = await _member(request, db)
+    user_id = await _admin(request, db)
     page = await _own(db, "fb_pages", page_id, user_id)
     body = await request.json()
     ids = [str(x) for x in (body.get("clip_ids") or []) if x][:60]
@@ -869,7 +854,7 @@ async def webhook_receive(request: Request, db: AsyncSession = Depends(get_db)):
 @router.post("/pages/{page_id}/inbox")
 async def set_inbox(page_id: str, request: Request, db: AsyncSession = Depends(get_db)):
     """Liga ou desliga a resposta automática da caixa de mensagens e guarda a resposta padrão da página."""
-    user_id = await _member(request, db)
+    user_id = await _admin(request, db)
     page = await _own(db, "fb_pages", page_id, user_id)
     body = await request.json()
     on = bool(body.get("on"))
@@ -895,7 +880,7 @@ async def set_inbox(page_id: str, request: Request, db: AsyncSession = Depends(g
 @router.get("/pages/{page_id}/reading")
 async def page_reading(page_id: str, request: Request, db: AsyncSession = Depends(get_db)):
     """Leitura da página: média de visualizações, vídeos que se destacaram e o próximo passo."""
-    user_id = await _member(request, db)
+    user_id = await _admin(request, db)
     page = await _own(db, "fb_pages", page_id, user_id)
     if not page.get("meta_token_enc") or not page.get("meta_page_id"):
         return {"status": "sem_conexao", "base": 0, "total": 0, "videos": [],
@@ -910,7 +895,7 @@ async def page_reading(page_id: str, request: Request, db: AsyncSession = Depend
 
 @router.get("/pages/{page_id}/posts")
 async def page_posts(page_id: str, request: Request, db: AsyncSession = Depends(get_db)):
-    user_id = await _member(request, db)
+    user_id = await _admin(request, db)
     await _own(db, "fb_pages", page_id, user_id)
     rows = (await db.execute(text("""SELECT id, kind, source, task_id, clip_id, title, caption, scheduled_at, status, fb_post_id, error, attempts
         FROM fb_posts WHERE page_id = :p ORDER BY scheduled_at DESC LIMIT 200"""), {"p": page_id})).mappings().all()
@@ -919,7 +904,7 @@ async def page_posts(page_id: str, request: Request, db: AsyncSession = Depends(
 
 @router.patch("/posts/{post_id}")
 async def edit_post(post_id: str, request: Request, db: AsyncSession = Depends(get_db)):
-    user_id = await _member(request, db)
+    user_id = await _admin(request, db)
     post = await _own(db, "fb_posts", post_id, user_id)
     if post["status"] != "pendente":
         raise HTTPException(status_code=409, detail="Esse post já foi para o Facebook. Mude por lá.")
@@ -933,7 +918,7 @@ async def edit_post(post_id: str, request: Request, db: AsyncSession = Depends(g
 @router.get("/comments")
 async def comments(request: Request, db: AsyncSession = Depends(get_db)):
     """Quem comentou, em qual página e perfil, e de qual produto (pela palavra-chave da oferta)."""
-    user_id = await _member(request, db)
+    user_id = await _admin(request, db)
     rows = (await db.execute(text("""SELECT c.id, c.from_name, c.message, c.keyword, c.product, c.commented_at, c.fb_post_id, c.page_id, c.dm_status, c.dm_error, c.dm_at,
             g.name AS page_name, a.name AS account_name
         FROM fb_comments c JOIN fb_pages g ON g.id = c.page_id LEFT JOIN fb_accounts a ON a.id = g.account_id
@@ -947,7 +932,7 @@ async def comments(request: Request, db: AsyncSession = Depends(get_db)):
 @router.get("/calendar")
 async def calendar(request: Request, db: AsyncSession = Depends(get_db), days: int = 7):
     """Calendário da semana: o que vai sair em cada dia, em todas as páginas."""
-    user_id = await _member(request, db)
+    user_id = await _admin(request, db)
     days = max(1, min(31, days))
     start = datetime.now(BR).replace(hour=0, minute=0, second=0, microsecond=0)
     rows = (await db.execute(text("""SELECT x.id, x.page_id, g.name AS page_name, x.kind, x.source, x.title, x.scheduled_at, x.status
@@ -963,7 +948,7 @@ MANUAL_KINDS = {"texto": "só com texto", "imagem": "com imagem", "video": "em v
 @router.post("/pages/{page_id}/posts/manual")
 async def register_manual_posts(page_id: str, request: Request, db: AsyncSession = Depends(get_db)):
     """Registra posts feitos direto no Facebook, para os números da página baterem com a realidade."""
-    user_id = await _member(request, db)
+    user_id = await _admin(request, db)
     await _own(db, "fb_pages", page_id, user_id)
     body = await request.json()
     kind = _s(body.get("kind"), 10)
@@ -986,7 +971,7 @@ async def register_manual_posts(page_id: str, request: Request, db: AsyncSession
 @router.get("/posts/{post_id}/file")
 async def post_file(post_id: str, request: Request, db: AsyncSession = Depends(get_db)):
     """Baixa o vídeo do post, para quem posta à mão (sem conectar à Meta)."""
-    user_id = await _member(request, db)
+    user_id = await _admin(request, db)
     post = await _own(db, "fb_posts", post_id, user_id)
     path = post["file_path"] or ""
     if not path or not os.path.isfile(path):
@@ -998,7 +983,7 @@ async def post_file(post_id: str, request: Request, db: AsyncSession = Depends(g
 @router.post("/posts/{post_id}/done")
 async def post_done(post_id: str, request: Request, db: AsyncSession = Depends(get_db)):
     """Postar à mão: a pessoa publicou ou programou direto no Facebook e marca aqui."""
-    user_id = await _member(request, db)
+    user_id = await _admin(request, db)
     post = await _own(db, "fb_posts", post_id, user_id)
     if post["status"] != "pendente":
         raise HTTPException(status_code=409, detail="Esse post já foi para o Facebook")
@@ -1010,7 +995,7 @@ async def post_done(post_id: str, request: Request, db: AsyncSession = Depends(g
 
 @router.delete("/posts/{post_id}")
 async def delete_post(post_id: str, request: Request, db: AsyncSession = Depends(get_db)):
-    user_id = await _member(request, db)
+    user_id = await _admin(request, db)
     post = await _own(db, "fb_posts", post_id, user_id)
     if post["status"] == "publicado":
         raise HTTPException(status_code=409, detail="Esse post já foi publicado. Apague pelo Facebook.")
@@ -1029,5 +1014,5 @@ async def delete_post(post_id: str, request: Request, db: AsyncSession = Depends
 
 @router.post("/publish")
 async def publish_now(request: Request, db: AsyncSession = Depends(get_db)):
-    user_id = await _member(request, db)
+    user_id = await _admin(request, db)
     return await publish_due(db, user_id=user_id)

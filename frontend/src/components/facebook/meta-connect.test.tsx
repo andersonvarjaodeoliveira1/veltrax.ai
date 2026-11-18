@@ -63,7 +63,7 @@ describe("Resumo e comentários", () => {
   it("soma por perfil: posts normais lidos do Facebook e vídeos do ClipGringa", async () => {
     server.use(http.get("/api/facebook/calendar", () => HttpResponse.json({ start: "2026-11-12", days: 7, posts: [
       { id: "x", page_id: "p1", page_name: "Body Explained", kind: "video", source: "organico", title: "Sono", scheduled_at: "2026-11-12T15:14:00Z", status: "pendente" }] })));
-    render(<SummaryPanel accounts={[account]} pages={[page({}), page({ id: "p2", name: "Sem conexão", meta_connected: false, fb_synced_at: null, fb_posts_normal: null, posts_normal: 4, videos_cta: 0, videos_cut: 0, upcoming: 0, fb_followers: null })]} advanced onOpen={() => {}} />);
+    render(<SummaryPanel accounts={[account]} pages={[page({}), page({ id: "p2", name: "Sem conexão", meta_connected: false, fb_synced_at: null, fb_posts_normal: null, posts_normal: 4, videos_cta: 0, videos_cut: 0, upcoming: 0, fb_followers: null })]} onOpen={() => {}} />);
     expect(screen.getAllByText("Posts normais")[0].previousSibling).toHaveTextContent("13");
     expect(screen.getByText("Vídeos do ClipGringa").previousSibling).toHaveTextContent("3");
     expect(screen.getByText("1 com CTA, 2 cortes")).toBeInTheDocument();
