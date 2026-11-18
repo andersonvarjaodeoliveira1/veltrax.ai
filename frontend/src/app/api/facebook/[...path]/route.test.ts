@@ -13,17 +13,12 @@ const ctx = (...path: string[]) => ({ params: Promise.resolve({ path }) });
 describe("/api/facebook proxy (em construção)", () => {
   beforeEach(() => vi.resetAllMocks());
 
-  it("blocks people who are not signed in", async () => {
+  it("blocks people who are not signed in or not admins", async () => {
     vi.mocked(getServerSession).mockResolvedValue(null as never);
     expect((await GET(new Request("http://x/api/facebook/overview"), ctx("overview"))).status).toBe(401);
-    expect(fetchBackend).not.toHaveBeenCalled();
-  });
-
-  it("forwards members with their own user id (the backend scopes everything by user)", async () => {
     vi.mocked(getServerSession).mockResolvedValue({ user: { id: "u1", is_admin: false } } as never);
-    vi.mocked(fetchBackend).mockResolvedValue(new Response("{}", { status: 200 }));
-    expect((await GET(new Request("http://x/api/facebook/overview"), ctx("overview"))).status).toBe(200);
-    expect(fetchBackend).toHaveBeenCalledWith("/facebook/overview", expect.objectContaining({ method: "GET", userId: "u1" }));
+    expect((await GET(new Request("http://x/api/facebook/overview"), ctx("overview"))).status).toBe(403);
+    expect(fetchBackend).not.toHaveBeenCalled();
   });
 
   it("forwards admins to the backend with their user id and JSON body", async () => {

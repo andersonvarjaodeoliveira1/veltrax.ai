@@ -19,13 +19,13 @@ function Kpi({ value, label, hint }: { value: number; label: string; hint?: stri
 }
 
 /** Resumo: quantos perfis, páginas por perfil, posts normais e vídeos do ClipGringa, e a semana. */
-export function SummaryPanel({ accounts, pages, onOpen, advanced = false }: { accounts: FbAccount[]; pages: FbPage[]; onOpen: (tab: "paginas" | "contas") => void; advanced?: boolean }) {
+export function SummaryPanel({ accounts, pages, onOpen }: { accounts: FbAccount[]; pages: FbPage[]; onOpen: (tab: "paginas" | "contas") => void }) {
   const [week, setWeek] = useState<{ start: string; posts: CalendarPost[] } | null>(null);
   useEffect(() => { fb.calendar(7).then(setWeek).catch(() => setWeek({ start: "", posts: [] })); }, []);
 
   const numbers = pages.map((p) => ({ p, n: pageNumbers(p) }));
   const groups: Array<{ key: string; name: string; hint: string; rows: typeof numbers }> = [
-    ...accounts.map((a) => ({ key: a.id, name: a.name, hint: advanced ? PROTECTION_TEXT[a.protection] : "", rows: numbers.filter((x) => x.p.account_id === a.id) })),
+    ...accounts.map((a) => ({ key: a.id, name: a.name, hint: PROTECTION_TEXT[a.protection], rows: numbers.filter((x) => x.p.account_id === a.id) })),
     { key: "sem", name: "Sem perfil", hint: "Páginas ainda sem perfil ligado", rows: numbers.filter((x) => !x.p.account_id || !accounts.some((a) => a.id === x.p.account_id)) },
   ].filter((g) => g.key !== "sem" || g.rows.length);
   const total = (pick: (x: (typeof numbers)[number]) => number, rows = numbers) => sum(rows.map(pick));
@@ -64,7 +64,7 @@ export function SummaryPanel({ accounts, pages, onOpen, advanced = false }: { ac
           {groups.map((g) => (
             <tbody key={g.key} className="border-t border-white/10">
               <tr className="text-white">
-                <td className="py-2"><span className="font-medium">{g.name}</span> <span className="text-xs text-white/50">{g.rows.length} {g.rows.length === 1 ? "página" : "páginas"}{g.hint ? `, ${g.hint.toLowerCase()}` : ""}</span></td>
+                <td className="py-2"><span className="font-medium">{g.name}</span> <span className="text-xs text-white/50">{g.rows.length} {g.rows.length === 1 ? "página" : "páginas"}, {g.hint.toLowerCase()}</span></td>
                 <td className="py-2 text-right tabular-nums">{total((x) => x.n.normal, g.rows)}</td>
                 <td className="py-2 text-right tabular-nums">{total((x) => x.n.cta, g.rows)}</td>
                 <td className="py-2 text-right tabular-nums">{total((x) => x.n.cuts, g.rows)}</td>

@@ -90,38 +90,3 @@ describe("data de criação e e-mail na ficha", () => {
   });
 });
 
-describe("o que o membro vê e o que fica só para administrador", () => {
-  const twoAccounts = [account({ id: "a1", name: "Perfil A" }), account({ id: "a2", name: "Perfil B", provider: "dolphin", external_id: "904", proxy: "1.2.3.4:8000", protection: "antidetect_proxy" })];
-
-  it("membro: lista, ficha e cadastro à mão, sem conector, navegador, proxy nem mapa de proteção", async () => {
-    const user = userEvent.setup();
-    const fetchMock = vi.fn(async () => { throw new Error("sem rede"); });
-    vi.stubGlobal("fetch", fetchMock);
-    render(<AccountsPanel accounts={twoAccounts} onChange={async () => {}} />);
-    expect(screen.getByText("Perfil A")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Anotar situação" })).toHaveLength(2);
-    for (const text of [/Conector/, /Dolphin/, /Proteção das contas/, /proxy/i, /Antidetect/i]) expect(screen.queryByText(text)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Abrir" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
-    expect(fetchMock).not.toHaveBeenCalled(); // não procura o conector local
-
-    await user.click(screen.getByRole("button", { name: "Adicionar conta à mão" }));
-    expect(screen.getByLabelText("Nome do perfil")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Onde abre")).not.toBeInTheDocument();
-
-    await user.click(screen.getAllByRole("button", { name: "Anotar situação" })[0]);
-    const dialog = screen.getByRole("dialog");
-    expect(within(dialog).queryByLabelText("Onde abre")).not.toBeInTheDocument();
-    expect(within(dialog).queryByLabelText("Proxy")).not.toBeInTheDocument();
-    expect(within(dialog).getByLabelText("Conta criada em")).toBeInTheDocument();
-  });
-
-  it("administrador continua vendo tudo como antes", async () => {
-    render(<AccountsPanel accounts={twoAccounts} onChange={async () => {}} advanced />);
-    expect(await screen.findByText("Conector desligado")).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Proteção das contas" })).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Abrir" })).toHaveLength(2);
-    expect(screen.getAllByRole("checkbox")).toHaveLength(2);
-  });
-});
-

@@ -14,7 +14,7 @@ type Tab = "resumo" | "paginas" | "contas" | "comentarios";
 
 export default function FacebookPage() {
   const [tab, setTab] = useState<Tab>("resumo");
-  const [data, setData] = useState<{ accounts: FbAccount[]; pages: FbPage[]; advanced?: boolean } | null>(null);
+  const [data, setData] = useState<{ accounts: FbAccount[]; pages: FbPage[] } | null>(null);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
@@ -51,9 +51,9 @@ export default function FacebookPage() {
       </div>
       {error ? <p role="alert" className="text-sm text-[#F0466B]">{error}</p> : null}
       {!data ? <p className="text-sm text-white/60">Carregando…</p>
-        : tab === "resumo" ? <SummaryPanel accounts={data.accounts} pages={data.pages} onOpen={setTab} advanced={Boolean(data.advanced)} />
+        : tab === "resumo" ? <SummaryPanel accounts={data.accounts} pages={data.pages} onOpen={setTab} />
         : tab === "comentarios" ? <CommentsPanel />
-        : tab === "contas" ? <AccountsPanel accounts={data.accounts} onChange={load} advanced={Boolean(data.advanced)} />
+        : tab === "contas" ? <AccountsPanel accounts={data.accounts} onChange={load} />
         : <PagesPanel pages={data.pages} accounts={data.accounts} onChange={load} />}
     </div>
   );

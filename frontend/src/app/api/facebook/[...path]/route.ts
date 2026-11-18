@@ -3,11 +3,11 @@ import { NextResponse } from "next/server";
 import { createProxyResponse, fetchBackend } from "@/server/backend-api";
 import { getServerSession } from "@/server/session";
 
-// EM CONSTRUÇÃO: módulo Facebook (perfis, páginas e posts). Qualquer membro com sessão; o backend separa
-// tudo por usuário e mantém só para administrador o espelho de perfis de navegador (accounts/sync).
+// EM CONSTRUÇÃO: módulo Facebook (contas, páginas e posts). Só administradores; o backend confere de novo.
 async function proxy(request: Request, { params }: { params: Promise<{ path: string[] }> }) {
   const session = await getServerSession();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(session.user as { is_admin?: boolean }).is_admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const { path } = await params;
   const hasBody = request.method !== "GET" && request.method !== "HEAD";
 
