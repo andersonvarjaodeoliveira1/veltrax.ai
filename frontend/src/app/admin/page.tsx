@@ -6,6 +6,7 @@ import { RecentActivity } from "@/components/admin/recent-activity";
 import { AccountDetails } from "@/components/admin/account-details";
 import { AdminUserToggle } from "@/components/admin/admin-user-toggle";
 import { MemberAccessPanel } from "@/components/admin/member-access";
+import { SignupRequestsPanel } from "@/components/admin/signup-requests";
 import { StatusBoard, type StatusBoardData } from "@/components/admin/status-board";
 import { AffiliateReviewActions } from "@/components/admin/affiliate-review-actions";
 import {
@@ -271,6 +272,8 @@ export default async function AdminPage({
         <p className="mt-1 text-sm text-muted-foreground">Gerencie os usuários e acompanhe a atividade da plataforma.</p>
         <Link href="/admin/announcements" className="mt-3 inline-block text-sm font-medium text-brand underline-offset-4 hover:underline">Gerenciar avisos</Link>
       </div>
+
+      <SignupRequestsPanel />
 
       <MemberAccessPanel />
 

@@ -26,8 +26,10 @@ export function PrivacyPortuguese({ contactEmail }: { contactEmail: string }) {
       <Section title="Informações que coletamos">
         <Lead>Informações da conta.</Lead>
         <p>
-          Quando você cria uma conta, coletamos seu nome, seu e-mail e uma senha guardada de forma protegida (hash). A
-          autenticação é feita pelo nosso provedor de autenticação; não guardamos senhas em texto puro.
+          Quando você cria uma conta, coletamos seu nome, seu e-mail, seu CPF, seu telefone e uma senha guardada de forma
+          protegida (hash). O CPF e o telefone servem para confirmar quem está pedindo o acesso, liberar a conta e falar
+          com você pelo suporte. A autenticação é feita pelo nosso provedor de autenticação; não guardamos senhas em texto
+          puro.
         </p>
         <Lead>Conteúdo que você envia.</Lead>
         <p>

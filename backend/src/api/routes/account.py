@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth_headers import get_authenticated_user_id
@@ -14,6 +14,7 @@ from ...database import get_db
 from ...models import User
 from ...services.affiliate_email_service import AffiliateEmailService
 from ...services.password_reset_email_service import PasswordResetEmailService
+from ...services.signup_request_email_service import SignupRequestEmailService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/account", tags=["account"])
@@ -129,5 +130,50 @@ async def send_affiliate_email(
     except Exception as exc:
         logger.exception("Failed to send affiliate %s email for user %s", body.event, user_id)
         raise HTTPException(status_code=502, detail="Failed to send affiliate email") from exc
+
+    return {"status": "ok"}
+
+
+class SignupRequestEmailRequest(BaseModel):
+    event: Literal["requested", "approved"]
+
+
+@router.post("/signup-request-email")
+async def send_signup_request_email(
+    body: SignupRequestEmailRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """E-mails da captura do cadastro, disparados pelo servidor do site para a conta da pessoa.
+
+    `requested` avisa todo administrador (CPF mascarado; o completo fica no Admin);
+    `approved` avisa a própria pessoa que o acesso foi liberado.
+    """
+    config = get_config()
+    user_id = get_authenticated_user_id(request, config)
+    row = (await db.execute(
+        text("SELECT name, email, cpf, phone, status FROM signup_requests WHERE user_id = :u"), {"u": user_id}
+    )).mappings().first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Cadastro não encontrado")
+    signup = dict(row)
+
+    service = SignupRequestEmailService(config)
+    try:
+        if body.event == "requested":
+            admins = await db.execute(select(User).where(User.is_admin.is_(True), User.email.is_not(None)))
+            for admin in admins.scalars().all():
+                await service.send_requested_email(admin.email, signup)
+        else:
+            if signup["status"] != "approved":
+                raise HTTPException(status_code=409, detail="Cadastro ainda não liberado")
+            await service.send_approved_email(signup)
+    except HTTPException:
+        raise
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Falha ao enviar o e-mail de cadastro (%s) do usuário %s", body.event, user_id)
+        raise HTTPException(status_code=502, detail="Falha ao enviar o e-mail") from exc
 
     return {"status": "ok"}

@@ -5,11 +5,13 @@ import prisma from "@/lib/prisma";
 import { nextCookies } from "better-auth/next-js";
 import { getAuthTrustedOrigins } from "@/lib/auth-origins";
 import { prepareAccountDeletion } from "@/server/account-deletion";
+import { PENDING_ACCESS_CODE } from "@/lib/cadastro";
 import { fetchBackend } from "@/server/backend-api";
+import { isAccessPending } from "@/server/signup-access";
 
-const disableSignUp = ["1", "true", "yes"].includes(
-  (process.env.DISABLE_SIGN_UP ?? "").toLowerCase()
-);
+// O cadastro direto pela API de autenticação fica sempre fechado: conta nova só nasce pela captura
+// (/api/cadastro, com nome, e-mail, CPF e telefone, aguardando liberação) ou por convite do administrador.
+const disableSignUp = true;
 
 async function sendPasswordResetEmail(userId: string, url: string) {
   const response = await fetchBackend("/account/password-reset-email", {
@@ -47,6 +49,8 @@ export const auth = betterAuth({
           const rows = await prisma.$queryRaw<{ expired: boolean }[]>`
             SELECT (test_expires_at IS NOT NULL AND test_expires_at < NOW() AND is_admin = FALSE) AS expired FROM users WHERE id = ${session.userId}`;
           if (rows[0]?.expired) throw new APIError("FORBIDDEN", { message: "O seu acesso de teste terminou. Fale com a equipe para continuar." });
+          // Conta criada pela captura do cadastro: só entra depois que o administrador libera.
+          if (await isAccessPending(session.userId)) throw new APIError("FORBIDDEN", { message: `${PENDING_ACCESS_CODE}: o seu cadastro está aguardando a liberação do suporte.` });
         },
       },
     },

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { signIn } from "../../lib/auth-client";
 import { postAuthPath } from "@/lib/auth-redirect";
+import { PENDING_ACCESS_CODE } from "@/lib/cadastro";
 import { track } from "@/lib/datafast";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -27,6 +28,11 @@ export function SignIn() {
     });
 
     if (response.error) {
+      // Conta criada pela captura e ainda não liberada: vai para a tela de espera, com o contato do suporte.
+      if ((response.error.message || "").includes(PENDING_ACCESS_CODE)) {
+        router.push("/aguardando-liberacao");
+        return;
+      }
       setMessage(response.error.message || "Failed to sign in");
       setLoading(false);
       return;
