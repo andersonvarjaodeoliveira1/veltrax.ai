@@ -6,6 +6,7 @@
 import { ExternalLink, Library, Loader2, Star, Upload, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { useSession } from "@/lib/auth-client";
 import { clipspy, type Creative } from "@/lib/clipspy";
 
 type Chosen = { kind: "upload"; name: string } | { kind: "bank"; creative: Creative };
@@ -13,22 +14,27 @@ type Chosen = { kind: "upload"; name: string } | { kind: "bank"; creative: Creat
 export function CreativeSource() {
   const [chosen, setChosen] = useState<Chosen | null>(null);
   const [open, setOpen] = useState(false);
+  // A biblioteca do ClipSpy é só do administrador: o membro sobe o vídeo do computador.
+  const { data: session } = useSession();
+  const admin = Boolean((session?.user as { is_admin?: boolean } | undefined)?.is_admin);
 
   return (
     <section className="relative space-y-3 rounded-[22px] border border-white/10 bg-white/[0.02] p-5">
       <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#A98BFF]">De onde vem o criativo campeão?</p>
       <div className="flex flex-wrap gap-2">
         <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-white/15 px-4 py-2 text-sm hover:bg-white/5">
-          <Upload className="size-4" /> Opção A · Subir do computador
+          <Upload className="size-4" /> {admin ? "Opção A · Subir do computador" : "Subir do computador"}
           <input type="file" accept="video/*" hidden onChange={(e) => {
             const f = e.target.files?.[0]; e.target.value = "";
             if (f) { setChosen({ kind: "upload", name: f.name }); toast.success("Vídeo campeão selecionado do computador"); }
           }} />
         </label>
-        <button type="button" onClick={() => setOpen(true)}
-          className="inline-flex items-center gap-2 rounded-full border border-white/15 px-4 py-2 text-sm hover:bg-white/5">
-          <Library className="size-4" /> Opção B · Escolher da biblioteca (ClipSpy)
-        </button>
+        {admin ? (
+          <button type="button" onClick={() => setOpen(true)}
+            className="inline-flex items-center gap-2 rounded-full border border-white/15 px-4 py-2 text-sm hover:bg-white/5">
+            <Library className="size-4" /> Opção B · Escolher da biblioteca (ClipSpy)
+          </button>
+        ) : null}
       </div>
 
       {chosen && (
