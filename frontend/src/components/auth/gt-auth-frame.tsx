@@ -28,9 +28,9 @@ export function GtAuthFrame({ children }: { children: React.ReactNode }) {
           </div>
           <ShowcaseCards />
           <div className="max-w-xl">
-            <p className="text-3xl font-bold leading-tight tracking-tight">Um vídeo longo vira uma semana de cortes</p>
+            <p className="text-3xl font-bold leading-tight tracking-tight">Crie os vídeos da sua oferta do começo ao fim</p>
             <p className="mt-4 text-sm leading-relaxed text-white/90">
-              A IA escolhe os <span className="font-medium text-[#FFC83D]">melhores momentos</span>, enquadra o rosto e <span className="font-medium text-[#FFC83D]">escreve a legenda</span>,<br />tudo num só lugar.
+              Modele um <span className="font-medium text-[#FFC83D]">vídeo que já vende</span>, crie sua <span className="font-medium text-[#FFC83D]">influencer com IA</span>,<br />faça os cortes e junte as cenas, tudo num só lugar.
             </p>
           </div>
         </div>
@@ -40,36 +40,47 @@ export function GtAuthFrame({ children }: { children: React.ReactNode }) {
 }
 
 const card = "rounded-lg bg-white p-4 text-left text-[#171717] shadow-[0_10px_30px_rgb(0_0_0/0.12)]";
-const CLIPS = [["Corte 1", "0:42", 92], ["Corte 2", "0:31", 88], ["Corte 3", "0:55", 81], ["Corte 4", "0:27", 76]] as const;
-const SCORES = [["Gancho", 92], ["Engajamento", 84], ["Valor", 71], ["Compartilhar", 66]] as const;
+const tool = "text-[10px] text-[#737373]";
+const SCENES = [["Cena 1", "Gancho", true], ["Cena 2", "Problema", true], ["Cena 3", "Prova", true], ["Cena 4", "Chamada final", false]] as const;
+const CLIPS = [["Corte 1", "0:42", 92], ["Corte 2", "0:31", 88], ["Corte 3", "0:55", 81]] as const;
 
+/** Um cartão por ferramenta do ClipGringa, com os nomes que a pessoa vê no menu. */
 function ShowcaseCards() {
   return (
     <div className="grid w-full max-w-[500px] grid-cols-2 gap-4">
       <div className={card}>
-        <p className="text-[10px] text-[#737373]">Vídeo de 48 min</p>
-        <p className="mt-0.5 text-xs font-semibold">Corte pronto para postar</p>
-        <div className="mt-3 flex gap-3">
-          <div className="flex h-[74px] w-[42px] items-end justify-center rounded-md bg-[#EDE7FB] pb-1.5"><span className="h-1 w-6 rounded-full bg-[#7B3FE4]" /></div>
-          <div className="min-w-0 flex-1 space-y-2">
-            <p className="text-lg font-semibold tabular-nums leading-none">92<span className="text-[10px] font-normal text-[#737373]"> de 100</span></p>
-            <p className="text-[10px] text-[#737373]">Nota de potencial viral</p>
-            <span className="inline-block rounded bg-[#7B3FE4] px-2 py-1 text-[9px] font-medium text-white">Baixar corte</span>
+        <p className={tool}>Vídeo orgânico</p>
+        <p className="mt-0.5 text-xs font-semibold">Cenas do seu vídeo</p>
+        <ul className="mt-3 space-y-2">
+          {SCENES.map(([scene, role, ready]) => (
+            <li key={scene} className="flex items-center gap-2 text-[10px]">
+              <span className="font-medium">{scene}</span>
+              <span className="text-[#737373]">{role}</span>
+              <span className={`ml-auto rounded px-1.5 py-0.5 text-[9px] ${ready ? "bg-[#E8F7EF] text-[#15803D]" : "bg-[#F4F4F6] text-[#525252]"}`}>{ready ? "Pronta" : "Gerando"}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div className={card}>
+        <p className={tool}>Avatar influencer</p>
+        <p className="mt-0.5 text-xs font-semibold">Sua influencer com IA</p>
+        <div className="mt-3 flex items-center gap-3">
+          <span className="flex size-12 shrink-0 items-end justify-center overflow-hidden rounded-full bg-[#EDE7FB]">
+            <span className="h-5 w-8 rounded-t-full bg-[#7B3FE4]" />
+          </span>
+          <div className="min-w-0 space-y-1.5">
+            <span className="block h-1.5 w-20 rounded-full bg-[#D9D9DE]" />
+            <span className="block h-1.5 w-14 rounded-full bg-[#EEEEF1]" />
           </div>
         </div>
-      </div>
-      <div className={card}>
-        <p className="text-xs font-semibold">Cortes por vídeo</p>
-        <div className="mt-4 flex h-[78px] items-end justify-around border-b border-[#E5E5E5]">
-          {[38, 26, 100].map((h, i) => (
-            <span key={i} className={`w-2 rounded-t-full ${i === 2 ? "bg-[#7B3FE4]" : "bg-[#D9D9DE]"}`} style={{ height: `${h}%` }} />
-          ))}
+        <div className="mt-3 flex gap-1.5">
+          {[0, 1, 2].map((i) => <span key={i} className="h-10 flex-1 rounded-md bg-[#EDE7FB]" />)}
         </div>
-        <div className="mt-1 flex justify-around text-[9px] text-[#737373]"><span>Ago</span><span>Set</span><span>Out</span></div>
       </div>
       <div className={card}>
-        <div className="flex justify-between text-[9px] text-[#737373]"><span>Corte</span><span>Nota</span></div>
-        <ul className="mt-2 space-y-2">
+        <p className={tool}>Cortes para TikTok</p>
+        <div className="mt-0.5 flex justify-between text-xs font-semibold"><span>Cortes prontos</span><span className="text-[9px] font-normal text-[#737373]">Nota viral</span></div>
+        <ul className="mt-3 space-y-2">
           {CLIPS.map(([name, time, score]) => (
             <li key={name} className="flex items-center gap-2 text-[10px]">
               <span className="h-5 w-3.5 rounded-sm bg-[#EDE7FB]" />
@@ -81,16 +92,14 @@ function ShowcaseCards() {
         </ul>
       </div>
       <div className={card}>
-        <p className="text-xs font-semibold">O que a IA avalia</p>
-        <ul className="mt-3 space-y-2.5">
-          {SCORES.map(([label, value]) => (
-            <li key={label} className="flex items-center gap-2 text-[10px]">
-              <span className="w-[74px] text-[#525252]">{label}</span>
-              <span className="h-1 flex-1 rounded-full bg-[#EEEEF1]"><span className="block h-1 rounded-full bg-[#7B3FE4]" style={{ width: `${value}%` }} /></span>
-              <span className="w-6 text-right font-semibold tabular-nums">{value}</span>
-            </li>
-          ))}
-        </ul>
+        <p className={tool}>Juntar vídeos</p>
+        <p className="mt-0.5 text-xs font-semibold">Vídeo final com legenda</p>
+        <div className="mt-3 flex items-center gap-1.5">
+          {[0, 1, 2].map((i) => <span key={i} className="h-9 w-6 rounded-sm bg-[#EDE7FB]" />)}
+          <span className="px-1 text-[#737373]">→</span>
+          <span className="flex h-14 w-9 items-end justify-center rounded-md bg-[#7B3FE4] pb-1.5"><span className="h-1 w-5 rounded-full bg-white" /></span>
+        </div>
+        <p className="mt-3 text-[10px] text-[#737373]">Cenas na ordem, com legenda e título</p>
       </div>
     </div>
   );
