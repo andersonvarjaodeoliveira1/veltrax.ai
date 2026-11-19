@@ -35,8 +35,8 @@ test("a tela de login abre em português sem ser refeita pelo React", async ({ p
   expect(errors.filter((message) => /Hydration failed|Minified React error #(418|423|425)/.test(message))).toEqual([]);
 });
 
-test("o cadastro mostra a animação do vídeo virando cortes", async ({ page }) => {
-  await page.goto("/sign-up");
+test("o login mostra a animação do vídeo virando cortes", async ({ page }) => {
+  await page.goto("/sign-in");
   await expect(page.getByText("podcast-episode-42.mp4", { exact: false })).toBeAttached();
 });
 

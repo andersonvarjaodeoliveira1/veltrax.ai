@@ -4,10 +4,10 @@ import Link from "next/link";
 import { ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HOSTED_APP_URL, OPERATOR_NAME, getSiteUrl } from "@/lib/site";
-import { LEGAL_LAST_UPDATED_PT } from "@/components/legal/legal-section";
+
 import { PrivacyPortuguese } from "./portuguese";
 
-const LAST_UPDATED = "November 16, 2026";
+const LAST_UPDATED = "November 19, 2026";
 const CONTACT_EMAIL = "contato@gringatools.com";
 
 export const metadata: Metadata = {
@@ -76,7 +76,7 @@ export default function PrivacyPolicyPage() {
             >
               Política de Privacidade
             </h1>
-            <p className="text-sm text-muted-foreground">Última atualização: {LEGAL_LAST_UPDATED_PT}</p>
+            <p className="text-sm text-muted-foreground">Última atualização: 19 de novembro de 2026</p>
             <p className="text-sm text-muted-foreground">
               <a className="underline hover:text-foreground" href="#english">English version below.</a>
             </p>
@@ -114,9 +114,10 @@ export default function PrivacyPolicyPage() {
           <Section title="Information We Collect">
             <p className="font-medium text-foreground">Account information.</p>
             <p>
-              When you create an account we collect your name, email address, and a securely hashed
-              password. Authentication is handled by our auth provider; we do not store plaintext
-              passwords.
+              When you create an account we collect your name, email address, CPF (Brazilian taxpayer
+              number), phone number, and a securely hashed password. The CPF and phone number are used
+              to confirm who is requesting access, release the account, and contact you for support.
+              Authentication is handled by our auth provider; we do not store plaintext passwords.
             </p>
             <p className="font-medium text-foreground">Content you provide.</p>
             <p>
