@@ -48,6 +48,14 @@ async def _is_admin(db: AsyncSession, user_id: str) -> bool:
     return bool(row and row[0])
 
 
+async def _admin_id(request: Request, db: AsyncSession) -> str:
+    """Sessão válida e de administrador: o ClipSpy é só do administrador."""
+    user_id = await _user_id(request, db)
+    if not await _is_admin(db, user_id):
+        raise HTTPException(status_code=403, detail="Área só do administrador")
+    return user_id
+
+
 @router.post("/access/check")
 async def check_access(request: Request, db: AsyncSession = Depends(get_db)):
     """Confere agora a validade do acesso à Ad Library e renova se for hora (só administrador)."""
@@ -88,7 +96,7 @@ def _row(r: Any) -> dict[str, Any]:
 @router.post("/search")
 async def search(request: Request, db: AsyncSession = Depends(get_db)):
     """Minera a Ad Library por um termo, salva no banco e devolve ordenado por tempo de veiculação."""
-    user_id = await _user_id(request, db)
+    user_id = await _admin_id(request, db)
     body = await request.json()
     term = str(body.get("term") or "").strip()
     if len(term) < 2:
@@ -133,7 +141,7 @@ async def add_reference(request: Request, db: AsyncSession = Depends(get_db)):
     """Arquivo de referências manual: guarda um vídeo que a pessoa achou navegando, com o que ela anotou.
 
     Nada é lido do link pelo servidor. Colar o mesmo link de novo atualiza a referência."""
-    user_id = await _user_id(request, db)
+    user_id = await _admin_id(request, db)
     from ...clipspy_references import manual_reference
 
     try:
@@ -163,7 +171,7 @@ async def _connected_pages(db: AsyncSession, user_id: str) -> list[dict[str, Any
 @router.get("/page-analysis/pages")
 async def analysis_pages(request: Request, db: AsyncSession = Depends(get_db)):
     """As páginas conectadas desta conta, para analisar com um clique (só os nomes)."""
-    user_id = await _user_id(request, db)
+    user_id = await _admin_id(request, db)
     return {"pages": [{"id": r["meta_page_id"], "name": r["name"]} for r in await _connected_pages(db, user_id)]}
 
 
@@ -173,7 +181,7 @@ async def analyze_page(request: Request, db: AsyncSession = Depends(get_db)):
 
     Página conectada usa o token dela. Página de terceiros usa o acesso do servidor e depende de a Meta
     ter aprovado o Page Public Content Access; sem a aprovação a resposta vem com `blocked` explicando."""
-    user_id = await _user_id(request, db)
+    user_id = await _admin_id(request, db)
     import httpx
 
     from ...clipspy_pages import ORDERS, PageAccessError, find_pages, page_info, page_posts, parse_page_ref, rank, summary
@@ -227,7 +235,7 @@ async def analyze_page(request: Request, db: AsyncSession = Depends(get_db)):
 @router.get("/bank")
 async def bank(request: Request, champion: int = 0, source: str = "", db: AsyncSession = Depends(get_db)):
     """Lista a biblioteca de criativos salva (opcionalmente só os campeões)."""
-    user_id = await _user_id(request, db)
+    user_id = await _admin_id(request, db)
     from ...reviewer import is_reviewer, seed_references
 
     if await is_reviewer(db, user_id):
@@ -257,7 +265,7 @@ async def recipe(item_id: str, request: Request, db: AsyncSession = Depends(get_
     Usa o texto do anúncio (não o vídeo, que a Ad Library não entrega): devolve a
     sequência de beats e os pesos para modelar a copy do usuário no Gerador de Cenas.
     """
-    user_id = await _user_id(request, db)
+    user_id = await _admin_id(request, db)
     row = (await db.execute(text(
         "SELECT advertiser, title, metrics FROM creative_bank WHERE id = :id AND user_id = :u"
     ), {"id": item_id, "u": user_id})).first()
@@ -298,7 +306,7 @@ async def recipe(item_id: str, request: Request, db: AsyncSession = Depends(get_
 @router.post("/bank/{item_id}/status")
 async def set_status(item_id: str, request: Request, db: AsyncSession = Depends(get_db)):
     """Marca um criativo como salvo, usado ou arquivado."""
-    user_id = await _user_id(request, db)
+    user_id = await _admin_id(request, db)
     status = str((await request.json()).get("status") or "").strip()
     if status not in {"novo", "salvo", "usado", "arquivado"}:
         raise HTTPException(status_code=400, detail="Status inválido")

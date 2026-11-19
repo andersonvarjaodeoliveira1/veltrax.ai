@@ -26,7 +26,6 @@ const TELAS: Array<[string, string, RegExp]> = [
   ["Conectar ao Flow", "/conectar-flow", /Flow|extens/i],
   ["Ofertas", "/ofertas", /Oferta/i],
   ["Juntar vídeos", "/juntar-videos", /Juntar|cena/i],
-  ["ClipSpy", "/clipspy", /ClipSpy|anúncio/i],
   ["Minhas APIs", "/minhas-apis", /API|chave|IA/i],
   ["Configurações", "/settings", /./],
 ];
@@ -46,7 +45,7 @@ test("membro percorre todas as telas sem erro", async ({ page }) => {
     if (erros.length > antes) problemas.push(`${nome}: ${erros.slice(antes).join(" | ")}`);
   }
   // o membro não entra no Admin nem na área Facebook (só administrador)
-  for (const [nome, rota] of [["Admin", "/admin"], ["Facebook", "/facebook"]] as const) {
+  for (const [nome, rota] of [["Admin", "/admin"], ["Facebook", "/facebook"], ["ClipSpy", "/clipspy"]] as const) {
     await page.goto(rota, { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(1500);
     const corpo = await page.locator("body").innerText();
