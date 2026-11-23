@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { isHostileRequest, isLegalProbe } from "../middleware";
+import { NextRequest } from "next/server";
+import { isHostileRequest, isLegalProbe, middleware } from "../middleware";
+import { MAX_SITE_UPLOAD_BYTES } from "./upload-limit";
 
 describe("middleware · robôs e varreduras", () => {
   it("bloqueia scanners, copiadores e robôs de IA", () => {
@@ -54,5 +56,19 @@ describe("middleware · robôs e varreduras", () => {
     expect(isLegalProbe("/privacy", null)).toBe(true);
     expect(isLegalProbe("/privacy", chrome)).toBe(false);
     expect(isLegalProbe("/clipspy", "facebookexternalhit/1.1")).toBe(false);
+  });
+});
+
+describe("middleware · tamanho do envio", () => {
+  const post = (size: number) => middleware(new NextRequest("https://clipgringa.gringatools.com/api/multiplier/captions/draft", {
+    method: "POST", headers: { "user-agent": "Mozilla/5.0 (Windows NT 10.0) Chrome/130", "content-length": String(size) },
+  }));
+  it("recusa com aviso claro o arquivo acima do teto, em vez de deixar passar só o começo", async () => {
+    const response = post(MAX_SITE_UPLOAD_BYTES + 1);
+    expect(response.status).toBe(413);
+    expect((await response.json()).detail).toMatch(/grande demais/);
+  });
+  it("deixa passar o vídeo dentro do teto", () => {
+    expect(post(250 * 1024 * 1024).status).toBe(200);
   });
 });
