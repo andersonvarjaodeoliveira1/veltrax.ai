@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+import { exceedsUploadLimit } from "@/lib/upload-limit";
+
 const PUBLIC_FILE = /\.(.*)$/;
 
 // Ferramentas de varredura, copiadores de site e robôs de coleta (IA/raspagem). Navegadores, Stripe e RevenueCat não entram.
@@ -61,6 +63,10 @@ export function middleware(request: NextRequest) {
     return new NextResponse("Forbidden", { status: 403, headers: { "Cache-Control": "no-store" } });
   }
   if (isLegalProbe(request.nextUrl.pathname, userAgent)) note("legal", request);
+  // Arquivo maior que o teto do site: recusa com aviso claro, em vez de deixar passar só o começo dele.
+  if (exceedsUploadLimit(request.headers.get("content-length"))) {
+    return NextResponse.json({ detail: "Arquivo grande demais. O limite por envio é 1 GB." }, { status: 413, headers: { "Cache-Control": "no-store" } });
+  }
   const isLandingOnlyModeEnabled =
     process.env.NEXT_PUBLIC_LANDING_ONLY_MODE === "true";
 

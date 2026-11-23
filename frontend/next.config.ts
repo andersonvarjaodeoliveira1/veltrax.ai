@@ -43,6 +43,12 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: false,
   },
+  // Envio de vídeos pelo site (/api): por padrão o Next corta em 10 MB o corpo de todo pedido que passa pelo
+  // middleware, e o vídeo chegava pela metade ao servidor. O teto é o mesmo de src/lib/upload-limit.ts (1 GB);
+  // acima disso o middleware responde 413 em vez de cortar.
+  experimental: {
+    middlewareClientMaxBodySize: 1024 * 1024 * 1024,
+  },
   // Proteção do código: em produção, tira os console.log do pacote do navegador (menos pistas internas na tela).
   // warn e error ficam: o registro de segurança do middleware usa console.warn.
   compiler: {

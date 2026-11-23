@@ -14,7 +14,12 @@ async function proxy(request: Request, { params }: { params: Promise<{ path: str
   const contentType = request.headers.get("content-type") || "";
   let body: BodyInit | undefined;
   if (isBody) {
-    body = contentType.includes("multipart/form-data") ? await request.formData() : await request.text();
+    try {
+      body = contentType.includes("multipart/form-data") ? await request.formData() : await request.text();
+    } catch {
+      // Envio interrompido ou incompleto (conexão caiu no meio): avisa em vez de quebrar com erro 500.
+      return NextResponse.json({ detail: "O envio chegou incompleto. Confira a internet e tente de novo." }, { status: 400 });
+    }
   }
   const upstream = await fetchBackend(`/multiplier/${path.map(encodeURIComponent).join("/")}${new URL(request.url).search}`, {
     method: request.method,
