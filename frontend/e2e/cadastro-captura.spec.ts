@@ -91,6 +91,22 @@ test("captura do cadastro: pede os dados, segura a entrada e libera pelo Admin",
   await expect(painel.getByRole("status")).toContainText(`Acesso de ${pessoa.nome} liberado`);
   await expect(painel.getByRole("row").filter({ hasText: pessoa.email })).toContainText("Liberado");
 
+  // A aba Cadastros mostra a conta com os dados da captura, o dia do cadastro e a situação.
+  await page.getByRole("navigation", { name: "Seções do Admin" }).getByRole("link", { name: /Cadastros/ }).click();
+  await page.waitForURL("**/admin/cadastros");
+  const aba = page.getByTestId("registered-users");
+  await aba.getByRole("searchbox").fill(pessoa.email);
+  const conta = aba.getByRole("row").filter({ hasText: pessoa.email });
+  await expect(conta).toContainText(pessoa.nome);
+  await expect(conta).toContainText(comMascara(pessoa.cpf));
+  await expect(conta).toContainText("(11) 91314-2143");
+  await expect(conta).toContainText(new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }));
+  await expect(conta).toContainText("Ainda não entrou");
+  await expect(conta).toContainText("Liberado");
+  await aba.getByRole("searchbox").fill("");
+  await expect(aba.getByRole("button", { name: /Contas cadastradas/ })).not.toContainText("…");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+
   // Quem não é administrador não lê os cadastros.
   await context.clearCookies();
   expect(await lerCadastros()).toBe(401);
@@ -107,4 +123,16 @@ test("captura do cadastro: pede os dados, segura a entrada e libera pelo Admin",
   await page.waitForURL((url) => !url.pathname.startsWith("/sign-in") && !url.pathname.startsWith("/aguardando"));
   await page.waitForLoadState("domcontentloaded");
   expect(await lerCadastros()).toBe(403);
+  expect(await page.evaluate(async () => (await fetch("/api/admin/signups?all=1", { cache: "no-store" })).status)).toBe(403);
+
+  // Na entrada, o guia mostra o que falta conectar em cada etapa.
+  await page.goto("/");
+  const guia = page.getByTestId("getting-started");
+  await expect(guia.getByText("Primeiros passos para usar o ClipGringa")).toBeVisible();
+  // A primeira conferência da extensão espera 6 s antes de dizer que ela não existe.
+  await expect(guia.getByTestId("start-step-ext")).toContainText("Não encontrada neste Chrome", { timeout: 20_000 });
+  await expect(guia.getByTestId("start-step-ai")).toContainText("Nenhuma API ou conta conectada");
+  await expect(guia.getByTestId("start-step-ai").getByRole("link", { name: "Conectar minha API" })).toHaveAttribute("href", "/minhas-apis");
+  await guia.getByTestId("start-step-flow").getByRole("button", { name: "Como funciona" }).click();
+  await expect(guia.getByTestId("start-step-flow")).toContainText("Os créditos e os limites de geração são da sua conta Google");
 });

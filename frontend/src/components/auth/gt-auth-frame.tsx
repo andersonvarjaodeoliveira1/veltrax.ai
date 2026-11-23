@@ -28,9 +28,9 @@ export function GtAuthFrame({ children }: { children: React.ReactNode }) {
           </div>
           <ShowcaseCards />
           <div className="max-w-xl">
-            <p className="text-3xl font-bold leading-tight tracking-tight">Crie os vídeos da sua oferta do começo ao fim</p>
+            <p className="text-3xl font-bold leading-tight tracking-tight">Cortes, vídeos com IA e avatar num só lugar</p>
             <p className="mt-4 text-sm leading-relaxed text-white/90">
-              Modele um <span className="font-medium text-[#FFC83D]">vídeo que já vende</span>, crie sua <span className="font-medium text-[#FFC83D]">influencer com IA</span>,<br />faça os cortes e junte as cenas, tudo num só lugar.
+              Transforme vídeos longos em <span className="font-medium text-[#FFC83D]">cortes prontos para postar</span>, modele um <span className="font-medium text-[#FFC83D]">vídeo que já vende</span>,<br />crie sua influencer com IA e junte as cenas com legenda.
             </p>
           </div>
         </div>

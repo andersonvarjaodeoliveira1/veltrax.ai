@@ -32,6 +32,7 @@ import { buildFontOptionsPayload, FONT_TEMPLATE_DEFAULT_VALUE } from "@/lib/font
 import { fetchGenerations, greeting, type GenerationSummary } from "@/lib/generations";
 import { cn } from "@/lib/utils";
 import { DISPLAY_NAME } from "@/lib/site";
+import { GettingStarted } from "@/components/app/getting-started";
 import { FontSelectOption, type FontOption } from "@/components/font-select-option";
 
 interface CaptionTemplate {
@@ -331,6 +332,7 @@ export default function HomeApp() {
         )}
 
         <div className="mx-auto max-w-3xl animate-rise">
+          <GettingStarted />
           <h1 className="text-center font-display text-3xl font-bold tracking-tight sm:text-[2.6rem] sm:leading-tight">
             {greeting(DISPLAY_NAME)}
           </h1>
