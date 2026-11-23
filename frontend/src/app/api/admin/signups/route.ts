@@ -1,14 +1,16 @@
 import { NextResponse } from "next/server";
 
 import { requireUnlockedAdmin } from "@/server/admin-guard";
-import { decideSignupRequest, listSignupRequests } from "@/server/signup-requests";
+import { decideSignupRequest, listRegisteredUsers, listSignupRequests } from "@/server/signup-requests";
 
 export const dynamic = "force-dynamic";
 
 // Cadastros da captura (nome, e-mail, CPF e telefone): só o administrador com o Admin destravado vê e decide.
-export async function GET() {
+// ?all=1 traz todas as contas (aba Cadastros); sem isso, só os pedidos da captura.
+export async function GET(request: Request) {
   const check = await requireUnlockedAdmin();
   if ("error" in check) return check.error;
+  if (new URL(request.url).searchParams.get("all") === "1") return NextResponse.json({ users: await listRegisteredUsers() });
   return NextResponse.json({ items: await listSignupRequests() });
 }
 

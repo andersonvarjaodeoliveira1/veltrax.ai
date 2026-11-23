@@ -82,3 +82,37 @@ export async function decideSignupRequest(userId: string, action: "approve" | "d
   }
   return { ok: true, emailSent: await sendEmail(userId, "approved").catch(() => false) };
 }
+
+export type RegisteredUserRow = {
+  user_id: string; name: string; email: string; is_admin: boolean; created_at: Date;
+  cpf: string | null; phone: string | null;
+  /** invited = conta criada por convite do administrador, sem passar pela captura. */
+  status: "pending" | "approved" | "declined" | "invited";
+  decided_at: Date | null; last_seen: Date | null;
+  flow_connected: boolean; apis: number; tokens_granted: number | null; tasks: number;
+};
+
+/** Todas as contas, da mais nova para a mais antiga, com os dados da captura e o que cada uma já conectou. */
+export async function listRegisteredUsers(): Promise<RegisteredUserRow[]> {
+  return prisma.$queryRaw<RegisteredUserRow[]>`
+    SELECT u.id AS user_id, COALESCE(r.name, u.name) AS name, u.email, u.is_admin, u."createdAt" AS created_at,
+           r.cpf, r.phone, COALESCE(r.status, 'invited') AS status, r.decided_at,
+           -- Último sinal de uso da própria pessoa: sessão, extensão avisando do Flow, vídeo enviado, imagem ou cena criada.
+           -- Erros do servidor registrados na conta não contam como acesso.
+           GREATEST(
+             (SELECT MAX(s."updatedAt") FROM session s WHERE s."userId" = u.id)::timestamptz,
+             (SELECT MAX(a.created_at) FROM activity_events a WHERE a.user_id = u.id AND a.kind IN ('imagem', 'cena')),
+             (SELECT MAX(t.created_at) FROM tasks t WHERE t.user_id = u.id),
+             f.checked_at
+           ) AS last_seen,
+           COALESCE(f.connected, false) AS flow_connected,
+           (SELECT COUNT(*)::int FROM user_integrations i WHERE i.user_id = u.id) AS apis,
+           q.granted::float8 AS tokens_granted,
+           (SELECT COUNT(*)::int FROM tasks t WHERE t.user_id = u.id) AS tasks
+    FROM users u
+    LEFT JOIN signup_requests r ON r.user_id = u.id
+    LEFT JOIN flow_connection f ON f.user_id = u.id
+    LEFT JOIN user_token_quota q ON q.user_id = u.id
+    ORDER BY u."createdAt" DESC
+    LIMIT 2000`;
+}

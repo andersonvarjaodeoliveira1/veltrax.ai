@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Download, Loader2, UserPlus } from "lucide-react";
 
@@ -65,7 +66,7 @@ export function SignupRequestsPanel() {
           <Download className="size-4" /> Baixar planilha
         </button>
       </div>
-      <p className="text-xs text-muted-foreground">Quem cria a conta em Criar acesso informa nome, e-mail, CPF e telefone e só entra depois que você liberar aqui.</p>
+      <p className="text-xs text-muted-foreground">Quem cria a conta em Criar acesso informa nome, e-mail, CPF e telefone e só entra depois que você liberar aqui. <Link href="/admin/cadastros" className="underline underline-offset-4">Ver todas as contas na aba Cadastros</Link></p>
       {notice ? <p role="status" className="text-sm text-foreground">{notice}</p> : null}
       {items === null ? (
         <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Carregando…</p>
