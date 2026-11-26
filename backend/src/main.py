@@ -83,6 +83,13 @@ def create_app(
             async with AsyncSessionLocal() as db:
                 await load_runtime_settings_cache(db)
             logger.info("✅ Runtime settings loaded")
+            # A entrada sem senha depende do e-mail de envio: deixa claro no registro se ele está configurado.
+            from .services.login_link_email_service import LoginLinkEmailService
+
+            if LoginLinkEmailService(config or get_config()).is_configured:
+                logger.info("✅ E-mail de envio configurado (links de entrada)")
+            else:
+                logger.warning("⚠️ E-mail de envio NÃO configurado: os links de entrada não serão enviados")
 
             await queue_adapter.get_pool()
             logger.info("✅ Job queue initialized")

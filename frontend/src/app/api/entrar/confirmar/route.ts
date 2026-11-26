@@ -7,8 +7,9 @@ import { PENDING_ACCESS_CODE } from "@/lib/cadastro";
 export const dynamic = "force-dynamic";
 
 // Limite por endereço: o código do link tem 32 letras e não dá para adivinhar, mas a rota não precisa aceitar rajadas.
+// Folgado de propósito: várias pessoas podem sair pelo mesmo endereço (operadora de celular, escritório).
 const WINDOW_MS = 10 * 60 * 1000;
-const MAX_PER_WINDOW = 20;
+const MAX_PER_WINDOW = 60;
 const attempts = new Map<string, number[]>();
 
 function tooMany(ip: string, now = Date.now()) {

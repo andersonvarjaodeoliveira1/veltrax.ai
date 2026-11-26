@@ -98,6 +98,9 @@ export const auth = betterAuth({
       // consulta a sessão; ao estourar, o menu sumia e a pessoa parecia ter saído da conta.
       "/get-session": false,
       "/sign-in/email": { window: 300, max: 5 },
+      // Pedido de link por e-mail: várias pessoas podem sair pelo mesmo endereço (operadora de celular, escritório).
+      // Quem protege a caixa de cada pessoa é o limite por e-mail do servidor (1 a cada 45 s, 6 por hora).
+      "/sign-in/magic-link": { window: 60, max: 20 },
       "/sign-in/*": { window: 300, max: 10 },
       "/sign-up/*": { window: 3600, max: 3 },
       "/forget-password": { window: 3600, max: 3 },
@@ -136,7 +139,7 @@ export const auth = betterAuth({
     magicLink({
       expiresIn: LOGIN_LINK_MINUTES * 60,
       storeToken: "hashed",
-      rateLimit: { window: 60, max: 5 },
+      rateLimit: { window: 60, max: 20 },
       sendMagicLink: async ({ email, token }, ctx) => {
         const origin = new URL(ctx?.context.baseURL || process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3107").origin;
         const url = `${origin}/entrar/confirmar?token=${encodeURIComponent(token)}`;
