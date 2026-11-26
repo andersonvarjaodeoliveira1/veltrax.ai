@@ -171,6 +171,67 @@ async def test_conta_convidada_continua_entrando_sem_consultar_a_base(db):
     assert decision.action == "send" and calls == []
 
 
+async def _set_test(db, user_id, days):
+    await db.execute(text("UPDATE users SET test_expires_at = NOW() + make_interval(days => :d) WHERE id = :u"), {"d": days, "u": user_id})
+    await db.commit()
+
+
+async def _test_until(db, user_id):
+    return (await db.execute(text("SELECT test_expires_at FROM users WHERE id = :u"), {"u": user_id})).scalar()
+
+
+@pytest.mark.parametrize("days", [-3, 5])
+async def test_conta_de_teste_de_assinante_ativo_deixa_de_ter_prazo(db, days):
+    # O convite por e-mail chegou para quem já tinha uma conta de teste vencida: o link vinha e a entrada era recusada.
+    email = _email("teste-assinante")
+    user_id = await db.add_user(email)
+    await _set_test(db, user_id, days)
+    decision = await member_access.login_decision(db, email, checker=checker(default=ACTIVE))
+    assert decision.action == "send" and decision.why == "teste_virou_assinante"
+    assert await _test_until(db, user_id) is None
+    assert (await db.row(email))[0] is True  # passa a seguir a assinatura
+    # Se cancelar depois, perde o acesso como qualquer assinante.
+    assert (await member_access.login_decision(db, email, checker=checker(default=CANCELLED))).action == "inactive"
+    assert await db.open_sessions(user_id) == 0
+
+
+async def test_conta_de_teste_de_quem_nao_e_assinante_continua_com_o_prazo(db):
+    email = _email("teste-sem-assinatura")
+    user_id = await db.add_user(email)
+    await _set_test(db, user_id, -3)
+    calls = []
+    decision = await member_access.login_decision(db, email, checker=checker(default=CANCELLED, calls=calls))
+    assert decision.action == "send" and decision.why == "convidado" and len(calls) == 1
+    assert await _test_until(db, user_id) is not None and await db.row(email) is None
+
+
+async def test_conta_de_teste_com_a_base_fora_do_ar_nao_muda(db):
+    email = _email("teste-base-fora")
+    user_id = await db.add_user(email)
+    await _set_test(db, user_id, -3)
+    decision = await member_access.login_decision(db, email, checker=checker(fail=True))
+    assert decision.action == "send" and await _test_until(db, user_id) is not None and await db.row(email) is None
+
+
+async def test_cadastro_aguardando_com_teste_nao_consulta_nem_recebe(db):
+    email = _email("teste-pendente")
+    user_id = await db.add_user(email, signup="pending")
+    await _set_test(db, user_id, -3)
+    calls = []
+    assert (await member_access.login_decision(db, email, checker=checker(default=ACTIVE, calls=calls))).action == "skip"
+    assert calls == [] and await _test_until(db, user_id) is not None
+
+
+async def test_assinante_com_teste_vencido_consulta_a_base_uma_vez_so(db):
+    email = _email("teste-membro")
+    user_id = await db.add_user(email)
+    await db.add_row(email, active=True)
+    await _set_test(db, user_id, -3)
+    calls = []
+    decision = await member_access.login_decision(db, email, checker=checker(default=CANCELLED, calls=calls))
+    assert decision.action == "inactive" and len(calls) == 1
+
+
 async def test_administrador_sempre_recebe(db):
     email = _email("admin")
     await db.add_user(email, admin=True)

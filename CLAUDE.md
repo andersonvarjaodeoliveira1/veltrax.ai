@@ -177,7 +177,8 @@ abrir a página não gasta o link, porque provedores de e-mail abrem links sozin
 Quem recebe o link é decidido no servidor (`backend/src/member_access.py`, rota `POST /access/login-link`):
 administrador, conta convidada e cadastro liberado pela captura recebem sempre; e-mail sem conta só recebe se for
 assinante ativo da Gringatools (a conta nasce no primeiro acesso e ganha uma linha em `member_access`). A resposta ao
-navegador é sempre a mesma, para não revelar quem é assinante.
+navegador é sempre a mesma, para não revelar quem é assinante. Conta de teste (convite com prazo, `users.test_expires_at`) de quem é
+assinante ativo perde o prazo no pedido de link e passa a seguir a assinatura (ganha linha em `member_access`).
 
 - **Conferência:** `check_remote` chama a função `clipgringa-acesso` da base da Gringatools (Supabase; código em
   `supabase/functions/clipgringa-acesso`, regra em `public.clipgringa_acesso`, a mesma do login da extensão). O pedido
