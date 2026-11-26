@@ -31,7 +31,10 @@ it("conta nova: mostra o que falta em cada etapa e por onde começar", async () 
   render(<GettingStarted />);
   expect(await screen.findByText("Primeiros passos para usar o ClipGringa")).toBeInTheDocument();
   expect(await within(step("ai")).findByText(/Nenhuma API ou conta conectada/)).toBeInTheDocument();
-  expect(screen.getByText(/0 de 4 prontos\. Falta: instalar a extensão no Chrome/)).toBeInTheDocument();
+  // API própria obrigatória: é o primeiro passo e o único com botão roxo até ser resolvido.
+  expect(await screen.findByText(/0 de 5 prontos\. Falta: conectar a sua chave do Gemini ou do ChatGPT \(obrigatório\)/)).toBeInTheDocument();
+  expect(within(step("key")).getByText("Falta conectar: sem ela os cortes e as legendas automáticas não saem")).toBeInTheDocument();
+  expect(within(step("key")).getByRole("link", { name: "Conectar minha chave" })).toHaveAttribute("href", "/minhas-apis");
   expect(within(step("ext")).getByText("Não encontrada neste Chrome")).toBeInTheDocument();
   expect(within(step("flow")).getByText("Depende da extensão")).toBeInTheDocument();
   expect(within(step("tokens")).getByText("Você ainda não tem tokens liberados")).toBeInTheDocument();
@@ -46,11 +49,12 @@ it("mostra os dados reais de cada etapa quando está tudo conectado", async () =
   server([{ provider: "gemini", connected: true }, { provider: "openai", connected: true }, { provider: "pexels", connected: true }]);
   render(<GettingStarted />);
   expect(await within(step("ai")).findByText("Pela sua chave de API (Gemini, OpenAI)")).toBeInTheDocument();
+  expect(await within(step("key")).findByText("Conectada (Gemini, ChatGPT)")).toBeInTheDocument();
   expect(within(step("ext")).getByText("Instalada, versão 1.24.2")).toBeInTheDocument();
   expect(within(step("flow")).getByText("Conta conectada, plano Pro, 820 créditos")).toBeInTheDocument();
   expect(within(step("tokens")).getByText("Você usa a sua própria IA, não gasta tokens")).toBeInTheDocument();
   expect(screen.getByText("Tudo conectado, você já pode criar")).toBeInTheDocument();
-  expect(screen.getByText("4 de 4 prontos")).toBeInTheDocument();
+  expect(screen.getByText("5 de 5 prontos")).toBeInTheDocument();
 });
 
 it("avisa quando a extensão está desatualizada e quando a IA é pela conta", async () => {
@@ -93,7 +97,7 @@ it("pode ser escondido e lembra a escolha", async () => {
   const view = render(<GettingStarted />);
   await user.click(await screen.findByRole("button", { name: /Primeiros passos/ }));
   expect(screen.queryByTestId("start-step-ext")).toBeNull();
-  expect(screen.getByText(/0 de 4 prontos/)).toBeInTheDocument();
+  expect(screen.getByText(/0 de 5 prontos/)).toBeInTheDocument();
   view.unmount();
   render(<GettingStarted />);
   expect(await screen.findByRole("button", { name: /Primeiros passos/ })).toHaveAttribute("aria-expanded", "false");

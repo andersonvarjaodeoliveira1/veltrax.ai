@@ -37,6 +37,8 @@ export function GettingStarted() {
   const balance = useTokenBalance(true);
   const [latest, setLatest] = useState("");
   const [apis, setApis] = useState<string[] | null>(null);
+  // Chaves que servem para a transcrição e os cortes (API própria obrigatória): Gemini ou ChatGPT (OpenAI).
+  const [cutKeys, setCutKeys] = useState<string[] | null>(null);
   const [site, setSite] = useState<string | null>(null);
   const [relayReady, setRelayReady] = useState<boolean | null>(null);
   const [collapsed, setCollapsed] = useState<boolean | null>(null);
@@ -48,8 +50,11 @@ export function GettingStarted() {
       .then((d: { version?: string } | null) => { if (alive && d?.version) setLatest(d.version); }).catch(() => undefined);
     const loadApis = () => fetch("/api/integrations", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null))
       .then((d: { integrations?: { provider: string; connected: boolean }[] } | null) => {
-        if (alive) setApis(d ? (d.integrations ?? []).filter((i) => i.connected && AI_API_PROVIDERS.includes(i.provider)).map((i) => API_NAME[i.provider] ?? i.provider) : []);
-      }).catch(() => { if (alive) setApis([]); });
+        if (!alive) return;
+        const connected = (d?.integrations ?? []).filter((i) => i.connected);
+        setApis(connected.filter((i) => AI_API_PROVIDERS.includes(i.provider)).map((i) => API_NAME[i.provider] ?? i.provider));
+        setCutKeys(connected.filter((i) => i.provider === "gemini" || i.provider === "openai").map((i) => (i.provider === "openai" ? "ChatGPT" : "Gemini")));
+      }).catch(() => { if (alive) { setApis([]); setCutKeys([]); } });
     void loadApis();
     window.addEventListener("gv-tokens-changed", loadApis);
     return () => { alive = false; window.removeEventListener("gv-tokens-changed", loadApis); };
@@ -83,7 +88,26 @@ export function GettingStarted() {
   const ownAi = aiOk || Boolean(balance?.own_key);
   const tokensOk = ownAi || Boolean(balance && (balance.unlimited || (balance.remaining ?? 0) > 0));
 
+  const hasCutKey = Boolean(cutKeys?.length);
+  // Administrador e contas com tokens liberados usam a transcrição do ClipGringa; os demais, a própria chave.
+  const houseCuts = Boolean(balance && (balance.unlimited || (balance.remaining ?? 0) > 0));
+
   const steps: Step[] = [
+    {
+      id: "key", title: "Conectar a sua chave do Gemini ou do ChatGPT (obrigatório)",
+      tone: cutKeys === null || !balance ? "wait" : hasCutKey || houseCuts ? "ok" : "todo",
+      status: cutKeys === null || !balance ? "Conferindo…"
+        : hasCutKey ? `Conectada (${cutKeys.join(", ")})`
+        : houseCuts ? "A sua conta usa a transcrição do ClipGringa"
+        : "Falta conectar: sem ela os cortes e as legendas automáticas não saem",
+      how: [
+        "A transcrição dos vídeos e a escolha dos cortes são feitas com a sua própria chave. O ClipGringa é um bônus da assinatura e não cobre esse custo.",
+        "Gemini: tem cota grátis. Entre em aistudio.google.com/apikey com a sua conta Google, crie a chave e cole em Minhas APIs.",
+        "ChatGPT: é a chave da OpenAI (platform.openai.com/api-keys), cobrada à parte da assinatura do ChatGPT. Com ela a legenda sai sincronizada palavra por palavra.",
+        "A chave fica guardada com criptografia e só a sua conta usa.",
+      ],
+      actions: [{ label: hasCutKey ? "Ver minhas APIs" : "Conectar minha chave", href: "/minhas-apis", primary: cutKeys !== null && Boolean(balance) && !hasCutKey && !houseCuts }],
+    },
     {
       id: "ext", title: "Instalar a extensão no Chrome",
       tone: !extKnown ? "wait" : !extOk ? "todo" : outdated ? "warn" : "ok",

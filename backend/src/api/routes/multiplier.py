@@ -294,6 +294,12 @@ def _job_dir(job_id: str) -> Path:
     return _root() / job_id
 
 
+from ...media.member_transcription import MemberTranscriptionError
+from ...member_keys import MemberKeyRequired as _MemberKeyRequired
+
+_MEMBER_KEY_ERRORS = (MemberTranscriptionError, _MemberKeyRequired)
+
+
 async def _user_id(request: Request, db: AsyncSession) -> str:
     return await resolve_authenticated_user_id(request, db, get_config())
 
@@ -825,6 +831,8 @@ async def _run_variations_job(
                     words = await run_in_thread(transcribe_words, source)
                 except Exception as exc:
                     logger.warning("variations %s transcription failed: %s", job_id, exc)
+                    if isinstance(exc, _MEMBER_KEY_ERRORS):
+                        raise RuntimeError(str(exc))  # chave do membro recusada ou sem cota: a mensagem já diz o que fazer
                     raise RuntimeError("Could not create the captions. Try again or send without captions.")
                 if not words:
                     raise RuntimeError("No speech was found in this video, so there are no captions to add.")
@@ -909,6 +917,12 @@ async def create_caption_draft(request: Request, db: AsyncSession = Depends(get_
     from ...multiplier_captions import lines_from_words, transcribe_words
 
     user_id = await _user_id(request, db)
+    from ...member_keys import MemberKeyRequired, activate as activate_member_keys
+
+    try:
+        await activate_member_keys(db, user_id)  # API própria obrigatória: a legenda usa a chave do membro
+    except MemberKeyRequired as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
     from ...integrations import load_user_keys
 
     await load_user_keys(db, user_id)  # usa a chave Claude/Gemini da própria pessoa quando existe
@@ -951,6 +965,8 @@ async def create_caption_draft(request: Request, db: AsyncSession = Depends(get_
             words = await run_in_thread(transcribe_words, video)
         except Exception as exc:
             logger.warning("caption draft transcription failed: %s", exc)
+            if isinstance(exc, _MEMBER_KEY_ERRORS):
+                raise HTTPException(status_code=502, detail=str(exc))
             raise HTTPException(status_code=502, detail="Could not create the captions. Try again.")
         if not words:
             raise HTTPException(status_code=422, detail="No speech was found in this video")
@@ -1001,6 +1017,12 @@ async def _read_onscreen_text(video: Path, duration: float, folder: Path) -> lis
 @router.post("/variations")
 async def create_variations(request: Request, db: AsyncSession = Depends(get_db)):
     user_id = await _user_id(request, db)
+    from ...member_keys import MemberKeyRequired, activate as activate_member_keys
+
+    try:
+        await activate_member_keys(db, user_id)  # API própria obrigatória: a legenda usa a chave do membro
+    except MemberKeyRequired as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
     if user_id in _running.values():
         raise HTTPException(status_code=409, detail="You already have a job running. Wait for it to finish.")
     total_jobs = (

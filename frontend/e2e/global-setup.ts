@@ -68,6 +68,11 @@ export default async function globalSetup() {
   });
 
   const passwordHash = await hashPassword(password);
+  const grantTokens = async (userId: string) => {
+    // API própria obrigatória: a conta de teste do membro tem tokens liberados pelo administrador,
+    // então segue usando a transcrição do servidor. Conta nova sem chave é coberta em entrar-por-email.spec.ts.
+    await prisma.$executeRawUnsafe(`INSERT INTO user_token_quota (user_id, granted) VALUES ('${userId}', 500000) ON CONFLICT (user_id) DO UPDATE SET granted = 500000`);
+  };
 
   const regularUser = await prisma.user.create({
     data: {
@@ -85,6 +90,8 @@ export default async function globalSetup() {
       emailVerified: true,
     },
   });
+
+  await grantTokens(regularUser.id);
 
   await prisma.account.createMany({
     data: [regularUser, adminUser].map((user) => ({

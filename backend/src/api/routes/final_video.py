@@ -100,6 +100,12 @@ async def _run(job_id: str, parts: list[Path], options: dict[str, Any]) -> None:
 @router.post("")
 async def create_final(body: FinalRequest, request: Request, db: AsyncSession = Depends(get_db)):
     user_id = await _user_id(request, db)
+    from ...member_keys import MemberKeyRequired, activate as activate_member_keys
+
+    try:
+        await activate_member_keys(db, user_id)  # API própria obrigatória: a legenda usa a chave do membro
+    except MemberKeyRequired as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
     if sum(1 for owner in _running.values() if owner == user_id) >= MAX_QUEUED_PER_USER:
         raise HTTPException(status_code=409, detail="You already have too many final videos in the queue. Wait for them to finish.")
     total = (await db.execute(text("SELECT COUNT(*) FROM final_videos WHERE user_id = :u"), {"u": user_id})).scalar_one()
@@ -213,6 +219,12 @@ async def make_takes(job_id: str, request: Request, db: AsyncSession = Depends(g
     from ...takes import takes_from_bounds
 
     user_id = await _user_id(request, db)
+    from ...member_keys import MemberKeyRequired, activate as activate_member_keys
+
+    try:
+        await activate_member_keys(db, user_id)  # API própria obrigatória: a legenda usa a chave do membro
+    except MemberKeyRequired as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
     row = (await db.execute(text(
         "SELECT id, status, path, scene_bounds FROM final_videos WHERE id = :id AND user_id = :u"
     ), {"id": _uuid(job_id), "u": user_id})).first()

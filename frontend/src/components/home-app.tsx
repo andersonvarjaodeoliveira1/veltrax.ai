@@ -69,6 +69,8 @@ export default function HomeApp() {
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needsDownload, setNeedsDownload] = useState(false);
+  // API própria obrigatória: o servidor recusou porque falta a chave do Gemini ou do ChatGPT.
+  const [needsKey, setNeedsKey] = useState(false);
   const deleteRecent = async (id: string) => {
     const response = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
     if (!response.ok) {
@@ -229,6 +231,7 @@ export default function HomeApp() {
     setIsLoading(true);
     setError(null);
     setNeedsDownload(false);
+    setNeedsKey(false);
     setStatusMessage("");
 
     const fontOptions = buildFontOptionsPayload(fontFamily, fontSize, fontColor);
@@ -268,6 +271,13 @@ export default function HomeApp() {
         const upgradeForError = upgradeReasonForError(info.code, info.detail, upgradeState?.nextPlan?.youtubeMaxMinutes);
         if (upgradeForError) {
           openUpgrade(upgradeForError);
+          setIsLoading(false);
+          setStatusMessage("");
+          return;
+        }
+        if (startResponse.status === 403 && info.message.includes("Minhas APIs")) {
+          setError(info.message);
+          setNeedsKey(true);
           setIsLoading(false);
           setStatusMessage("");
           return;
@@ -616,6 +626,11 @@ export default function HomeApp() {
               <AlertCircle className="h-4 w-4 text-red-500" />
               <AlertDescription className="text-sm text-red-700">
                 <span>{error}</span>
+                {needsKey && (
+                  <Button asChild size="sm" className="mt-2 w-fit" data-no-translate>
+                    <Link href="/minhas-apis">Conectar minha chave</Link>
+                  </Button>
+                )}
                 {needsDownload && (
                   <Button asChild size="sm" className="mt-2 w-fit">
                     <a href="https://turboscribe.ai/pt/downloader/youtube/video" target="_blank" rel="noopener noreferrer" title="Abre o site externo turboscribe.ai em outra aba">Baixar vídeo (site externo)</a>
