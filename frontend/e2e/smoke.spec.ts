@@ -28,16 +28,20 @@ test("a tela de login abre em português sem ser refeita pelo React", async ({ p
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/sign-in");
-  await expect(page.getByRole("heading", { name: "Bem-vindo de volta" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Entrar", exact: true })).toBeVisible();
   await expect(page.getByPlaceholder("E-mail")).toBeVisible();
+  // O caminho principal é sem senha; a senha só aparece para quem pede.
+  await expect(page.getByRole("button", { name: "Receber link de acesso" })).toBeVisible();
+  await expect(page.getByPlaceholder("Senha")).toHaveCount(0);
   await page.waitForTimeout(1500);
   // Em desenvolvimento o React diz "Hydration failed"; no site de produção o mesmo erro vem com número (418, 423, 425).
   expect(errors.filter((message) => /Hydration failed|Minified React error #(418|423|425)/.test(message))).toEqual([]);
 });
 
-test("o login mostra a animação do vídeo virando cortes", async ({ page }) => {
+test("o login tem o mesmo painel da marca da tela de criar acesso", async ({ page }) => {
   await page.goto("/sign-in");
-  await expect(page.getByText("podcast-episode-42.mp4", { exact: false })).toBeAttached();
+  await expect(page.getByText("Cortes, vídeos com IA e avatar num só lugar")).toBeAttached();
+  await expect(page.getByRole("link", { name: "Criar acesso" })).toHaveAttribute("href", "/criar-acesso");
 });
 
 test("membro entra, vê a biblioteca e não abre o Admin", async ({ page }) => {

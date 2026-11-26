@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import os
 import smtplib
 import ssl
+import time
 from dataclasses import dataclass
 from email.message import EmailMessage
+from pathlib import Path
 from typing import Optional
+from uuid import uuid4
 
 import boto3
 
@@ -38,7 +43,7 @@ class SesEmailService:
 
     @property
     def is_configured(self) -> bool:
-        if self.smtp_configured:
+        if self._outbox_dir() is not None or self.smtp_configured:
             return True
         return bool(
             self.region
@@ -87,7 +92,22 @@ class SesEmailService:
             server.send_message(message)
         return {"provider": "smtp", "to": recipient}
 
+    @staticmethod
+    def _outbox_dir() -> Optional[Path]:
+        """Caixa de saída em arquivo, para desenvolvimento e testes: com EMAIL_OUTBOX_DIR nada é enviado de verdade."""
+        value = (os.getenv("EMAIL_OUTBOX_DIR") or "").strip()
+        return Path(value) if value else None
+
+    def _write_outbox(self, folder: Path, recipient: str, content: EmailContent) -> dict:
+        folder.mkdir(parents=True, exist_ok=True)
+        target = folder / f"{int(time.time() * 1000)}-{uuid4().hex[:8]}.json"
+        target.write_text(json.dumps({"to": recipient, "subject": content.subject, "text": content.text, "html": content.html}, ensure_ascii=False), encoding="utf-8")
+        return {"provider": "outbox", "to": recipient}
+
     async def send_email(self, recipient: str, content: EmailContent) -> dict:
+        outbox = self._outbox_dir()
+        if outbox is not None:
+            return await asyncio.to_thread(self._write_outbox, outbox, recipient, content)
         if self.smtp_configured:
             return await asyncio.to_thread(self._send_smtp, recipient, content)
         if not self.is_configured:

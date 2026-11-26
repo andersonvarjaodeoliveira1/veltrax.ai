@@ -83,6 +83,13 @@ def create_app(
             async with AsyncSessionLocal() as db:
                 await load_runtime_settings_cache(db)
             logger.info("✅ Runtime settings loaded")
+            # A entrada sem senha depende do e-mail de envio: deixa claro no registro se ele está configurado.
+            from .services.login_link_email_service import LoginLinkEmailService
+
+            if LoginLinkEmailService(config or get_config()).is_configured:
+                logger.info("✅ E-mail de envio configurado (links de entrada)")
+            else:
+                logger.warning("⚠️ E-mail de envio NÃO configurado: os links de entrada não serão enviados")
 
             await queue_adapter.get_pool()
             logger.info("✅ Job queue initialized")
@@ -96,7 +103,11 @@ def create_app(
             sweeper = asyncio.create_task(sweep_forever(AsyncSessionLocal))
             alerter = asyncio.create_task(alert_forever())
             adlib_renewer = asyncio.create_task(renew_forever(AsyncSessionLocal))
+            from .member_access import sweep_forever as member_sweep_forever
+
+            member_sweeper = asyncio.create_task(member_sweep_forever(AsyncSessionLocal))
             yield
+            member_sweeper.cancel()
             sweeper.cancel()
             alerter.cancel()
             adlib_renewer.cancel()
@@ -240,6 +251,9 @@ def create_app(
     app.include_router(security_router)
     app.include_router(flow_router)
     app.include_router(account_router)
+    from .api.routes.access import router as access_router
+
+    app.include_router(access_router)
     app.include_router(folders_router)
     try:  # BETA, isolated: a failure here must never take the API down
         from .api.routes.multiplier import router as multiplier_router

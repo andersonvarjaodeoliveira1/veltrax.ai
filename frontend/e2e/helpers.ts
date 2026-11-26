@@ -17,17 +17,14 @@ export const seed = JSON.parse(fs.readFileSync(path.join(process.cwd(), "e2e", "
 type SavedCookies = Awaited<ReturnType<ReturnType<Page["context"]>["cookies"]>>;
 const sessions = new Map<string, SavedCookies>();
 
-export async function signIn(page: Page, email: string, password: string) {
-  const saved = sessions.get(email);
-  if (saved) {
-    await page.context().addCookies(saved);
-    return;
-  }
+/** Abre a entrada, troca para "Entrar com senha" (o padrão é o link por e-mail), preenche e envia. */
+export async function submitPassword(page: Page, email: string, password: string) {
   await page.goto("/sign-in");
   const emailBox = page.getByPlaceholder("E-mail");
   const passwordBox = page.getByPlaceholder("Senha");
   // Confere os dois campos antes de enviar: uma tela remontada logo depois de abrir apagaria o que foi digitado.
   await expect(async () => {
+    if (!(await passwordBox.isVisible())) await page.getByRole("button", { name: "Entrar com senha" }).click();
     await emailBox.fill(email);
     await passwordBox.fill(password);
     await page.waitForTimeout(1500);
@@ -35,6 +32,15 @@ export async function signIn(page: Page, email: string, password: string) {
     await expect(passwordBox).toHaveValue(password, { timeout: 500 });
   }).toPass({ timeout: 30_000 });
   await page.getByRole("button", { name: "Entrar", exact: true }).click();
+}
+
+export async function signIn(page: Page, email: string, password: string) {
+  const saved = sessions.get(email);
+  if (saved) {
+    await page.context().addCookies(saved);
+    return;
+  }
+  await submitPassword(page, email, password);
   await page.waitForURL((url) => !url.pathname.startsWith("/sign-in"));
   sessions.set(email, await page.context().cookies());
 }

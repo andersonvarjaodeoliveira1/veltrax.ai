@@ -87,7 +87,9 @@ export type RegisteredUserRow = {
   user_id: string; name: string; email: string; is_admin: boolean; created_at: Date;
   cpf: string | null; phone: string | null;
   /** invited = conta criada por convite do administrador, sem passar pela captura. */
-  status: "pending" | "approved" | "declined" | "invited";
+  status: "pending" | "approved" | "declined" | "invited" | "member" | "member_inactive" | "member_kept";
+  /** Só para quem entrou como assinante da Gringatools: por que a assinatura não está ativa. */
+  member_reason: string | null;
   decided_at: Date | null; last_seen: Date | null;
   flow_connected: boolean; apis: number; tokens_granted: number | null; tasks: number;
 };
@@ -96,7 +98,15 @@ export type RegisteredUserRow = {
 export async function listRegisteredUsers(): Promise<RegisteredUserRow[]> {
   return prisma.$queryRaw<RegisteredUserRow[]>`
     SELECT u.id AS user_id, COALESCE(r.name, u.name) AS name, u.email, u.is_admin, u."createdAt" AS created_at,
-           r.cpf, r.phone, COALESCE(r.status, 'invited') AS status, r.decided_at,
+           r.cpf, r.phone,
+           -- member* = entrou como assinante da Gringatools (link por e-mail); a assinatura é conferida de tempos em tempos.
+           CASE WHEN r.status IS NOT NULL THEN r.status
+                WHEN m.email IS NULL OR u.is_admin THEN 'invited'
+                WHEN m.exempt THEN 'member_kept'
+                WHEN m.active THEN 'member'
+                ELSE 'member_inactive' END AS status,
+           CASE WHEN r.status IS NULL AND m.email IS NOT NULL AND NOT m.active THEN m.reason END AS member_reason,
+           r.decided_at,
            -- Último sinal de uso da própria pessoa: sessão, extensão avisando do Flow, vídeo enviado, imagem ou cena criada.
            -- Erros do servidor registrados na conta não contam como acesso.
            GREATEST(
@@ -111,6 +121,7 @@ export async function listRegisteredUsers(): Promise<RegisteredUserRow[]> {
            (SELECT COUNT(*)::int FROM tasks t WHERE t.user_id = u.id) AS tasks
     FROM users u
     LEFT JOIN signup_requests r ON r.user_id = u.id
+    LEFT JOIN member_access m ON m.email = lower(u.email)
     LEFT JOIN flow_connection f ON f.user_id = u.id
     LEFT JOIN user_token_quota q ON q.user_id = u.id
     ORDER BY u."createdAt" DESC
