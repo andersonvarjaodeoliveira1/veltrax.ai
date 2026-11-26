@@ -62,6 +62,7 @@ export default defineConfig({
         EMAIL_OUTBOX_DIR: outboxDir,
         MEMBER_CHECK_URL: `http://127.0.0.1:${memberBasePort}/`,
         LOGIN_LINK_MIN_GAP_SECONDS: "0",
+        KEY_SELFTEST: "false",
       },
     },
     {

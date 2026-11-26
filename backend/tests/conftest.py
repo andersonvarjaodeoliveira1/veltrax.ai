@@ -12,6 +12,8 @@ from sqlalchemy.pool import NullPool
 
 # API própria obrigatória fica desligada nos testes antigos (contas de teste sem chave); test_member_keys.py liga.
 os.environ.setdefault("MEMBER_KEY_REQUIRED", "false")
+# O autoteste da chave própria chama as APIs de verdade ao subir: nunca nos testes.
+os.environ.setdefault("KEY_SELFTEST", "false")
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:

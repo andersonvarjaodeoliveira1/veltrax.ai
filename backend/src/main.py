@@ -9,6 +9,7 @@ This is the new main entry point with:
 """
 
 import asyncio
+import os
 from contextlib import asynccontextmanager
 import logging
 import time
@@ -106,7 +107,15 @@ def create_app(
             from .member_access import sweep_forever as member_sweep_forever
 
             member_sweeper = asyncio.create_task(member_sweep_forever(AsyncSessionLocal))
+            # Confere, com a chave do servidor, se a transcrição e os cortes com chave própria funcionam de verdade.
+            selftest = None
+            if (os.getenv("KEY_SELFTEST") or "true").strip().lower() not in ("false", "0", "off"):
+                from .media.transcription_selftest import run_after_startup as run_key_selftest
+
+                selftest = asyncio.create_task(run_key_selftest())
             yield
+            if selftest:
+                selftest.cancel()
             member_sweeper.cancel()
             sweeper.cancel()
             alerter.cancel()
