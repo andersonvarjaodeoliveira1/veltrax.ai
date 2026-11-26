@@ -201,11 +201,17 @@ async def login_decision(db: AsyncSession, raw_email: str, *, checker: Checker |
     if not email:
         return Decision("skip", why="email_invalido")
 
-    async def ask() -> dict[str, Any]:
-        result = (await (checker([email]) if checker else check_remote(db, [email]))).get(email)
-        return result if isinstance(result, dict) else {"ativo": False, "motivo": "nao_e_membro"}
+    asked: list[dict[str, Any]] = []
 
-    user = (await db.execute(text("SELECT id, name, is_admin FROM users WHERE lower(email) = :e LIMIT 1"), {"e": email})).first()
+    async def ask() -> dict[str, Any]:
+        # Uma consulta por pedido de link, mesmo quando duas regras precisam da resposta.
+        if not asked:
+            result = (await (checker([email]) if checker else check_remote(db, [email]))).get(email)
+            asked.append(result if isinstance(result, dict) else {"ativo": False, "motivo": "nao_e_membro"})
+        return asked[0]
+
+    user = (await db.execute(text(
+        "SELECT id, name, is_admin, test_expires_at IS NOT NULL FROM users WHERE lower(email) = :e LIMIT 1"), {"e": email})).first()
     row = (await db.execute(text("SELECT active, exempt, member_name FROM member_access WHERE email = :e"), {"e": email})).first()
 
     if user is None:
@@ -223,13 +229,28 @@ async def login_decision(db: AsyncSession, raw_email: str, *, checker: Checker |
         await db.commit()
         return Decision("send", name=result.get("nome"), why="assinante_novo")
 
-    user_id, user_name, is_admin = user[0], user[1], bool(user[2])
+    user_id, user_name, is_admin, on_test = user[0], user[1], bool(user[2]), bool(user[3])
     if is_admin:
         return Decision("send", name=user_name, why="admin")
     signup = (await db.execute(text("SELECT status FROM signup_requests WHERE user_id = :u"), {"u": user_id})).first()
-    if signup is not None:
+    if signup is not None and signup[0] != "approved":
         # Cadastro da captura: aguardando ou recusado não recebe link (o link apagaria a senha escolhida no cadastro).
-        return Decision("send", name=user_name, why="liberado") if signup[0] == "approved" else Decision("skip", why=f"cadastro_{signup[0]}")
+        return Decision("skip", why=f"cadastro_{signup[0]}")
+    if on_test and enabled():
+        # Conta de teste (convite com prazo) de quem é assinante ativo: o prazo do teste deixa de valer e a conta passa a
+        # seguir a assinatura. Sem isso, o link chegava e a entrada era recusada com "o seu acesso de teste terminou".
+        try:
+            result = await ask()
+        except MemberCheckError as exc:
+            logger.warning("conferência de assinatura falhou para conta de teste: %s", exc)
+            result = {}
+        if result.get("ativo"):
+            await db.execute(text("UPDATE users SET test_expires_at = NULL WHERE id = :u"), {"u": user_id})
+            await _store(db, email, result, create=True)
+            await db.commit()
+            return Decision("send", name=user_name or result.get("nome"), why="teste_virou_assinante")
+    if signup is not None:
+        return Decision("send", name=user_name, why="liberado")
     if row is None:
         return Decision("send", name=user_name, why="convidado")
     if bool(row[1]):
