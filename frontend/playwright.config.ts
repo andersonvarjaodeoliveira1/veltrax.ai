@@ -1,3 +1,5 @@
+import path from "path";
+
 import { defineConfig } from "@playwright/test";
 
 const databaseUrl =
@@ -10,6 +12,9 @@ const backendDatabaseUrl =
 const backendAuthSecret = process.env.BACKEND_AUTH_SECRET ?? "clipgringa_test_secret";
 const frontendPort = process.env.PLAYWRIGHT_FRONTEND_PORT ?? "3100";
 const backendPort = process.env.PLAYWRIGHT_BACKEND_PORT ?? "8100";
+// Base de assinantes de mentira (sobe no global-setup) e caixa de saída em arquivo: nenhum e-mail sai de verdade.
+export const memberBasePort = process.env.PLAYWRIGHT_MEMBER_BASE_PORT ?? "8197";
+export const outboxDir = path.join(process.cwd(), "e2e", ".outbox");
 const frontendBaseUrl = `http://127.0.0.1:${frontendPort}`;
 const backendBaseUrl = `http://127.0.0.1:${backendPort}`;
 
@@ -50,6 +55,9 @@ export default defineConfig({
         SELF_HOST: "true",
         BACKEND_AUTH_SECRET: backendAuthSecret,
         TEMP_DIR: process.env.TEMP_DIR ?? "temp",
+        EMAIL_OUTBOX_DIR: outboxDir,
+        MEMBER_CHECK_URL: `http://127.0.0.1:${memberBasePort}/`,
+        LOGIN_LINK_MIN_GAP_SECONDS: "0",
       },
     },
     {

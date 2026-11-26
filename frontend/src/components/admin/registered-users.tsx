@@ -7,7 +7,9 @@ import { formatCpf, formatPhone } from "@/lib/cadastro";
 
 export type RegisteredUser = {
   user_id: string; name: string; email: string; is_admin: boolean; created_at: string;
-  cpf: string | null; phone: string | null; status: "pending" | "approved" | "declined" | "invited";
+  cpf: string | null; phone: string | null;
+  status: "pending" | "approved" | "declined" | "invited" | "member" | "member_inactive" | "member_kept";
+  member_reason?: string | null;
   decided_at: string | null; last_seen: string | null;
   flow_connected: boolean; apis: number; tokens_granted: number | null; tasks: number;
 };
@@ -18,10 +20,19 @@ const STATUS: Record<RegisteredUser["status"], { label: string; className: strin
   approved: { label: "Liberado", className: "bg-[#5BD69A]/15 text-[#5BD69A]" },
   declined: { label: "Recusado", className: "bg-[#E5484D]/15 text-[#E5484D]" },
   invited: { label: "Por convite", className: "bg-muted text-muted-foreground" },
+  member: { label: "Assinante ativo", className: "bg-[#5BD69A]/15 text-[#5BD69A]" },
+  member_inactive: { label: "Assinatura inativa", className: "bg-[#E5484D]/15 text-[#E5484D]" },
+  member_kept: { label: "Acesso mantido", className: "bg-muted text-muted-foreground" },
+};
+// Por que a base da Gringatools diz que a assinatura não está ativa.
+const REASONS: Record<string, string> = {
+  cancelou: "Cancelou a assinatura", pediu_reembolso: "Pediu reembolso", reembolso: "Reembolso", chargeback: "Chargeback",
+  nao_renovou: "Não renovou", bloqueado: "Bloqueado na base", acesso_encerrado: "Acesso encerrado", nao_e_membro: "Não é mais assinante",
 };
 const FILTERS: { id: Filter; label: string }[] = [
   { id: "all", label: "Todos" }, { id: "pending", label: "Aguardando" }, { id: "approved", label: "Liberados" },
   { id: "declined", label: "Recusados" }, { id: "invited", label: "Por convite" },
+  { id: "member", label: "Assinantes" }, { id: "member_inactive", label: "Assinatura inativa" },
 ];
 const TZ = "America/Sao_Paulo";
 const day = (iso: string) => new Date(iso).toLocaleDateString("pt-BR", { timeZone: TZ, day: "2-digit", month: "2-digit", year: "numeric" });
@@ -67,8 +78,17 @@ export function RegisteredUsers() {
     await load();
   }
 
+  async function keep(user: RegisteredUser, action: "keep" | "unkeep") {
+    setBusy(user.user_id); setNotice("");
+    const response = await fetch("/api/admin/signups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: user.user_id, action }) });
+    if (!response.ok) setNotice("Não consegui salvar. Tente de novo.");
+    else setNotice(action === "keep" ? `${user.name} continua com acesso mesmo sem assinatura ativa.` : `${user.name} volta a precisar de assinatura ativa para entrar.`);
+    setBusy("");
+    await load();
+  }
+
   const counts = useMemo(() => {
-    const base: Record<Filter, number> = { all: users?.length ?? 0, pending: 0, approved: 0, declined: 0, invited: 0 };
+    const base: Record<Filter, number> = { all: users?.length ?? 0, pending: 0, approved: 0, declined: 0, invited: 0, member: 0, member_inactive: 0, member_kept: 0 };
     for (const user of users ?? []) base[user.status] += 1;
     return base;
   }, [users]);
@@ -160,11 +180,16 @@ export function RegisteredUsers() {
                       <span className="block">{u.apis === 0 ? "Nenhuma API" : u.apis === 1 ? "1 API" : `${u.apis} APIs`}, {u.tasks === 1 ? "1 vídeo enviado" : `${fmt.format(u.tasks)} vídeos enviados`}</span>
                       <span className="block">{u.tokens_granted ? `${fmt.format(u.tokens_granted)} tokens liberados` : "Sem tokens liberados"}</span>
                     </td>
-                    <td className="px-4 py-3"><span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] ${STATUS[u.status].className}`}>{STATUS[u.status].label}</span></td>
+                    <td className="px-4 py-3">
+                      <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] ${STATUS[u.status].className}`}>{STATUS[u.status].label}</span>
+                      {u.status === "member_inactive" && u.member_reason ? <span className="mt-1 block text-xs text-muted-foreground">{REASONS[u.member_reason] ?? "Sem assinatura ativa"}</span> : null}
+                    </td>
                     <td className="px-4 py-3 text-right">
                       <span className="inline-flex gap-2">
                         {u.status === "pending" || u.status === "declined" ? <button type="button" disabled={busy === u.user_id} onClick={() => decide(u, "approve")} className="h-10 rounded-md bg-[#7B3FE4] px-3 text-sm font-medium text-white disabled:opacity-60">Liberar</button> : null}
                         {u.status === "pending" ? <button type="button" disabled={busy === u.user_id} onClick={() => decide(u, "decline")} className="h-10 rounded-md border px-3 text-sm disabled:opacity-60">Recusar</button> : null}
+                        {u.status === "member_inactive" ? <button type="button" disabled={busy === u.user_id} onClick={() => keep(u, "keep")} className="h-10 whitespace-nowrap rounded-md border px-3 text-sm disabled:opacity-60">Manter acesso</button> : null}
+                        {u.status === "member_kept" ? <button type="button" disabled={busy === u.user_id} onClick={() => keep(u, "unkeep")} className="h-10 whitespace-nowrap rounded-md border px-3 text-sm disabled:opacity-60">Exigir assinatura</button> : null}
                       </span>
                     </td>
                   </tr>

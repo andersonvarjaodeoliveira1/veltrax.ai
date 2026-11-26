@@ -9,6 +9,8 @@ temp/
 .env
 *.m4a
 frontend/e2e/.seed.json
+frontend/e2e/.member-base.json
+frontend/e2e/.outbox/
 frontend/playwright-report/
 frontend/test-results/
 

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { callApi, signInUnlockedAdmin, skipTutorial } from "./helpers";
+import { callApi, signInUnlockedAdmin, skipTutorial, submitPassword } from "./helpers";
 
 // Captura antes do cadastro: sem nome, e-mail, CPF e telefone a conta não nasce;
 // com eles a conta nasce, mas a pessoa só entra depois que o administrador libera.
@@ -69,14 +69,7 @@ test("captura do cadastro: pede os dados, segura a entrada e libera pelo Admin",
   expect(direto.status).toBeGreaterThanOrEqual(400);
 
   // Antes da liberação, entrar leva de volta para a espera.
-  await page.goto("/sign-in");
-  await expect(async () => {
-    await page.getByPlaceholder("E-mail").fill(pessoa.email);
-    await page.getByPlaceholder("Senha").fill(pessoa.senha);
-    await page.waitForTimeout(1500);
-    await expect(page.getByPlaceholder("Senha")).toHaveValue(pessoa.senha, { timeout: 500 });
-  }).toPass({ timeout: 30_000 });
-  await page.getByRole("button", { name: "Entrar", exact: true }).click();
+  await submitPassword(page, pessoa.email, pessoa.senha);
   await page.waitForURL("**/aguardando-liberacao");
 
   // O administrador vê nome, e-mail, CPF e telefone e libera.
@@ -112,14 +105,7 @@ test("captura do cadastro: pede os dados, segura a entrada e libera pelo Admin",
   expect(await lerCadastros()).toBe(401);
 
   // Depois da liberação a pessoa entra com a senha que criou.
-  await page.goto("/sign-in");
-  await expect(async () => {
-    await page.getByPlaceholder("E-mail").fill(pessoa.email);
-    await page.getByPlaceholder("Senha").fill(pessoa.senha);
-    await page.waitForTimeout(1500);
-    await expect(page.getByPlaceholder("Senha")).toHaveValue(pessoa.senha, { timeout: 500 });
-  }).toPass({ timeout: 30_000 });
-  await page.getByRole("button", { name: "Entrar", exact: true }).click();
+  await submitPassword(page, pessoa.email, pessoa.senha);
   await page.waitForURL((url) => !url.pathname.startsWith("/sign-in") && !url.pathname.startsWith("/aguardando"));
   await page.waitForLoadState("domcontentloaded");
   expect(await lerCadastros()).toBe(403);

@@ -168,6 +168,30 @@ API keys authenticate `/tasks/*`, `/fonts` and `/upload` directly via
 back to the frontend's HMAC-signed session headers). Only the SHA-256 hash is
 stored (`api_keys` table). The frontend manages keys at `/settings/api-keys`.
 
+## Entrada sem senha e acesso do assinante (Gringatools)
+
+A tela de entrada (`/sign-in`) pede só o e-mail e manda um link (plugin `magicLink` do Better Auth, 15 min, uso único,
+guardado em hash). O link abre `/entrar/confirmar`, onde a pessoa aperta um botão (`POST /api/entrar/confirmar`):
+abrir a página não gasta o link, porque provedores de e-mail abrem links sozinhos. "Entrar com senha" continua lá.
+
+Quem recebe o link é decidido no servidor (`backend/src/member_access.py`, rota `POST /access/login-link`):
+administrador, conta convidada e cadastro liberado pela captura recebem sempre; e-mail sem conta só recebe se for
+assinante ativo da Gringatools (a conta nasce no primeiro acesso e ganha uma linha em `member_access`). A resposta ao
+navegador é sempre a mesma, para não revelar quem é assinante.
+
+- **Conferência:** `check_remote` chama a função `clipgringa-acesso` da base da Gringatools (Supabase; código em
+  `supabase/functions/clipgringa-acesso`, regra em `public.clipgringa_acesso`, a mesma do login da extensão). O pedido
+  vai assinado com Ed25519: a chave privada é gerada aqui e fica criptografada em `app_settings`
+  (`GT_MEMBER_SIGNING_KEY`); a pública sai em `GET /access/public-key`. Não há segredo compartilhado.
+  `MEMBER_CHECK_URL=off` desliga (instalação própria).
+- **Perda de acesso:** a cada pedido de link e a cada 30 min (`sweep_forever`, no processo da API) as contas de
+  `member_access` são conferidas; assinatura inativa (cancelou, reembolso, venceu) encerra as sessões e revoga as chaves.
+  Só vale para quem entrou como assinante: nunca administrador, convidado ou cadastro liberado. O Admin (aba Cadastros)
+  mostra a situação e tem "Manter acesso" (`member_access.exempt`). Se metade ou mais das contas "cair" de uma vez, a
+  varredura não altera nada (problema na base, não cancelamento em massa).
+- **Testes:** `EMAIL_OUTBOX_DIR` grava os e-mails em arquivo em vez de enviar; o e2e sobe uma base de mentira no
+  `global-setup` (`e2e/entrar-por-email.spec.ts`).
+
 ## Creator (affiliate) program
 
 Creators apply at `/settings/creator-program` (public pitch page: `/affiliate`).

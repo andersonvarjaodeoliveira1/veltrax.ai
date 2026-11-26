@@ -96,7 +96,11 @@ def create_app(
             sweeper = asyncio.create_task(sweep_forever(AsyncSessionLocal))
             alerter = asyncio.create_task(alert_forever())
             adlib_renewer = asyncio.create_task(renew_forever(AsyncSessionLocal))
+            from .member_access import sweep_forever as member_sweep_forever
+
+            member_sweeper = asyncio.create_task(member_sweep_forever(AsyncSessionLocal))
             yield
+            member_sweeper.cancel()
             sweeper.cancel()
             alerter.cancel()
             adlib_renewer.cancel()
@@ -240,6 +244,9 @@ def create_app(
     app.include_router(security_router)
     app.include_router(flow_router)
     app.include_router(account_router)
+    from .api.routes.access import router as access_router
+
+    app.include_router(access_router)
     app.include_router(folders_router)
     try:  # BETA, isolated: a failure here must never take the API down
         from .api.routes.multiplier import router as multiplier_router
