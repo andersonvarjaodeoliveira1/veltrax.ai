@@ -260,6 +260,10 @@ class TaskService(ClipEditingMixin):
 
         try:
             await check_cancelled()
+            # API própria obrigatória: daqui em diante a transcrição e a análise usam a chave de quem enviou o vídeo.
+            from ..member_keys import activate as activate_member_keys
+
+            await activate_member_keys(self.db, user_id)
             logger.info(f"Starting processing for task {task_id}")
             started_at = datetime.utcnow()
             stage_timings: Dict[str, float] = {}

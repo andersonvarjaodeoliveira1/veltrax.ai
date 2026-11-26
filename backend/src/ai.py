@@ -1438,6 +1438,32 @@ def _is_transient_model_error(error: Exception) -> bool:
     return False
 
 
+async def _run_agent_for_account(agent: Agent, prompt: str) -> Any:
+    """Roda a análise com a chave de quem enviou o vídeo.
+
+    API própria obrigatória: o membro usa a chave dele do Gemini ou do ChatGPT (um modelo depois do outro,
+    se o primeiro falhar); o modelo do servidor fica para o administrador e as contas com tokens liberados.
+    """
+    from .member_keys import MemberKeyRequired, current_plan, text_models
+
+    plan = current_plan()
+    if plan.mode == "missing":
+        raise MemberKeyRequired()
+    if plan.mode != "own":
+        return await agent.run(prompt)
+    last: Exception | None = None
+    for model in text_models(plan):
+        try:
+            return await agent.run(prompt, model=model)
+        except asyncio.CancelledError:
+            raise
+        except Exception as error:
+            logger.warning("AI analysis failed on the member's own model %s (%s)", getattr(model, "model_name", model), type(error).__name__)
+            last = error
+    assert last is not None
+    raise last
+
+
 async def _run_transcript_analysis(
     agent: Agent,
     prompt: str,
@@ -1455,7 +1481,7 @@ async def _run_transcript_analysis(
         async with asyncio.timeout(timeout_seconds):
             for attempt in range(1, TRANSCRIPT_ANALYSIS_MAX_ATTEMPTS + 1):
                 try:
-                    result = await agent.run(prompt)
+                    result = await _run_agent_for_account(agent, prompt)
                     if hasattr(result, "response"):
                         logger.info("AI analysis completed using model %s", result.response.model_name)
                     return result

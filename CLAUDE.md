@@ -192,6 +192,23 @@ navegador é sempre a mesma, para não revelar quem é assinante.
 - **Testes:** `EMAIL_OUTBOX_DIR` grava os e-mails em arquivo em vez de enviar; o e2e sobe uma base de mentira no
   `global-setup` (`e2e/entrar-por-email.spec.ts`).
 
+## API própria obrigatória (transcrição e cortes com a chave do membro)
+
+O ClipGringa é um bônus do assinante: a transcrição e a análise dos cortes rodam com a chave do próprio membro
+(Gemini ou ChatGPT/OpenAI, cadastrada em Minhas APIs). `backend/src/member_keys.py` resolve o plano da conta:
+`house` (administrador, ou conta com tokens liberados e ainda com saldo), `own` (tem chave do Gemini ou da OpenAI)
+ou `missing` (não tem: `POST /tasks/` responde 403 com a orientação, e os trabalhos de legenda também).
+O plano fica num contextvar (`activate`/`current_plan`) lido por `media/transcription.get_video_transcript` e por
+`ai._run_agent_for_account`. `MEMBER_KEY_REQUIRED=false` devolve o comportamento antigo.
+
+- **Transcrição** (`media/member_transcription.py`, mesmo formato do Whisper local): OpenAI `whisper-1` com tempo por
+  palavra (a OpenAI anunciou o desligamento dele para 26/02/2027); Gemini por frase, com o tempo de cada palavra
+  repartido dentro da frase. Áudio longo é cortado em pedaços (20 min OpenAI, 8 min Gemini) e os tempos são somados.
+  Com as duas chaves, tenta a OpenAI e depois o Gemini. Erros de chave e de cota chegam ao membro em português.
+- **Cortes:** `agent.run(prompt, model=...)` com `member_keys.text_models` (Gemini primeiro, depois OpenAI).
+- **Tela:** o guia de entrada tem o passo obrigatório `key`; ao tentar cortar sem chave aparece o botão
+  "Conectar minha chave".
+
 ## Creator (affiliate) program
 
 Creators apply at `/settings/creator-program` (public pitch page: `/affiliate`).

@@ -10,6 +10,9 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
+# API própria obrigatória fica desligada nos testes antigos (contas de teste sem chave); test_member_keys.py liga.
+os.environ.setdefault("MEMBER_KEY_REQUIRED", "false")
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))

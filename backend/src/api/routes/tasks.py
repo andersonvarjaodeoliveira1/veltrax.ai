@@ -333,6 +333,12 @@ async def create_task(request: Request, db: AsyncSession = Depends(get_db)):
     if not raw_source or not raw_source.get("url"):
         raise HTTPException(status_code=400, detail="Source URL is required")
 
+    # API própria obrigatória: sem a chave do Gemini ou do ChatGPT o vídeo nem entra na fila.
+    from ...member_keys import MISSING_KEY_MESSAGE, resolve as resolve_member_keys
+
+    if (await resolve_member_keys(db, user_id)).mode == "missing":
+        raise HTTPException(status_code=403, detail=MISSING_KEY_MESSAGE)
+
     try:
         billing_service = BillingService(db)
         billing = await billing_service.assert_can_create_task(user_id)

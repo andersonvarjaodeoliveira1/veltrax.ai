@@ -65,6 +65,17 @@ test("assinante ativo entra só com o e-mail e perde o acesso quando cancela", a
   const session = await page.evaluate(async () => (await (await fetch("/api/auth/get-session", { cache: "no-store" })).json()) as { user?: { email: string; name: string } });
   expect(session.user).toMatchObject({ email: assinante, name: "Marina" });
 
+  // API própria obrigatória: conta nova, sem chave, vê o passo obrigatório no guia e não consegue cortar um vídeo.
+  const guia = page.getByTestId("getting-started");
+  await expect(guia.getByTestId("start-step-key")).toContainText("Falta conectar: sem ela os cortes e as legendas automáticas não saem");
+  await expect(guia.getByTestId("start-step-key").getByRole("link", { name: "Conectar minha chave" })).toHaveAttribute("href", "/minhas-apis");
+  const recusa = await page.evaluate(async () => {
+    const response = await fetch("/api/tasks/create", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ source: { url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", title: null } }) });
+    return { status: response.status, body: (await response.json().catch(() => ({}))) as { detail?: string } };
+  });
+  expect(recusa.status).toBe(403);
+  expect(recusa.body.detail).toContain("Conecte a sua chave do Gemini ou do ChatGPT em Minhas APIs");
+
   // O link só vale uma vez.
   const outra = await context.newPage();
   await outra.goto(link.pathname + link.search);

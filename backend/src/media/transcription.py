@@ -328,6 +328,16 @@ def get_video_transcript(
     runtime_config = get_config()
     provider = runtime_config.transcription_provider
 
+    # API própria obrigatória: o membro transcreve com a chave dele (Minhas APIs); o servidor só paga
+    # para o administrador e para as contas a que ele liberou tokens.
+    from ..member_keys import MemberKeyRequired, current_plan
+
+    plan = current_plan()
+    if plan.mode == "missing":
+        raise MemberKeyRequired()
+    if plan.mode == "own":
+        return _get_transcript_with_member_keys(video_path, plan, runtime_config)
+
     if provider == "whisper":
         return _get_transcript_with_whisper(video_path, runtime_config)
     if provider == "youtube_captions":
@@ -402,6 +412,20 @@ def _get_transcript_with_assemblyai(
     except Exception as e:
         logger.error(f"Error in AssemblyAI transcription: {e}")
         raise
+
+
+def _get_transcript_with_member_keys(video_path: Path, plan, runtime_config) -> str:
+    """Transcreve com a chave do próprio membro (OpenAI ou Gemini) e guarda no mesmo cache das legendas."""
+    from .member_transcription import transcribe_with_member_keys
+
+    audio_path = _prepare_audio_for_transcription(video_path)
+    result = transcribe_with_member_keys(
+        audio_path, openai_key=plan.openai, gemini_key=plan.gemini,
+        language=runtime_config.transcription_language or None,
+    )
+    formatted_lines = format_transcript_for_analysis(result)
+    cache_transcript_data(video_path, result)
+    return "\n".join(formatted_lines)
 
 
 def _get_transcript_with_whisper(video_path: Path, runtime_config) -> str:
