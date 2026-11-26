@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { LOGIN_TOKEN_RE } from "@/lib/acesso";
+import { FEEDBACK_WHATSAPP_URL, LOGIN_TOKEN_RE } from "@/lib/acesso";
 
 const primary = "inline-flex h-12 w-full items-center justify-center rounded-md bg-[#7B3FE4] px-6 text-[15px] font-semibold text-white transition-colors hover:bg-[#6A32CC] disabled:opacity-60";
 
@@ -15,13 +15,14 @@ export function ConfirmLogin({ token }: { token: string }) {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<"expired" | "failed" | "too_many" | null>(valid ? null : "expired");
   const [detail, setDetail] = useState("");
+  const [support, setSupport] = useState(false);
 
   async function enter() {
     setBusy(true);
     setProblem(null);
     try {
       const response = await fetch("/api/entrar/confirmar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) });
-      const data = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string; message?: string };
+      const data = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string; message?: string; support?: boolean };
       if (data.ok) {
         // Navegação completa: a tela inicial abre já com a sessão nova.
         window.location.assign("/");
@@ -29,7 +30,7 @@ export function ConfirmLogin({ token }: { token: string }) {
       }
       if (data.error === "pending") return router.replace("/aguardando-liberacao");
       if (data.error === "inactive") return router.replace("/assinatura-inativa");
-      if (data.error === "blocked") setDetail(data.message || "");
+      if (data.error === "blocked") { setDetail(data.message || ""); setSupport(Boolean(data.support)); }
       setProblem(data.error === "expired" || data.error === "too_many" ? data.error : "failed");
     } catch {
       setProblem("failed");
@@ -55,6 +56,7 @@ export function ConfirmLogin({ token }: { token: string }) {
       {problem ? (
         <p role="alert" className="mt-4 text-sm text-[#DC2626]">
           {problem === "too_many" ? "Muitas tentativas. Espere alguns minutos e tente de novo." : detail || "Não foi possível entrar agora. Tente de novo em instantes."}
+          {support ? <> <a href={FEEDBACK_WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className="font-medium underline underline-offset-2">Chamar o suporte</a></> : null}
         </p>
       ) : null}
       <p className="mt-8 text-sm text-[#525252]">Não pediu este link? É só fechar esta página.</p>

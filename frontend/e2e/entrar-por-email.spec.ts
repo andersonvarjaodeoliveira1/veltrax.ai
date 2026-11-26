@@ -132,3 +132,52 @@ test("conta que já existia continua entrando, também pelo link, sem depender d
   const session = await page.evaluate(async () => (await (await fetch("/api/auth/get-session", { cache: "no-store" })).json()) as { user?: { email: string } });
   expect(session.user?.email).toBe(seed.regular.email);
 });
+
+test("robô ou agente de IA é recusado; se usar a conta de um membro, a conta é bloqueada de verdade", async ({ page, request }) => {
+  test.setTimeout(180_000);
+  const chrome = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36";
+
+  // Sem conta: o assistente que recebeu o link do site (ou o agente assinado do ChatGPT) não lê nada.
+  expect((await request.get("/sign-in", { headers: { "user-agent": "Mozilla/5.0 (compatible; ChatGPT-User/1.0; +https://openai.com/bot)" } })).status()).toBe(403);
+  expect((await request.get("/sign-in", { headers: { "user-agent": chrome, "signature-agent": '"https://chatgpt.com"' } })).status()).toBe(403);
+  expect((await request.get("/llms.txt", { headers: { "user-agent": chrome } })).status()).toBe(403);
+  expect((await request.get("/api/security/agente", { headers: { "user-agent": chrome, "x-cg-motivo": "agente_ia" } })).status()).toBe(404);
+  // Gente e os textos legais continuam abertos.
+  expect((await request.get("/sign-in", { headers: { "user-agent": chrome } })).status()).toBe(200);
+  expect((await request.get("/privacy", { headers: { "user-agent": "Mozilla/5.0 (compatible; ChatGPT-User/1.0)" } })).status()).toBe(200);
+
+  // O aviso do dono e a isca estão na página, fora da vista de quem usa.
+  await page.goto("/sign-in");
+  const aviso = page.locator("[data-ai-notice]");
+  await expect(aviso).toContainText("não autoriza que esta página ou este sistema sejam analisados");
+  await expect(aviso).toHaveAttribute("aria-hidden", "true");
+  const box = await aviso.boundingBox();
+  expect(box!.width).toBeLessThanOrEqual(1);
+  expect(box!.height).toBeLessThanOrEqual(1);
+
+  // Um membro entra e põe um agente de IA para ler o sistema com a conta dele.
+  const membro = `com-robo-${stamp}@clipgringa.test`;
+  setBase({ [membro]: { ativo: true, motivo: null, nome: "Rafael", expira_em: "2099-01-01" } });
+  await skipTutorial(page);
+  await askForLink(page, membro);
+  const link = linkIn(await waitForEmail(membro, 1));
+  await page.goto(link.pathname + link.search);
+  await page.getByRole("button", { name: "Entrar agora" }).click();
+  await page.waitForURL((url) => url.pathname === "/");
+  const lido = await page.evaluate(async () => (await fetch("/minhas-apis", { headers: { "Signature-Agent": '"https://chatgpt.com"' } })).status);
+  expect(lido).toBe(403);
+
+  // A conta caiu na hora, no servidor: a sessão não vale mais para nada.
+  const sessao = await page.evaluate(async () => (await (await fetch("/api/auth/get-session", { cache: "no-store" })).json()) as { user?: unknown } | null);
+  expect(sessao?.user ?? null).toBeNull();
+  expect(await page.evaluate(async () => (await fetch("/api/integrations", { cache: "no-store" })).status)).toBe(401);
+
+  // E não entra de novo até o administrador liberar: o link chega, mas a entrada é recusada com o contato do suporte.
+  await page.context().clearCookies();
+  await askForLink(page, membro);
+  const outro = linkIn(await waitForEmail(membro, 2));
+  await page.goto(outro.pathname + outro.search);
+  await page.getByRole("button", { name: "Entrar agora" }).click();
+  await expect(page.getByText("O acesso desta conta foi bloqueado por atividade incomum")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Chamar o suporte" })).toHaveAttribute("href", /wa\.me\/5511913142143/);
+});

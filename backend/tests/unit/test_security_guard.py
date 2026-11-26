@@ -43,3 +43,17 @@ def test_many_404s_ban_external_ip():
     for i in range(6):
         g.note_status(req("/nada-%d" % i), 404, i)
     assert g.check(req(), 7) == "banned"
+
+
+def test_ai_agents_are_refused_on_the_api():
+    g = Guard()
+    chrome = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
+    # O agente do ChatGPT usa User-Agent de Chrome comum; quem entrega é o cabeçalho assinado.
+    signed = req(ua=chrome)
+    signed.headers["signature-agent"] = '"https://chatgpt.com"'
+    assert g.check(signed, 0) == "ai_visit"
+    for agent in ("ChatGPT-User/1.0", "Claude-User/1.0", "Google-CloudVertexBot", "Gemini-Deep-Research", "Manus-User/1.0", "GoogleAgent-Mariner"):
+        assert g.check(req(ua=f"Mozilla/5.0 (compatible; {agent})"), 0) == "ai_visit", agent
+    # Navegador comum e o cliente das chaves de API (MCP) continuam passando.
+    assert g.check(req(ua=chrome), 0) is None
+    assert g.check(req(ua="python-httpx/0.28.1"), 0) is None

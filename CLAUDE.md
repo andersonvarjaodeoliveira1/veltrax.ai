@@ -209,6 +209,29 @@ O plano fica num contextvar (`activate`/`current_plan`) lido por `media/transcri
 - **Tela:** o guia de entrada tem o passo obrigatório `key`; ao tentar cortar sem chave aparece o botão
   "Conectar minha chave".
 
+## Bloqueio de robôs e agentes de IA (anti-cópia)
+
+O sistema é privado: nenhum robô ou assistente de IA pode ler as telas. Camadas, da borda para dentro:
+
+- **Lista e detecção** (`frontend/src/lib/ai-agents.ts`): `aiReason()` reconhece (1) `Signature-Agent` (Web Bot Auth; é
+  como o agente do ChatGPT se identifica, com User-Agent de Chrome comum), (2) User-Agent de robô/assistente de IA
+  (`AI_AGENT_TOKENS`, também usado no `robots.txt`) e (3) arquivos-isca que só robô pede (`/llms.txt`, `/openapi.json`,
+  `/.well-known/ai-plugin.json`, `/api/interno/*`). Textos legais e `robots.txt` ficam abertos.
+- **Middleware** desvia esses pedidos (rewrite, com a marca `x-cg-guard`) para `/api/security/agente`, que registra e
+  responde 403. Com sessão: `POST /security/report` (`ai_agent` bloqueia a conta na hora; `ai_probe` conta como uma
+  tentativa). Sem sessão: `POST /security/visit` (só alerta, por IP). A API (`security_guard.py`) recusa os mesmos agentes.
+- **Bloqueio de conta vale no servidor** (`security_alerts.close_sessions` + `isAccountBlocked` no gancho de sessão do
+  Better Auth): as sessões caem e a conta não entra de novo até o administrador liberar (`DELETE /security/block/{id}`).
+  Administrador nunca é bloqueado.
+- **Dentro do app** (`SecurityWatch`, só para não administradores): `automationSignal()` confere ao abrir e a cada 5 s
+  (webdriver, navegador sem tela, marcas de Selenium/Puppeteer/PhantomJS/ChromeDriver, marcações de agentes tipo
+  browser-use). Não inclui marcas do Playwright, que é o que roda os testes e2e.
+- **Aviso e isca** (`components/ai-notice.tsx`, em todas as telas menos as legais): texto do dono, fora da vista e do
+  leitor de tela, dizendo que a análise por IA não é autorizada, e um link escondido para a isca.
+
+Limite conhecido: um assistente que roda dentro do Chrome da própria pessoa (extensão que lê a tela ou tira print) usa
+o navegador e a sessão dela e não tem como ser distinguido com certeza.
+
 ## Creator (affiliate) program
 
 Creators apply at `/settings/creator-program` (public pitch page: `/affiliate`).

@@ -15,6 +15,14 @@ BLOCKED_AGENTS = re.compile(
     r"scrapy|python-scrapy|go-http-client/1\.1 \(scanner\)|libwww-perl|nutch|masscan",
     re.I,
 )
+# Robôs e agentes de IA que leem sistemas a pedido de alguém. A API só atende o site e as chaves de API dos membros.
+AI_AGENTS = re.compile(
+    r"gptbot|chatgpt-user|oai-searchbot|claudebot|claude-user|claude-searchbot|claude-web|anthropic-ai|perplexitybot|perplexity-user|"
+    r"mistralai-user|cohere-ai|deepseekbot|google-cloudvertexbot|gemini-deep-research|googleagent-|google-agent|google-notebooklm|"
+    r"google-gemininotebook|google-gemini-cli|googleother|amazonbot|amzn-user|amazonbuyforme|novaact|bedrockbot|meta-externalagent|"
+    r"bytespider|ccbot|ai2bot|manus-user|twinagent|firecrawl|crawl4ai|diffbot",
+    re.I,
+)
 # Caminhos que só robôs de varredura pedem (a aplicação não tem nada disso).
 PROBE_PATHS = re.compile(
     r"^/(?:\.env|\.git|\.svn|\.hg|\.aws|\.ssh|\.DS_Store|wp-admin|wp-login|wp-content|wp-includes|xmlrpc\.php|phpmyadmin|pma|"
@@ -68,6 +76,9 @@ class Guard:
         if BLOCKED_AGENTS.search(request.headers.get("user-agent", "")):
             self.banned[ip] = now + BAN_SECONDS
             return "scanner"
+        # Agente de IA: declarado no User-Agent ou assinado (Signature-Agent, como o agente do ChatGPT se identifica).
+        if request.headers.get("signature-agent") or AI_AGENTS.search(request.headers.get("user-agent", "")):
+            return "ai_visit"
         if PROBE_PATHS.match(path):
             self.banned[ip] = now + BAN_SECONDS
             return "probe"

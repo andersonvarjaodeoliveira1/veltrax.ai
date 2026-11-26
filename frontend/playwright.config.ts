@@ -24,6 +24,10 @@ export default defineConfig({
   // convites de plano, processamento real com link do YouTube), e ficam parados até serem reescritos.
   testIgnore: ["polish.spec.ts", "editor-studio.spec.ts", "local-workflow.spec.ts", "upgrade-prompts.spec.ts"],
   fullyParallel: false,
+  // Um arquivo por vez: as contas de teste entram com senha uma única vez por rodada (helpers.ts guarda a sessão),
+  // e o site limita a 5 entradas com senha a cada 5 minutos por endereço. Com dois processos, cada um entra de novo
+  // e a rodada estoura o limite conforme a divisão dos arquivos (foi o que derrubou o CI em 26/11).
+  workers: 1,
   retries: 0,
   reporter: [["list"], ["html", { open: "never" }]],
   globalSetup: "./e2e/global-setup.ts",
