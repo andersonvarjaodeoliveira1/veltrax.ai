@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+import { aiReason, guardToken } from "@/lib/ai-agents";
 import { exceedsUploadLimit } from "@/lib/upload-limit";
 
 const PUBLIC_FILE = /\.(.*)$/;
@@ -56,8 +57,28 @@ function note(kind: "recusado" | "legal", request: NextRequest) {
   }));
 }
 
-export function middleware(request: NextRequest) {
+const AGENT_LOG_PATH = "/api/security/agente";
+
+export async function middleware(request: NextRequest) {
   const userAgent = request.headers.get("user-agent");
+  // Robô ou agente de IA (declarado no User-Agent, assinado, ou pedindo arquivo que só robô procura): o pedido é
+  // desviado para a rota que registra quem foi (e bloqueia a conta, se ele estava usando uma) e recusa.
+  // Os textos legais e o robots.txt continuam abertos para qualquer um.
+  const ai = LEGAL_PAGES.test(request.nextUrl.pathname) ? null : aiReason(request.nextUrl.pathname, userAgent, request.headers);
+  if (ai) {
+    const token = await guardToken();
+    // O pedido já desviado volta a passar por aqui: com a marca certa, segue para a rota de registro.
+    if (request.nextUrl.pathname === AGENT_LOG_PATH && request.headers.get("x-cg-guard") === token) return NextResponse.next();
+    note("recusado", request);
+    const headers = new Headers(request.headers);
+    headers.set("x-cg-guard", token);
+    headers.set("x-cg-motivo", ai);
+    headers.set("x-cg-caminho", request.nextUrl.pathname.slice(0, 120));
+    const target = request.nextUrl.clone();
+    target.pathname = AGENT_LOG_PATH;
+    target.search = "";
+    return NextResponse.rewrite(target, { request: { headers } });
+  }
   if (isHostileRequest(request.nextUrl.pathname, userAgent)) {
     note("recusado", request);
     return new NextResponse("Forbidden", { status: 403, headers: { "Cache-Control": "no-store" } });

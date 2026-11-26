@@ -8,9 +8,37 @@ import { SECURITY_WHATSAPP_URL } from "@/lib/token-balance";
 type Strikes = { strikes: number; blocked: boolean; limit: number };
 const SAME_KIND_MS = 3000;
 
-/** Robô / navegador automatizado: não é uso normal de quem assina. */
-export function looksAutomated(nav: { webdriver?: boolean; userAgent?: string } = typeof navigator === "undefined" ? {} : navigator): boolean {
-  return nav.webdriver === true || /HeadlessChrome|PhantomJS|Puppeteer|Playwright/i.test(nav.userAgent ?? "");
+// Marcas que ferramentas de automação deixam na página (Selenium, Puppeteer, PhantomJS, Nightmare).
+const AUTOMATION_GLOBALS = ["__webdriver_evaluate", "__selenium_evaluate", "__webdriver_script_function", "__webdriver_script_func", "__webdriver_script_fn",
+  "__fxdriver_evaluate", "__driver_unwrapped", "__webdriver_unwrapped", "__driver_evaluate", "__selenium_unwrapped", "__fxdriver_unwrapped",
+  "_Selenium_IDE_Recorder", "_selenium", "calledSelenium", "__puppeteer_evaluation_script__", "callPhantom", "_phantom", "__nightmare", "domAutomation", "domAutomationController"];
+// Marcas que agentes de IA que navegam sozinhos (browser-use e derivados) desenham por cima da tela para "enxergar" os botões.
+const AGENT_MARKS = "#playwright-highlight-container, [browser-user-highlight-id]";
+
+type AutomationView = { webdriver?: boolean; userAgent?: string };
+
+/** Robô / navegador automatizado: não é uso normal de quem assina. Devolve o sinal encontrado, ou "" se não achou nada. */
+export function automationSignal(
+  nav: AutomationView = typeof navigator === "undefined" ? {} : navigator,
+  win: Record<string, unknown> | undefined = typeof window === "undefined" ? undefined : (window as unknown as Record<string, unknown>),
+  doc: Pick<Document, "querySelector"> | undefined = typeof document === "undefined" ? undefined : document,
+): string {
+  if (nav.webdriver === true) return "navegador controlado por automação";
+  if (/HeadlessChrome|PhantomJS|Puppeteer|Playwright/i.test(nav.userAgent ?? "")) return "navegador sem tela";
+  if (win) {
+    if (AUTOMATION_GLOBALS.some((name) => name in win)) return "ferramenta de automação na página";
+    // O ChromeDriver deixa variáveis que começam com cdc_ ou $cdc_ no documento.
+    const docKeys = doc ? Object.keys(doc as unknown as Record<string, unknown>) : [];
+    if (docKeys.some((key) => /^\$?cdc_/.test(key))) return "ChromeDriver";
+  }
+  try {
+    if (doc?.querySelector(AGENT_MARKS)) return "agente de IA marcando a tela";
+  } catch { /* seletor não suportado */ }
+  return "";
+}
+
+export function looksAutomated(nav: AutomationView = typeof navigator === "undefined" ? {} : navigator): boolean {
+  return automationSignal(nav, undefined, undefined) !== "";
 }
 
 /**
@@ -45,7 +73,10 @@ export function SecurityWatch({ enabled }: { enabled: boolean }) {
         })
         .catch(() => {});
     };
-    if (looksAutomated()) report("automation", "navegador automatizado");
+    // Confere ao abrir e de tempos em tempos: um agente pode assumir o navegador depois que a tela já carregou.
+    const checkAutomation = () => { const signal = automationSignal(); if (signal) report("automation", signal); };
+    checkAutomation();
+    const automationTimer = window.setInterval(checkAutomation, 5000);
     const onContext = (event: MouseEvent) => { if (!isEditable(event.target)) report("contextmenu"); };
     const onKey = (event: KeyboardEvent) => { const kind = shortcutKind(event); if (kind) report(kind); };
     const onPaste = (event: ClipboardEvent) => {
@@ -61,6 +92,7 @@ export function SecurityWatch({ enabled }: { enabled: boolean }) {
     document.addEventListener("paste", onPaste, true);
     document.addEventListener("copy", onCopy);
     return () => {
+      window.clearInterval(automationTimer);
       document.removeEventListener("contextmenu", onContext);
       document.removeEventListener("keydown", onKey, true);
       document.removeEventListener("paste", onPaste, true);

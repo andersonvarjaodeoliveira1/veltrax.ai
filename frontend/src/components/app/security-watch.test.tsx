@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { SecurityWatch, looksAutomated } from "./security-watch";
+import { SecurityWatch, automationSignal, looksAutomated } from "./security-watch";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -42,4 +42,15 @@ it("reconhece navegador automatizado", () => {
   expect(looksAutomated({ webdriver: true, userAgent: "x" })).toBe(true);
   expect(looksAutomated({ userAgent: "Mozilla HeadlessChrome/120" })).toBe(true);
   expect(looksAutomated({ webdriver: false, userAgent: "Mozilla/5.0 Chrome" })).toBe(false);
+});
+
+it("reconhece as marcas de ferramentas de automação e de agentes de IA na página", () => {
+  const person = { webdriver: false, userAgent: "Mozilla/5.0 Chrome/131" };
+  const page = (found: boolean) => ({ querySelector: () => (found ? ({} as Element) : null) });
+  expect(automationSignal(person, {}, page(false))).toBe("");
+  expect(automationSignal(person, { __selenium_unwrapped: true }, page(false))).toBe("ferramenta de automação na página");
+  expect(automationSignal(person, { callPhantom: () => undefined }, page(false))).toBe("ferramenta de automação na página");
+  // Agentes de IA que navegam sozinhos desenham marcações por cima dos botões.
+  expect(automationSignal(person, {}, page(true))).toBe("agente de IA marcando a tela");
+  expect(automationSignal({ webdriver: true }, {}, page(false))).toBe("navegador controlado por automação");
 });

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { INACTIVE_MEMBER_CODE, LOGIN_TOKEN_RE } from "@/lib/acesso";
+import { BLOCKED_ACCOUNT_CODE, BLOCKED_ACCOUNT_MESSAGE, INACTIVE_MEMBER_CODE, LOGIN_TOKEN_RE } from "@/lib/acesso";
 import { auth } from "@/lib/auth";
 import { PENDING_ACCESS_CODE } from "@/lib/cadastro";
 
@@ -56,6 +56,7 @@ export async function POST(request: Request) {
   }
   if (outcome.message.includes(PENDING_ACCESS_CODE)) return NextResponse.json({ ok: false, error: "pending" }, { status: 403 });
   if (outcome.message.includes(INACTIVE_MEMBER_CODE)) return NextResponse.json({ ok: false, error: "inactive" }, { status: 403 });
+  if (outcome.message.includes(BLOCKED_ACCOUNT_CODE)) return NextResponse.json({ ok: false, error: "blocked", message: BLOCKED_ACCOUNT_MESSAGE, support: true }, { status: 403 });
   if (outcome.status === 403) return NextResponse.json({ ok: false, error: "blocked", message: outcome.message }, { status: 403 });
   // Link já usado, vencido ou que nunca existiu: o servidor de autenticação responde com um redirecionamento de erro.
   if ((outcome.status >= 300 && outcome.status < 400) || /INVALID_TOKEN/i.test(outcome.location ?? outcome.message)) return NextResponse.json({ ok: false, error: "expired" }, { status: 400 });

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 
 import { signIn } from "../../lib/auth-client";
-import { FEEDBACK_WHATSAPP_URL, INACTIVE_MEMBER_CODE, LOGIN_LINK_MINUTES } from "@/lib/acesso";
+import { BLOCKED_ACCOUNT_CODE, BLOCKED_ACCOUNT_MESSAGE, FEEDBACK_WHATSAPP_URL, INACTIVE_MEMBER_CODE, LOGIN_LINK_MINUTES } from "@/lib/acesso";
 import { postAuthPath } from "@/lib/auth-redirect";
 import { PENDING_ACCESS_CODE } from "@/lib/cadastro";
 import { track } from "@/lib/datafast";
@@ -29,10 +29,12 @@ export function SignIn() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [sentTo, setSentTo] = useState("");
+  const [blocked, setBlocked] = useState(false);
 
   function switchMode(next: "link" | "password") {
     setMode(next);
     setMessage("");
+    setBlocked(false);
   }
 
   async function sendLink(event: React.FormEvent) {
@@ -63,6 +65,7 @@ export function SignIn() {
       // Conta criada pela captura e ainda não liberada: vai para a tela de espera, com o contato do suporte.
       if (reason.includes(PENDING_ACCESS_CODE)) return router.push("/aguardando-liberacao");
       if (reason.includes(INACTIVE_MEMBER_CODE)) return router.push("/assinatura-inativa");
+      if (reason.includes(BLOCKED_ACCOUNT_CODE)) { setMessage(BLOCKED_ACCOUNT_MESSAGE); setBlocked(true); setBusy(false); return; }
       setMessage(response.error.status === 429
         ? "Muitas tentativas. Espere 5 minutos e tente de novo."
         : response.error.status === 401 ? "E-mail ou senha incorretos." : reason || "Não foi possível entrar. Tente de novo.");
@@ -124,7 +127,12 @@ export function SignIn() {
             </div>
           </div>
         ) : null}
-        {message ? <p role="alert" className="text-sm text-[#DC2626]">{message}</p> : null}
+        {message ? (
+          <p role="alert" className="text-sm text-[#DC2626]">
+            {message}
+            {blocked ? <> <a href={FEEDBACK_WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className="font-medium underline underline-offset-2">Chamar o suporte</a></> : null}
+          </p>
+        ) : null}
         <button type="submit" disabled={busy} className={primary}>
           {mode === "link" ? (busy ? "Enviando…" : "Receber link de acesso") : busy ? "Entrando…" : "Entrar"}
         </button>

@@ -64,11 +64,68 @@ describe("middleware · tamanho do envio", () => {
     method: "POST", headers: { "user-agent": "Mozilla/5.0 (Windows NT 10.0) Chrome/130", "content-length": String(size) },
   }));
   it("recusa com aviso claro o arquivo acima do teto, em vez de deixar passar só o começo", async () => {
-    const response = post(MAX_SITE_UPLOAD_BYTES + 1);
+    const response = await post(MAX_SITE_UPLOAD_BYTES + 1);
     expect(response.status).toBe(413);
     expect((await response.json()).detail).toMatch(/grande demais/);
   });
-  it("deixa passar o vídeo dentro do teto", () => {
-    expect(post(250 * 1024 * 1024).status).toBe(200);
+  it("deixa passar o vídeo dentro do teto", async () => {
+    expect((await post(250 * 1024 * 1024)).status).toBe(200);
+  });
+});
+
+describe("middleware · robôs e agentes de IA", () => {
+  const chromeUa = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36";
+  const visit = (path: string, headers: Record<string, string>) => middleware(new NextRequest(`https://clipgringa.gringatools.com${path}`, { headers }));
+  const rewrittenTo = (response: Response) => response.headers.get("x-middleware-rewrite") ?? "";
+
+  it("desvia para o registro o agente do ChatGPT, que usa User-Agent de Chrome comum e só se entrega pelo cabeçalho assinado", async () => {
+    const response = await visit("/", { "user-agent": chromeUa, "signature-agent": '"https://chatgpt.com"', cookie: "better-auth.session_token=abc" });
+    expect(rewrittenTo(response)).toBe("https://clipgringa.gringatools.com/api/security/agente");
+    expect(response.headers.get("x-middleware-request-x-cg-motivo")).toBe("agente_assinado");
+    expect(response.headers.get("x-middleware-request-x-cg-caminho")).toBe("/");
+    expect(response.headers.get("x-middleware-request-x-cg-guard")).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it.each([
+    ["Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot", "/sign-in"],
+    ["Mozilla/5.0 (compatible; Google-CloudVertexBot/1.0)", "/"],
+    ["Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Gemini-Deep-Research; +https://gemini.google/overview/deep-research/) Chrome/135.0.0.0 Safari/537.36", "/automacao"],
+    ["Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/131 Safari/537.36 Manus-User/1.0", "/api/tasks/"],
+  ])("desvia o robô de IA declarado (%s)", async (userAgent, path) => {
+    const response = await visit(path, { "user-agent": userAgent });
+    expect(rewrittenTo(response)).toContain("/api/security/agente");
+    expect(response.headers.get("x-middleware-request-x-cg-motivo")).toBe("agente_ia");
+  });
+
+  it("trata como isca os arquivos que só robô procura, mesmo com navegador comum", async () => {
+    for (const path of ["/llms.txt", "/openapi.json", "/.well-known/ai-plugin.json", "/api/interno/mapa-do-sistema.json"]) {
+      const response = await visit(path, { "user-agent": chromeUa });
+      expect(response.headers.get("x-middleware-request-x-cg-motivo"), path).toBe("isca");
+    }
+  });
+
+  it("não mexe com navegador de gente nem com os textos legais", async () => {
+    for (const path of ["/", "/sign-in", "/minhas-apis", "/api/auth/get-session", "/sitemap.xml"]) {
+      expect(rewrittenTo(await visit(path, { "user-agent": chromeUa })), path).toBe("");
+    }
+    // A Meta e qualquer robô continuam lendo a política de privacidade.
+    expect(rewrittenTo(await visit("/privacy", { "user-agent": "Mozilla/5.0 (compatible; ChatGPT-User/1.0)", "signature-agent": '"https://chatgpt.com"' }))).toBe("");
+  });
+
+  it("o pedido já desviado segue para o registro em vez de ser desviado de novo", async () => {
+    const first = await visit("/", { "user-agent": "Mozilla/5.0 (compatible; ChatGPT-User/1.0)" });
+    const token = first.headers.get("x-middleware-request-x-cg-guard")!;
+    const again = await visit("/api/security/agente", { "user-agent": "Mozilla/5.0 (compatible; ChatGPT-User/1.0)", "x-cg-guard": token, "x-cg-motivo": "agente_ia" });
+    expect(rewrittenTo(again)).toBe("");
+    expect(again.headers.get("x-middleware-next")).toBe("1");
+    // Com a marca errada, o robô que chama a rota direto é desviado como qualquer outro pedido dele.
+    const forged = await visit("/api/security/agente", { "user-agent": "Mozilla/5.0 (compatible; ChatGPT-User/1.0)", "x-cg-guard": "errada" });
+    expect(rewrittenTo(forged)).toContain("/api/security/agente");
+    expect(forged.headers.get("x-middleware-request-x-cg-guard")).toBe(token);
+  });
+
+  it("ninguém de fora consegue fingir que é o middleware", async () => {
+    const response = await visit("/minhas-apis", { "user-agent": chromeUa, "x-cg-guard": "qualquer", "x-cg-motivo": "agente_ia" });
+    expect(rewrittenTo(response)).toBe("");
   });
 });

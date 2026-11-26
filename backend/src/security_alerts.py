@@ -35,6 +35,10 @@ KINDS = {
     "paste_code": "colou um trecho parecido com código em um campo",
     "copy_large": "copiou um bloco grande de texto da tela",
     "automation": "navegador automatizado / robô detectado (conta bloqueada)",
+    "ai_agent": "agente de IA usando a conta para ler o sistema (conta bloqueada)",
+    "ai_probe": "a conta pediu um arquivo que só robôs e assistentes de IA procuram",
+    "ai_visit": "robô ou assistente de IA tentou ler o site (recusado)",
+    "ai_probe_visit": "alguém sem conta pediu um arquivo que só robôs de IA procuram (recusado)",
     "blocked": "conta bloqueada por atividade incomum (2 tentativas)",
     "scanner": "ferramenta de varredura bloqueada",
     "probe": "tentou acessar um caminho de sondagem",
@@ -140,7 +144,9 @@ class Report(BaseModel):
 
 
 # Tentativas de copiar o aplicativo que contam para o bloqueio. Botão direito só gera alerta, não conta.
-STRIKE_KINDS = ("devtools_shortcut", "view_source", "paste_code", "copy_large", "automation")
+STRIKE_KINDS = ("devtools_shortcut", "view_source", "paste_code", "copy_large", "automation", "ai_agent", "ai_probe")
+# Robô confirmado: bloqueia na hora, sem esperar a segunda tentativa.
+INSTANT_BLOCK_KINDS = ("automation", "ai_agent")
 BLOCK_AT = 2
 STRIKE_DEDUPE_SECONDS = 20
 
@@ -173,7 +179,7 @@ async def report(body: Report, request: Request, db: AsyncSession = Depends(get_
     blocked = bool(current and current[1])
     if not blocked:
         recent = bool(current and current[3] == body.kind and (datetime.now(timezone.utc) - current[2]).total_seconds() < STRIKE_DEDUPE_SECONDS)
-        if body.kind == "automation":
+        if body.kind in INSTANT_BLOCK_KINDS:
             strikes = max(strikes, BLOCK_AT)
         elif not recent:
             strikes += 1
@@ -189,10 +195,40 @@ async def report(body: Report, request: Request, db: AsyncSession = Depends(get_
             ),
             {"u": user_id, "s": strikes, "k": body.kind, "b": blocked},
         )
+        if blocked:
+            # O bloqueio vale no servidor, não só na tela: as sessões abertas caem e a conta não entra de novo
+            # até o administrador liberar (a tela de entrada mostra o contato).
+            await close_sessions(db, user_id)
         await db.commit()
         if blocked:
             buffer.add("blocked", who, f"{page} {body.kind}", dedupe_seconds=3600)
     return {"ok": True, "strikes": strikes, "blocked": blocked, "limit": BLOCK_AT}
+
+
+async def close_sessions(db: AsyncSession, user_id: str) -> None:
+    """Encerra as sessões da conta. A tabela é do site (Better Auth); num banco só do servidor ela pode não existir."""
+    try:
+        async with db.begin_nested():
+            await db.execute(text('DELETE FROM session WHERE "userId" = :u'), {"u": user_id})
+    except Exception:
+        logger.warning("não foi possível encerrar as sessões da conta bloqueada", exc_info=True)
+
+
+class Visit(BaseModel):
+    kind: str = Field(max_length=40)
+    ip: str = Field(default="", max_length=60)
+    page: str = Field(default="", max_length=120)
+    detail: str = Field(default="", max_length=120)
+
+
+@router.post("/visit")
+async def visit(body: Visit, request: Request):
+    """O site avisa quando recusa um robô ou assistente de IA que chegou sem conta. Só gera alerta (um por origem a cada 10 min)."""
+    if body.kind not in ("ai_visit", "ai_probe_visit"):
+        raise HTTPException(status_code=400, detail="Tipo desconhecido")
+    get_authenticated_user_id(request, get_config())
+    buffer.add(body.kind, body.ip or "desconhecido", f"{body.page.split('?')[0]} {body.detail}".strip(), dedupe_seconds=USER_THROTTLE_SECONDS)
+    return {"ok": True}
 
 
 @router.get("/status")

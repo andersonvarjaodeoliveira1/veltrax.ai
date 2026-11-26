@@ -54,3 +54,18 @@ export async function setMemberExempt(userId: string, exempt: boolean): Promise<
   if (changed > 0 && !exempt && (await isMemberInactive(userId))) await prisma.$executeRaw`DELETE FROM session WHERE "userId" = ${userId}`.catch(() => undefined);
   return changed > 0;
 }
+
+/**
+ * Conta bloqueada por atividade incomum (robô ou agente de IA usando a conta, tentativas de copiar o aplicativo).
+ * O bloqueio vale no servidor: a conta não abre sessão nova até o administrador liberar. Administrador nunca é bloqueado.
+ */
+export async function isAccountBlocked(userId: string): Promise<boolean> {
+  try {
+    const rows = await prisma.$queryRaw<{ blocked: boolean }[]>`
+      SELECT TRUE AS blocked FROM security_strikes s JOIN users u ON u.id = s.user_id
+      WHERE s.user_id = ${userId} AND s.blocked_at IS NOT NULL AND u.is_admin = FALSE LIMIT 1`;
+    return rows.length > 0;
+  } catch {
+    return false;
+  }
+}

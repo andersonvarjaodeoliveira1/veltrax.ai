@@ -9,3 +9,7 @@ export const LOGIN_TOKEN_RE = /^[A-Za-z]{24,64}$/;
 
 export const FEEDBACK_WHATSAPP_URL =
   "https://wa.me/5511913142143?text=" + encodeURIComponent("Olá! Estou usando o ClipGringa e quero falar com o suporte.");
+
+/** Marca que o servidor põe na recusa de quem teve a conta bloqueada por atividade incomum (robô, tentativa de cópia). */
+export const BLOCKED_ACCOUNT_CODE = "CONTA_BLOQUEADA";
+export const BLOCKED_ACCOUNT_MESSAGE = "O acesso desta conta foi bloqueado por atividade incomum. Fale com o suporte no WhatsApp para liberar.";

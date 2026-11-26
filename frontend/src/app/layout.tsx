@@ -9,6 +9,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { FeedbackButton } from "@/components/feedback-button";
 import { getSiteUrl } from "@/lib/site";
 import { LanguageProvider } from "@/lib/i18n";
+import { AiNotice } from "@/components/ai-notice";
 import { CodeGuard } from "@/components/code-guard";
 
 const geistSans = Geist({
@@ -102,6 +103,7 @@ export default function RootLayout({
         <LanguageProvider>
           <TooltipProvider>
             {children}
+            <AiNotice />
             <CodeGuard />
             <DataFastIdentity />
             <AttributionTracker />
