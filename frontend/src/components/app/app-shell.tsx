@@ -15,6 +15,7 @@ import { ConnectionStatus } from "@/components/app/connection-status";
 import { AccountAiSetup } from "@/components/app/account-ai-setup";
 import { SetupTutorial } from "@/components/app/setup-tutorial";
 import { FlowResumePrompt } from "@/components/app/flow-resume-prompt";
+import { RobotNotice } from "@/components/app/robot-notice";
 import { SecurityWatch } from "@/components/app/security-watch";
 import { signOut, useSession } from "@/lib/auth-client";
 import { useBillingSummary } from "@/hooks/use-billing-summary";
@@ -207,6 +208,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </button>
           </div>
         </header> : null}
+        {user ? <RobotNotice className="border-b bg-muted/40 px-4 py-2 md:px-6" /> : null}
         {user ? <TestBanner enabled={!admin} /> : null}
         {user ? <SecurityWatch enabled={!admin} /> : null}
         {user ? <AiProblemDialog /> : null}

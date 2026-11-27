@@ -229,6 +229,8 @@ O sistema é privado: nenhum robô ou assistente de IA pode ler as telas. Camada
   browser-use). Não inclui marcas do Playwright, que é o que roda os testes e2e.
 - **Aviso e isca** (`components/ai-notice.tsx`, em todas as telas menos as legais): texto do dono, fora da vista e do
   leitor de tela, dizendo que a análise por IA não é autorizada, e um link escondido para a isca.
+- **Aviso visível e fixo** (`components/app/robot-notice.tsx`, pedido do dono em 27/11): uma linha no topo de todas as telas
+  do app e na tela de entrada dizendo que o sistema tem proteção contra robôs e que a conta é bloqueada. Não tem botão de fechar.
 
 Limite conhecido: um assistente que roda dentro do Chrome da própria pessoa (extensão que lê a tela ou tira print) usa
 o navegador e a sessão dela e não tem como ser distinguido com certeza.
